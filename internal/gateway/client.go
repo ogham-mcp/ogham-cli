@@ -70,7 +70,7 @@ func (c *Client) FetchTools() ([]map[string]any, error) {
 	return tools, nil
 }
 
-func (c *Client) CallTool(toolName string, arguments map[string]any) (map[string]any, error) {
+func (c *Client) CallTool(toolName string, arguments map[string]any) (any, error) {
 	body := map[string]any{
 		"tool":      toolName,
 		"arguments": arguments,
@@ -97,7 +97,8 @@ func (c *Client) CallTool(toolName string, arguments map[string]any) (map[string
 		return nil, fmt.Errorf("call tool %s: status %d", toolName, resp.StatusCode)
 	}
 
-	var result map[string]any
+	// Response can be object or array depending on the tool
+	var result any
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
 		return nil, fmt.Errorf("parse tool response: %w", err)
 	}

@@ -56,7 +56,11 @@ func TestCallTool(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CallTool failed: %v", err)
 	}
-	if result["status"] != "stored" {
+	resultMap, ok := result.(map[string]any)
+	if !ok {
+		t.Fatalf("result is not map[string]any: %T", result)
+	}
+	if resultMap["status"] != "stored" {
 		t.Errorf("result = %v", result)
 	}
 }
