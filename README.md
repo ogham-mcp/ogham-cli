@@ -84,6 +84,34 @@ claude mcp add ogham -- ogham
 {"mcpServers": {"ogham": {"command": "ogham"}}}
 ```
 
+## Available tools
+
+The Go client dynamically fetches all tools from the gateway on startup. Currently 19 tools:
+
+| Tool | Description |
+|------|-------------|
+| `store_memory` | Store a memory with automatic enrichment |
+| `hybrid_search` | Search by meaning and keywords |
+| `list_recent` | List recent memories |
+| `delete_memory` | Delete a memory by ID |
+| `update_memory` | Update content, tags, or metadata |
+| `store_decision` | Store a decision with rationale |
+| `explore_knowledge` | Explore the knowledge graph |
+| `find_related` | Find related memories by graph links |
+| `list_profiles` | List all memory profiles |
+| `get_stats` | Memory statistics |
+| `reinforce_memory` | Increase a memory's confidence |
+| `contradict_memory` | Mark a memory as contradicted |
+| `current_profile` | Show active profile |
+| `switch_profile` | Switch to a different profile |
+| `set_profile_ttl` | Set memory expiry for a profile |
+| `export_profile` | Export memories as JSON |
+| `cleanup_expired` | Remove expired memories |
+| `link_unlinked` | Auto-link related memories |
+| `compress_old_memories` | Compress infrequently accessed memories |
+
+New tools added to the gateway are automatically available -- no Go client update needed.
+
 ## Development
 
 ### Prerequisites
