@@ -32,6 +32,18 @@ claude mcp add ogham -- ogham
 ogham init --api-key YOUR_API_KEY
 ```
 
+## How it works
+
+You run `ogham init` once. After that, your AI client handles everything automatically.
+
+1. **You run `ogham init`** -- saves your API key and registers with your AI client
+2. **Your AI client spawns `ogham serve`** -- this happens automatically when you open Claude Code, Cursor, etc. You never run `ogham serve` yourself
+3. **ogham fetches tools from the gateway** -- 10 tools (store, search, explore, etc.) are available to your AI agent
+4. **Your agent calls tools naturally** -- "remember this decision" triggers `store_memory`, "what do I know about X" triggers `hybrid_search`
+5. **ogham forwards to the cloud** -- each tool call becomes an HTTPS request to the gateway, which handles embeddings, scoring, and storage
+
+Your memories persist across clients. Use Claude Code in the morning, switch to Cursor in the afternoon -- same memory, same knowledge graph.
+
 ## Commands
 
 | Command | What it does |
