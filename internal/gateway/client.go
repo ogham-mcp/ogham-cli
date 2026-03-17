@@ -4,10 +4,13 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
+	"log/slog"
 	"net/http"
 	"time"
 )
 
+// Client is an HTTP client for the Ogham gateway REST API.
 type Client struct {
 	baseURL   string
 	apiKey    string
@@ -15,6 +18,7 @@ type Client struct {
 	http      *http.Client
 }
 
+// New creates a gateway client with 60s timeout.
 func New(baseURL, apiKey, userAgent string) *Client {
 	return &Client{
 		baseURL:   baseURL,
@@ -26,6 +30,67 @@ func New(baseURL, apiKey, userAgent string) *Client {
 	}
 }
 
+// doWithRetry executes an HTTP request with exponential backoff.
+// Retries on network errors, 500+, and 503 with X-Neon-Status: Waking-Up.
+// Does NOT retry on 4xx (client errors).
+func (c *Client) doWithRetry(req *http.Request) (*http.Response, error) {
+	maxRetries := 3
+	backoff := 1 * time.Second
+
+	// Save body for retries (if present)
+	var bodyBytes []byte
+	if req.Body != nil {
+		var err error
+		bodyBytes, err = io.ReadAll(req.Body)
+		if err != nil {
+			return nil, fmt.Errorf("read request body: %w", err)
+		}
+		req.Body.Close()
+	}
+
+	for i := 0; i < maxRetries; i++ {
+		// Reset body for each attempt
+		if bodyBytes != nil {
+			req.Body = io.NopCloser(bytes.NewReader(bodyBytes))
+		}
+
+		resp, err := c.http.Do(req)
+
+		if err != nil {
+			// Network error -- retry
+			slog.Warn("request failed", "attempt", i+1, "error", err)
+		} else if resp.StatusCode < 500 {
+			// Success or client error -- don't retry
+			return resp, nil
+		} else {
+			// Server error -- check for Neon cold start
+			neonStatus := resp.Header.Get("X-Neon-Status")
+			if neonStatus == "Waking-Up" {
+				slog.Info("neon waking up, will retry",
+					"attempt", i+1,
+					"retry_after", resp.Header.Get("Retry-After"),
+				)
+			} else {
+				slog.Warn("server error",
+					"status", resp.StatusCode,
+					"attempt", i+1,
+				)
+			}
+			resp.Body.Close() // must close before retry to avoid fd leak
+		}
+
+		if i < maxRetries-1 {
+			// Exponential backoff: 1s, 2s, 4s
+			wait := backoff * time.Duration(1<<i)
+			slog.Info("retrying", "wait", wait)
+			time.Sleep(wait)
+		}
+	}
+
+	return nil, fmt.Errorf("failed after %d attempts", maxRetries)
+}
+
+// Health checks gateway connectivity.
 func (c *Client) Health() (map[string]any, error) {
 	req, err := http.NewRequest("GET", c.baseURL+"/api/v1/health", nil)
 	if err != nil {
@@ -33,7 +98,7 @@ func (c *Client) Health() (map[string]any, error) {
 	}
 	c.setHeaders(req)
 
-	resp, err := c.http.Do(req)
+	resp, err := c.doWithRetry(req)
 	if err != nil {
 		return nil, fmt.Errorf("health check failed: %w", err)
 	}
@@ -46,6 +111,7 @@ func (c *Client) Health() (map[string]any, error) {
 	return result, nil
 }
 
+// FetchTools retrieves the MCP tool manifest from the gateway.
 func (c *Client) FetchTools() ([]map[string]any, error) {
 	req, err := http.NewRequest("GET", c.baseURL+"/api/v1/mcp/tools", nil)
 	if err != nil {
@@ -53,7 +119,7 @@ func (c *Client) FetchTools() ([]map[string]any, error) {
 	}
 	c.setHeaders(req)
 
-	resp, err := c.http.Do(req)
+	resp, err := c.doWithRetry(req)
 	if err != nil {
 		return nil, fmt.Errorf("fetch tools failed: %w", err)
 	}
@@ -70,6 +136,7 @@ func (c *Client) FetchTools() ([]map[string]any, error) {
 	return tools, nil
 }
 
+// CallTool executes a tool call via the gateway.
 func (c *Client) CallTool(toolName string, arguments map[string]any) (any, error) {
 	body := map[string]any{
 		"tool":      toolName,
@@ -87,7 +154,7 @@ func (c *Client) CallTool(toolName string, arguments map[string]any) (any, error
 	req.Header.Set("Content-Type", "application/json")
 	c.setHeaders(req)
 
-	resp, err := c.http.Do(req)
+	resp, err := c.doWithRetry(req)
 	if err != nil {
 		return nil, fmt.Errorf("call tool %s: %w", toolName, err)
 	}
@@ -97,7 +164,6 @@ func (c *Client) CallTool(toolName string, arguments map[string]any) (any, error
 		return nil, fmt.Errorf("call tool %s: status %d", toolName, resp.StatusCode)
 	}
 
-	// Response can be object or array depending on the tool
 	var result any
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
 		return nil, fmt.Errorf("parse tool response: %w", err)
