@@ -17,15 +17,7 @@ type CallbackResult struct {
 
 // StartCallbackServer starts a local HTTP server that waits for the
 // dashboard to redirect back with an API key.
-//
-// Flow:
-//  1. Server starts on a random available port
-//  2. Browser opens cloud.ogham-mcp.dev/auth/cli?callback=http://localhost:PORT
-//  3. User signs in via Clerk
-//  4. Dashboard generates API key, redirects to http://localhost:PORT/callback?key=ogham_live_...
-//  5. Server receives key, sends to result channel, shuts down
 func StartCallbackServer(ctx context.Context) (port int, result <-chan CallbackResult, err error) {
-	// Find an available port
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		return 0, nil, fmt.Errorf("start callback server: %w", err)
@@ -33,6 +25,7 @@ func StartCallbackServer(ctx context.Context) (port int, result <-chan CallbackR
 	port = listener.Addr().(*net.TCPAddr).Port
 
 	ch := make(chan CallbackResult, 1)
+	done := make(chan struct{}) // signal for shutdown, separate from result
 	mux := http.NewServeMux()
 
 	mux.HandleFunc("/callback", func(w http.ResponseWriter, r *http.Request) {
@@ -43,6 +36,7 @@ func StartCallbackServer(ctx context.Context) (port int, result <-chan CallbackR
 			ch <- CallbackResult{Error: fmt.Errorf("auth failed: %s", errMsg)}
 			w.Header().Set("Content-Type", "text/html")
 			fmt.Fprint(w, authFailHTML)
+			close(done)
 			return
 		}
 
@@ -50,12 +44,14 @@ func StartCallbackServer(ctx context.Context) (port int, result <-chan CallbackR
 			ch <- CallbackResult{Error: fmt.Errorf("no API key received")}
 			w.Header().Set("Content-Type", "text/html")
 			fmt.Fprint(w, authFailHTML)
+			close(done)
 			return
 		}
 
 		ch <- CallbackResult{APIKey: key}
 		w.Header().Set("Content-Type", "text/html")
 		fmt.Fprint(w, authSuccessHTML)
+		close(done)
 	})
 
 	server := &http.Server{Handler: mux}
@@ -71,7 +67,7 @@ func StartCallbackServer(ctx context.Context) (port int, result <-chan CallbackR
 	go func() {
 		select {
 		case <-ctx.Done():
-		case <-ch:
+		case <-done:
 			// Give browser time to render the success page
 			time.Sleep(1 * time.Second)
 		}
