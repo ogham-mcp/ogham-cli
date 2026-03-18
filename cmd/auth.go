@@ -51,7 +51,7 @@ Manual login: ogham auth login --api-key YOUR_KEY`,
 		}
 
 		callbackURL := fmt.Sprintf("http://localhost:%d/callback", port)
-		loginURL := fmt.Sprintf("%s/auth/cli?callback=%s", dashboardURL, callbackURL)
+		loginURL := fmt.Sprintf("%s/dashboard/cli-auth?callback=%s", dashboardURL, callbackURL)
 
 		if err := auth.OpenBrowser(loginURL); err != nil {
 			fmt.Fprintf(os.Stderr, "⚠ Could not open browser.\n")
