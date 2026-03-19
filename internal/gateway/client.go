@@ -45,7 +45,7 @@ func (c *Client) doWithRetry(req *http.Request) (*http.Response, error) {
 		if err != nil {
 			return nil, fmt.Errorf("read request body: %w", err)
 		}
-		req.Body.Close()
+		_ = req.Body.Close()
 	}
 
 	for i := 0; i < maxRetries; i++ {
@@ -76,7 +76,7 @@ func (c *Client) doWithRetry(req *http.Request) (*http.Response, error) {
 					"attempt", i+1,
 				)
 			}
-			resp.Body.Close() // must close before retry to avoid fd leak
+			_ = resp.Body.Close() // must close before retry to avoid fd leak
 		}
 
 		if i < maxRetries-1 {
@@ -102,7 +102,7 @@ func (c *Client) Health() (map[string]any, error) {
 	if err != nil {
 		return nil, fmt.Errorf("health check failed: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	var result map[string]any
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
@@ -123,7 +123,7 @@ func (c *Client) FetchTools() ([]map[string]any, error) {
 	if err != nil {
 		return nil, fmt.Errorf("fetch tools failed: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("fetch tools: status %d", resp.StatusCode)
@@ -158,7 +158,7 @@ func (c *Client) CallTool(toolName string, arguments map[string]any) (any, error
 	if err != nil {
 		return nil, fmt.Errorf("call tool %s: %w", toolName, err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("call tool %s: status %d", toolName, resp.StatusCode)
@@ -167,6 +167,41 @@ func (c *Client) CallTool(toolName string, arguments map[string]any) (any, error
 	var result any
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
 		return nil, fmt.Errorf("parse tool response: %w", err)
+	}
+	return result, nil
+}
+
+// BulkImport sends a batch of memories to the gateway bulk import endpoint.
+func (c *Client) BulkImport(memories []any) (map[string]any, error) {
+	body := map[string]any{
+		"memories": memories,
+	}
+	jsonData, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("POST", c.baseURL+"/api/v1/memories/bulk", bytes.NewReader(jsonData))
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	c.setHeaders(req)
+
+	resp, err := c.doWithRetry(req)
+	if err != nil {
+		return nil, fmt.Errorf("bulk import: %w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
+		respBody, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("bulk import: status %d: %s", resp.StatusCode, string(respBody))
+	}
+
+	var result map[string]any
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("parse bulk import response: %w", err)
 	}
 	return result, nil
 }
