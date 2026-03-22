@@ -192,29 +192,39 @@ func installClaudeCodeHooks() error {
 		hooks = make(map[string]any)
 	}
 
-	oghamHooks := map[string][]map[string]string{
-		"SessionStart": {{"command": "ogham-cli hooks run session-start"}},
-		"PostToolUse":  {{"command": "ogham-cli hooks run post-tool"}},
-		"PreCompact":   {{"command": "ogham-cli hooks run inscribe"}},
-		"PostCompact":  {{"command": "ogham-cli hooks run recall"}},
+	oghamHooks := map[string]map[string]any{
+		"SessionStart": {
+			"matcher": "",
+			"hooks":   []map[string]string{{"type": "command", "command": "ogham-cli hooks run session-start"}},
+		},
+		"PostToolUse": {
+			"matcher": "",
+			"hooks":   []map[string]string{{"type": "command", "command": "ogham-cli hooks run post-tool"}},
+		},
+		"PreCompact": {
+			"matcher": "",
+			"hooks":   []map[string]string{{"type": "command", "command": "ogham-cli hooks run inscribe"}},
+		},
+		"PostCompact": {
+			"matcher": "",
+			"hooks":   []map[string]string{{"type": "command", "command": "ogham-cli hooks run recall"}},
+		},
 	}
 
-	for event, cmds := range oghamHooks {
+	for event, hookEntry := range oghamHooks {
 		existing, _ := hooks[event].([]any)
-		for _, cmd := range cmds {
-			// Check if already installed
-			found := false
-			for _, e := range existing {
-				if m, ok := e.(map[string]any); ok {
-					if m["command"] == cmd["command"] {
-						found = true
-						break
-					}
+		// Check if already installed
+		found := false
+		for _, e := range existing {
+			if m, ok := e.(map[string]any); ok {
+				if fmt.Sprint(m["hooks"]) == fmt.Sprint(hookEntry["hooks"]) {
+					found = true
+					break
 				}
 			}
-			if !found {
-				existing = append(existing, cmd)
-			}
+		}
+		if !found {
+			existing = append(existing, hookEntry)
 		}
 		hooks[event] = existing
 	}
