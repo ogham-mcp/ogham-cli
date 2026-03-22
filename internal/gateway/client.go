@@ -206,6 +206,114 @@ func (c *Client) BulkImport(memories []any) (map[string]any, error) {
 	return result, nil
 }
 
+// HookSessionStart calls the gateway hooks/session-start endpoint.
+func (c *Client) HookSessionStart(cwd, profile string) (string, error) {
+	return c.hookContextCall("/api/v1/hooks/session-start", map[string]string{
+		"cwd": cwd, "profile": profile,
+	})
+}
+
+// HookPostTool calls the gateway hooks/post-tool endpoint.
+func (c *Client) HookPostTool(toolName string, toolInput map[string]any, cwd, sessionID, profile string) error {
+	body := map[string]any{
+		"tool_name":  toolName,
+		"tool_input": toolInput,
+		"cwd":        cwd,
+		"session_id": sessionID,
+		"profile":    profile,
+	}
+	_, err := c.hookStatusCall("/api/v1/hooks/post-tool", body)
+	return err
+}
+
+// HookInscribe calls the gateway hooks/inscribe endpoint.
+func (c *Client) HookInscribe(sessionID, cwd, profile string) error {
+	body := map[string]string{
+		"session_id": sessionID,
+		"cwd":        cwd,
+		"profile":    profile,
+	}
+	_, err := c.hookStatusCall("/api/v1/hooks/inscribe", body)
+	return err
+}
+
+// HookRecall calls the gateway hooks/recall endpoint.
+func (c *Client) HookRecall(cwd, profile string) (string, error) {
+	return c.hookContextCall("/api/v1/hooks/recall", map[string]string{
+		"cwd": cwd, "profile": profile,
+	})
+}
+
+// hookContextCall makes a POST and returns the "context" field from the response.
+func (c *Client) hookContextCall(path string, body any) (string, error) {
+	jsonData, err := json.Marshal(body)
+	if err != nil {
+		return "", err
+	}
+
+	req, err := http.NewRequest("POST", c.baseURL+path, bytes.NewReader(jsonData))
+	if err != nil {
+		return "", err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	c.setHeaders(req)
+
+	resp, err := c.doWithRetry(req)
+	if err != nil {
+		return "", fmt.Errorf("hook %s: %w", path, err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		respBody, _ := io.ReadAll(resp.Body)
+		return "", fmt.Errorf("hook %s: status %d: %s", path, resp.StatusCode, string(respBody))
+	}
+
+	var result map[string]any
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return "", fmt.Errorf("parse hook response: %w", err)
+	}
+	if ctx, ok := result["context"].(string); ok {
+		return ctx, nil
+	}
+	return "", nil
+}
+
+// hookStatusCall makes a POST and checks for success status.
+func (c *Client) hookStatusCall(path string, body any) (string, error) {
+	jsonData, err := json.Marshal(body)
+	if err != nil {
+		return "", err
+	}
+
+	req, err := http.NewRequest("POST", c.baseURL+path, bytes.NewReader(jsonData))
+	if err != nil {
+		return "", err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	c.setHeaders(req)
+
+	resp, err := c.doWithRetry(req)
+	if err != nil {
+		return "", fmt.Errorf("hook %s: %w", path, err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		respBody, _ := io.ReadAll(resp.Body)
+		return "", fmt.Errorf("hook %s: status %d: %s", path, resp.StatusCode, string(respBody))
+	}
+
+	var result map[string]any
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return "", fmt.Errorf("parse hook response: %w", err)
+	}
+	if status, ok := result["status"].(string); ok {
+		return status, nil
+	}
+	return "ok", nil
+}
+
 func (c *Client) setHeaders(req *http.Request) {
 	req.Header.Set("X-Api-Key", c.apiKey)
 	req.Header.Set("User-Agent", c.userAgent)
