@@ -31,48 +31,14 @@ jobs:
           go-version: ${{ matrix.go }}
           cache: true
 
-      - name: Install PICT
-        # PICT is Microsoft's pairwise test-case generator. We use it to
-        # regenerate testdata/<pkg>.pict.tsv in the regen-check step and
-        # fail the build if the committed matrix doesn't match a fresh
-        # generation. Not in apt; build from source on Linux (~10s).
-        run: |
-          if [[ "${{ matrix.os }}" == "macos-latest" ]]; then
-            brew install pict
-          else
-            sudo apt-get update -qq
-            sudo apt-get install -y -qq cmake g++
-            git clone --depth 1 https://github.com/microsoft/pict.git /tmp/pict-src
-            cd /tmp/pict-src && cmake . && make -j"$(nproc)"
-            # cmake puts the binary in cli/pict after the build
-            sudo install -m 0755 cli/pict /usr/local/bin/pict
-            pict --version > /dev/null 2>&1 || true
-            echo "pict built at: $(which pict)"
-          fi
-
-      - name: Verify PICT matrices are in sync with .pict sources
-        # If a maintainer edits a .pict model without regenerating the
-        # .tsv, this catches it before the test suite runs against a
-        # stale matrix. The committed matrix is canonical-sorted
-        # (header preserved, body sorted) so Homebrew PICT and git-
-        # source PICT compare equal regardless of internal row order.
-        # Must mirror make pict-regen exactly.
-        run: |
-          for pict_file in internal/native/extraction/testdata/*.pict; do
-            [[ -f "$pict_file" ]] || continue
-            tsv="${pict_file}.tsv"
-            raw=$(mktemp)
-            canon=$(mktemp)
-            pict "$pict_file" /r:1 > "$raw"
-            { head -n 1 "$raw"; tail -n +2 "$raw" | LC_ALL=C sort; } > "$canon"
-            if ! diff -q "$tsv" "$canon" > /dev/null; then
-              echo "FAIL: $tsv is out of sync with $pict_file"
-              diff "$tsv" "$canon" || true
-              echo "Run: make pict-regen"
-              exit 1
-            fi
-          done
-          echo "all PICT matrices are in sync"
+      # The PICT matrix itself (testdata/*.pict.tsv) is committed; tests
+       # run against the committed copy. We intentionally do NOT run a
+       # regen-drift check in CI: Homebrew PICT and git-source PICT
+       # produce different row sets for the same model, which makes
+       # byte-identical regen checks impossible without pinning PICT
+       # to one build. If a contributor edits a .pict model they are
+       # expected to run `make pict-regen` locally and commit the new
+       # .tsv; the review diff is the backstop.
 
       - name: Run tests with race detector
         run: go test -race ./...
