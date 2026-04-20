@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"os"
 	"strings"
 	"time"
 )
@@ -66,10 +65,12 @@ func NewEmbedder(cfg *Config) (Embedder, error) {
 		if model == "" {
 			model = "embeddinggemma"
 		}
-		// Ollama is local by default. OLLAMA_URL overrides the host; no
-		// API key is required. Longer timeout than Gemini because local
-		// inference on a cold model can take several seconds.
-		baseURL := strings.TrimRight(strings.TrimSpace(os.Getenv("OLLAMA_URL")), "/")
+		// Ollama is local by default. cfg.Embedding.BaseURL overrides
+		// the host (populated from OLLAMA_URL in applyEnv, or from
+		// [embedding] base_url in config.toml). No API key required.
+		// Longer timeout than Gemini because local inference on a cold
+		// model can take several seconds.
+		baseURL := strings.TrimRight(strings.TrimSpace(cfg.Embedding.BaseURL), "/")
 		if baseURL == "" {
 			baseURL = "http://localhost:11434"
 		}

@@ -155,3 +155,66 @@ func TestSidecarEnv(t *testing.T) {
 		t.Errorf("SidecarEnv should not emit OPENAI_API_KEY for voyage provider: %+v", got)
 	}
 }
+
+// OLLAMA_URL must lift into cfg.Embedding.BaseURL during applyEnv so
+// the embedder constructor can read a single source of truth.
+func TestLoad_OllamaURLIntoBaseURL(t *testing.T) {
+	isolateEnv(t)
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.toml")
+
+	t.Setenv("EMBEDDING_PROVIDER", "ollama")
+	t.Setenv("OLLAMA_URL", "http://remote-ollama:11434")
+
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Embedding.BaseURL != "http://remote-ollama:11434" {
+		t.Errorf("BaseURL = %q, want lifted from OLLAMA_URL", cfg.Embedding.BaseURL)
+	}
+}
+
+// SidecarEnv must emit OLLAMA_URL when the provider is ollama and
+// BaseURL is set so the Python sidecar sees the same endpoint. It
+// must NOT emit OLLAMA_URL for non-ollama providers.
+func TestSidecarEnv_OllamaURL(t *testing.T) {
+	cfg := &Config{
+		Embedding: Embedding{
+			Provider: "ollama",
+			BaseURL:  "http://remote-ollama:11434",
+		},
+	}
+	got := map[string]string{}
+	for _, kv := range cfg.SidecarEnv() {
+		for i := 0; i < len(kv); i++ {
+			if kv[i] == '=' {
+				got[kv[:i]] = kv[i+1:]
+				break
+			}
+		}
+	}
+	if got["OLLAMA_URL"] != "http://remote-ollama:11434" {
+		t.Errorf("OLLAMA_URL not emitted: %+v", got)
+	}
+
+	// Non-ollama provider with a BaseURL set: must not leak as OLLAMA_URL.
+	cfg2 := &Config{
+		Embedding: Embedding{
+			Provider: "openai",
+			BaseURL:  "https://azure.example.com",
+		},
+	}
+	got2 := map[string]string{}
+	for _, kv := range cfg2.SidecarEnv() {
+		for i := 0; i < len(kv); i++ {
+			if kv[i] == '=' {
+				got2[kv[:i]] = kv[i+1:]
+				break
+			}
+		}
+	}
+	if _, ok := got2["OLLAMA_URL"]; ok {
+		t.Errorf("OLLAMA_URL should not be emitted for non-ollama provider: %+v", got2)
+	}
+}
