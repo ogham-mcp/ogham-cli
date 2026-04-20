@@ -1,6 +1,6 @@
 # Ogham CLI development tasks
 
-.PHONY: build test test-race lint check clean cross-compile snapshot tag release-check cover cover-html bench pict-regen
+.PHONY: build test test-race lint check clean cross-compile snapshot tag release-check cover cover-html bench pict-regen live
 
 VERSION ?= dev
 
@@ -45,6 +45,22 @@ cover-html: cover
 # can see when a change trades cpu for heap pressure.
 bench:
 	go test -bench=. -benchmem -run=^$$ ./internal/native/...
+
+# Live embedder smoke tests. Build-tagged (`live`) so they run only
+# when explicitly opted into. Each test self-skips when its
+# preconditions aren't met (API key missing, local server down).
+# CI never runs these -- they require credentials / a running Ollama.
+#
+# Overrides:
+#   OLLAMA_URL                host for the Ollama probe + live call
+#   OGHAM_LIVE_OLLAMA_MODEL   e.g. embeddinggemma, nomic-embed-text
+#   OGHAM_LIVE_OLLAMA_DIM     e.g. 512 (MRL truncation) or 768 (native)
+#   OPENAI_API_KEY            enables the OpenAI live test
+#   OGHAM_LIVE_OPENAI_MODEL   e.g. text-embedding-3-small
+#   OGHAM_LIVE_OPENAI_DIM     e.g. 512
+#   OPENAI_BASE_URL           Azure OpenAI / LocalAI override
+live:
+	go test -tags live -v -run Live ./internal/native/
 
 # Regenerate PICT matrices from .pict source files. CI runs this and
 # fails if the committed .tsv drifts from a fresh generation.
