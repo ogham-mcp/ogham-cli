@@ -35,12 +35,18 @@ jobs:
         # PICT is Microsoft's pairwise test-case generator. We use it to
         # regenerate testdata/<pkg>.pict.tsv in the regen-check step and
         # fail the build if the committed matrix doesn't match a fresh
-        # generation.
+        # generation. Not in apt; build from source on Linux (~10s).
         run: |
           if [[ "${{ matrix.os }}" == "macos-latest" ]]; then
             brew install pict
           else
-            sudo apt-get update && sudo apt-get install -y pict
+            sudo apt-get update -qq
+            sudo apt-get install -y -qq cmake g++
+            git clone --depth 1 https://github.com/microsoft/pict.git /tmp/pict-src
+            cd /tmp/pict-src && cmake . && make -j"$(nproc)"
+            sudo install -m 0755 pict /usr/local/bin/pict
+            pict /tmp/pict-src/test/ui/test01.input > /dev/null && \
+                echo "pict build + smoke test OK"
           fi
 
       - name: Verify PICT matrices are in sync with .pict sources
