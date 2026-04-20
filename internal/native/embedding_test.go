@@ -56,8 +56,13 @@ func TestNewEmbedder_OllamaNoKeyRequired(t *testing.T) {
 }
 
 func TestNewEmbedder_OllamaURLOverride(t *testing.T) {
-	t.Setenv("OLLAMA_URL", "http://remote-ollama:11434/")
-	e, err := NewEmbedder(&Config{Embedding: Embedding{Provider: "ollama", Dimension: 512}})
+	// BaseURL comes from cfg.Embedding now, not env. applyEnv lifts
+	// OLLAMA_URL into the config field; the constructor is env-agnostic.
+	e, err := NewEmbedder(&Config{Embedding: Embedding{
+		Provider:  "ollama",
+		Dimension: 512,
+		BaseURL:   "http://remote-ollama:11434/",
+	}})
 	if err != nil {
 		t.Fatal(err)
 	}

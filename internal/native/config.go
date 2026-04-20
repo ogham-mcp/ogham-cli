@@ -63,6 +63,13 @@ type Embedding struct {
 	APIKey    string `toml:"api_key"`
 	Model     string `toml:"model"`
 	Dimension int    `toml:"dimension"`
+
+	// BaseURL lets providers that can be self-hosted (Ollama today;
+	// OpenAI via Azure / LocalAI proxies in v0.5+) point at a custom
+	// endpoint instead of the provider default. Empty string means
+	// "use provider default". Populated from OLLAMA_URL today; v0.5
+	// embedders will add OPENAI_BASE_URL / MISTRAL_BASE_URL as they land.
+	BaseURL string `toml:"base_url"`
 }
 
 // DefaultPath returns the standard config location. Same file as the
@@ -152,6 +159,13 @@ func applyEnv(cfg *Config) {
 	if v := strings.TrimSpace(os.Getenv("EMBEDDING_PROVIDER")); v != "" {
 		cfg.Embedding.Provider = v
 	}
+	// Provider-scoped base-URL overrides. OLLAMA_URL is the original
+	// knob; v0.5 embedders (OpenAI / Voyage / Mistral) can add their
+	// own env-var mappings here without constructors reaching into
+	// os.Getenv themselves.
+	if v := strings.TrimSpace(os.Getenv("OLLAMA_URL")); v != "" {
+		cfg.Embedding.BaseURL = v
+	}
 	// Profile: honour both the Python name (DEFAULT_PROFILE) and the Go
 	// name (OGHAM_PROFILE). OGHAM_PROFILE wins if both are set.
 	if v := strings.TrimSpace(os.Getenv("DEFAULT_PROFILE")); v != "" {
@@ -190,6 +204,11 @@ func (c *Config) SidecarEnv() []string {
 	}
 	if c.Embedding.Dimension > 0 {
 		env = append(env, fmt.Sprintf("EMBEDDING_DIM=%d", c.Embedding.Dimension))
+	}
+	// Provider-scoped base-URL: emit the env name the target provider
+	// reads. Ollama only for now; v0.5 embedders add their own.
+	if c.Embedding.BaseURL != "" && c.Embedding.Provider == "ollama" {
+		env = append(env, "OLLAMA_URL="+c.Embedding.BaseURL)
 	}
 	if c.Profile != "" {
 		// Python's pydantic-settings reads DEFAULT_PROFILE (the Settings
