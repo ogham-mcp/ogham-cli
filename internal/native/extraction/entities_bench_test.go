@@ -1,6 +1,9 @@
 package extraction
 
-import "testing"
+import (
+	"testing"
+	"time"
+)
 
 // BenchmarkEntities runs the extractor on a ~500-char representative
 // mixed-category input. Entities() fires on every `ogham store` call
@@ -46,4 +49,21 @@ func representativeContent() string {
 		"./pkg/queue/worker.go citing a ConnectionError during the deployment " +
 		"window. The MetricsPublisher now emits structured events to the " +
 		"QueueWorker and the SchedulerCore picks them up every 30 seconds."
+}
+
+// BenchmarkDates runs the date extractor on a representative mixed
+// input containing ISO, natural, and relative forms. Dates() fires on
+// every native `ogham store` so this is a hot path.
+func BenchmarkDates(b *testing.B) {
+	ref := time.Date(2026, 4, 15, 12, 0, 0, 0, time.UTC)
+	content := "On 2026-04-20 and April 3rd, 2026 we shipped. Last week " +
+		"was the rehearsal on 2025/12/01. In 2 weeks we ship again, " +
+		"three days after the 15 March 2026 checkpoint. Context: " +
+		"dates from 2025-11-03 through 2026-04-20."
+
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_ = DatesAt(content, ref)
+	}
 }

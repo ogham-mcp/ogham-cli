@@ -1,0 +1,17 @@
+Category	FormatVariant	OrdinalSuffix	CaseMix	DateCount
+ISO	V1	NA	Lower	One
+ISO	V2	NA	Title	One
+ISO	V2	NA	Upper	Multiple
+Mixed	V1	Present	Lower	Multiple
+Mixed	V2	Absent	Title	One
+Mixed	V2	Absent	Upper	One
+Mixed	V2	Present	Upper	One
+Natural	V1	Absent	Upper	Multiple
+Natural	V1	Present	Title	One
+Natural	V2	Absent	Lower	Multiple
+None	NA	NA	Lower	Zero
+None	NA	NA	Title	Zero
+None	NA	NA	Upper	Zero
+Relative	V1	NA	Upper	Multiple
+Relative	V2	NA	Lower	One
+Relative	V2	NA	Title	Multiple

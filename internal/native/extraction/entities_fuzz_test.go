@@ -1,8 +1,10 @@
 package extraction
 
 import (
+	"regexp"
 	"sort"
 	"testing"
+	"time"
 )
 
 // FuzzEntities asserts universal invariants that must hold for any input:
@@ -54,4 +56,49 @@ func veryLongSeed() string {
 		out = append(out, unit...)
 	}
 	return string(out)
+}
+
+// FuzzDates asserts universal invariants for Dates() / DatesAt():
+//
+//   - never panics on arbitrary input
+//   - output is always sorted ascending
+//   - output never contains duplicates
+//   - every token matches YYYY-MM-DD exactly
+//
+// Seed corpus is drawn from the dates PICT matrix plus a few
+// adversarial cases (empty, malformed relative phrases, impossible
+// calendar dates). Run locally with:
+//
+//	go test -fuzz=FuzzDates -fuzztime=60s ./internal/native/extraction/
+func FuzzDates(f *testing.F) {
+	ref := time.Date(2026, 4, 15, 12, 0, 0, 0, time.UTC)
+
+	for _, row := range readPICTMatrix(f, "testdata/dates.pict.tsv") {
+		f.Add(buildDatesFixture(row, ref).Content)
+	}
+	// Adversarial seeds: the date parser is regex-driven, so impossible
+	// calendar combinations + malformed quantifiers are the shapes most
+	// likely to trip a panic.
+	f.Add("")
+	f.Add("Feb 30, 2026 is not a date.")
+	f.Add("in 99999999999999999999 days")
+	f.Add("last monday last tuesday last wednesday")
+	f.Add("2026-13-45 is not valid ISO either.")
+
+	dateFormatRe := regexp.MustCompile(`^\d{4}-\d{2}-\d{2}$`)
+
+	f.Fuzz(func(t *testing.T, content string) {
+		got := DatesAt(content, ref)
+		if !sort.StringsAreSorted(got) {
+			t.Fatalf("output not sorted: %v", got)
+		}
+		if hasDuplicates(got) {
+			t.Fatalf("output has duplicates: %v", got)
+		}
+		for _, d := range got {
+			if !dateFormatRe.MatchString(d) {
+				t.Fatalf("non-ISO date in output: %q (full: %v)", d, got)
+			}
+		}
+	})
 }
