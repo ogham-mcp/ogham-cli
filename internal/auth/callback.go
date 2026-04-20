@@ -54,7 +54,10 @@ func StartCallbackServer(ctx context.Context) (port int, result <-chan CallbackR
 		close(done)
 	})
 
-	server := &http.Server{Handler: mux}
+	server := &http.Server{
+		Handler:           mux,
+		ReadHeaderTimeout: 5 * time.Second,
+	}
 
 	go func() {
 		slog.Info("callback server listening", "port", port)
@@ -71,7 +74,9 @@ func StartCallbackServer(ctx context.Context) (port int, result <-chan CallbackR
 			// Give browser time to render the success page
 			time.Sleep(1 * time.Second)
 		}
-		server.Shutdown(context.Background())
+		if err := server.Shutdown(context.Background()); err != nil {
+			slog.Error("callback server shutdown error", "error", err)
+		}
 	}()
 
 	return port, ch, nil
