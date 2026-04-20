@@ -159,11 +159,14 @@ func applyEnv(cfg *Config) {
 	if v := strings.TrimSpace(os.Getenv("EMBEDDING_PROVIDER")); v != "" {
 		cfg.Embedding.Provider = v
 	}
-	// Provider-scoped base-URL overrides. OLLAMA_URL is the original
-	// knob; v0.5 embedders (OpenAI / Voyage / Mistral) can add their
-	// own env-var mappings here without constructors reaching into
-	// os.Getenv themselves.
+	// Provider-scoped base-URL overrides. Each provider reads the env
+	// name it has historically used; only the one matching the selected
+	// provider wins so a stray OPENAI_BASE_URL doesn't accidentally
+	// redirect an Ollama client.
 	if v := strings.TrimSpace(os.Getenv("OLLAMA_URL")); v != "" {
+		cfg.Embedding.BaseURL = v
+	}
+	if v := strings.TrimSpace(os.Getenv("OPENAI_BASE_URL")); v != "" && cfg.Embedding.Provider == "openai" {
 		cfg.Embedding.BaseURL = v
 	}
 	// Profile: honour both the Python name (DEFAULT_PROFILE) and the Go
@@ -206,9 +209,15 @@ func (c *Config) SidecarEnv() []string {
 		env = append(env, fmt.Sprintf("EMBEDDING_DIM=%d", c.Embedding.Dimension))
 	}
 	// Provider-scoped base-URL: emit the env name the target provider
-	// reads. Ollama only for now; v0.5 embedders add their own.
-	if c.Embedding.BaseURL != "" && c.Embedding.Provider == "ollama" {
-		env = append(env, "OLLAMA_URL="+c.Embedding.BaseURL)
+	// reads. Only the provider currently selected gets its URL passed
+	// so a leftover BaseURL from a previous provider never leaks.
+	if c.Embedding.BaseURL != "" {
+		switch c.Embedding.Provider {
+		case "ollama":
+			env = append(env, "OLLAMA_URL="+c.Embedding.BaseURL)
+		case "openai":
+			env = append(env, "OPENAI_BASE_URL="+c.Embedding.BaseURL)
+		}
 	}
 	if c.Profile != "" {
 		// Python's pydantic-settings reads DEFAULT_PROFILE (the Settings

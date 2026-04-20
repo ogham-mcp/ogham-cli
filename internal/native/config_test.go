@@ -175,6 +175,92 @@ func TestLoad_OllamaURLIntoBaseURL(t *testing.T) {
 	}
 }
 
+// OPENAI_BASE_URL must lift into cfg.Embedding.BaseURL only when the
+// provider is openai. A stray value while provider=voyage / etc. must
+// not propagate (prevents cross-provider URL pollution).
+func TestLoad_OpenAIBaseURLIntoBaseURL(t *testing.T) {
+	isolateEnv(t)
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.toml")
+
+	t.Setenv("EMBEDDING_PROVIDER", "openai")
+	t.Setenv("OPENAI_API_KEY", "sk-xyz")
+	t.Setenv("OPENAI_BASE_URL", "https://azure.example.com/openai")
+
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Embedding.BaseURL != "https://azure.example.com/openai" {
+		t.Errorf("BaseURL = %q, want lifted from OPENAI_BASE_URL", cfg.Embedding.BaseURL)
+	}
+}
+
+// OPENAI_BASE_URL set alongside a non-openai provider must NOT set
+// BaseURL -- guards against a leftover Azure proxy env accidentally
+// redirecting a Voyage or Mistral call.
+func TestLoad_OpenAIBaseURLIgnoredForOtherProvider(t *testing.T) {
+	isolateEnv(t)
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.toml")
+
+	t.Setenv("EMBEDDING_PROVIDER", "voyage")
+	t.Setenv("VOYAGE_API_KEY", "vk-xyz")
+	t.Setenv("OPENAI_BASE_URL", "https://azure.example.com/openai")
+
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Embedding.BaseURL != "" {
+		t.Errorf("BaseURL = %q, want empty (OPENAI_BASE_URL should be ignored for voyage)", cfg.Embedding.BaseURL)
+	}
+}
+
+// SidecarEnv must emit OPENAI_BASE_URL when provider is openai AND
+// BaseURL is set. Must NOT emit it for non-openai providers.
+func TestSidecarEnv_OpenAIBaseURL(t *testing.T) {
+	cfg := &Config{
+		Embedding: Embedding{
+			Provider: "openai",
+			APIKey:   "sk-xyz",
+			BaseURL:  "https://azure.example.com/openai",
+		},
+	}
+	got := map[string]string{}
+	for _, kv := range cfg.SidecarEnv() {
+		for i := 0; i < len(kv); i++ {
+			if kv[i] == '=' {
+				got[kv[:i]] = kv[i+1:]
+				break
+			}
+		}
+	}
+	if got["OPENAI_BASE_URL"] != "https://azure.example.com/openai" {
+		t.Errorf("OPENAI_BASE_URL not emitted: %+v", got)
+	}
+
+	// Non-openai provider with BaseURL set must not leak it as OPENAI_BASE_URL.
+	cfg2 := &Config{
+		Embedding: Embedding{
+			Provider: "voyage",
+			BaseURL:  "https://not-openai.example.com",
+		},
+	}
+	got2 := map[string]string{}
+	for _, kv := range cfg2.SidecarEnv() {
+		for i := 0; i < len(kv); i++ {
+			if kv[i] == '=' {
+				got2[kv[:i]] = kv[i+1:]
+				break
+			}
+		}
+	}
+	if _, ok := got2["OPENAI_BASE_URL"]; ok {
+		t.Errorf("OPENAI_BASE_URL should not be emitted for voyage provider: %+v", got2)
+	}
+}
+
 // SidecarEnv must emit OLLAMA_URL when the provider is ollama and
 // BaseURL is set so the Python sidecar sees the same endpoint. It
 // must NOT emit OLLAMA_URL for non-ollama providers.
