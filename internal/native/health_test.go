@@ -151,21 +151,6 @@ func TestHealthCheck_JSONShape(t *testing.T) {
 	}
 }
 
-func TestRedactURL(t *testing.T) {
-	cases := []struct {
-		in, want string
-	}{
-		{"postgres://user:secret@host:5432/db", "postgres://user:***@host:5432/db"},
-		{"postgres://host:5432/db", "postgres://host:5432/db"},
-		{"not a url", "not a url"},
-	}
-	for _, tc := range cases {
-		if got := redactURL(tc.in); got != tc.want {
-			t.Errorf("redactURL(%q) = %q, want %q", tc.in, got, tc.want)
-		}
-	}
-}
-
 func TestSortChecksByName(t *testing.T) {
 	checks := []CheckResult{
 		{Name: "embedder:gemini"},

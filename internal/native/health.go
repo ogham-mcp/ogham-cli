@@ -185,23 +185,6 @@ func finish(name string, start time.Time, detail string, err error) CheckResult 
 	return r
 }
 
-// redactURL strips the password segment from a Postgres connection string
-// so `ogham health --json` is safe to pipe to logs. String-level surgery
-// avoids url.UserPassword percent-encoding the redacted stars.
-func redactURL(raw string) string {
-	u, err := url.Parse(raw)
-	if err != nil || u.User == nil {
-		return raw
-	}
-	pw, hasPass := u.User.Password()
-	if !hasPass || pw == "" {
-		return raw
-	}
-	// Replace the first occurrence of :pw@ with :***@; this survives
-	// arbitrary password characters without re-encoding them.
-	return strings.Replace(raw, ":"+pw+"@", ":***@", 1)
-}
-
 func sortChecksByName(checks []CheckResult) {
 	// Small list -- insertion sort keeps the implementation dependency-free.
 	for i := 1; i < len(checks); i++ {
