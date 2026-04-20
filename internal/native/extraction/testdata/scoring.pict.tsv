@@ -1,0 +1,8 @@
+DecisionSignal	ErrorSignal	ArchSignal	FilePathSignal	CodeFenceSignal	LengthBucket	TagCountBucket
+Absent	Absent	Absent	Absent	Absent	Long	Many
+Absent	Absent	Present	Present	Present	Short	Many
+Absent	Present	Absent	Absent	Present	Short	Few
+Present	Absent	Present	Present	Absent	Long	Many
+Present	Absent	Present	Present	Present	Long	Few
+Present	Present	Absent	Present	Absent	Short	Many
+Present	Present	Present	Absent	Absent	Long	Few
