@@ -1,6 +1,6 @@
 # Ogham CLI development tasks
 
-.PHONY: build test lint check clean cross-compile snapshot tag release-check
+.PHONY: build test test-race lint check clean cross-compile snapshot tag release-check cover cover-html bench pict-regen
 
 VERSION ?= dev
 
@@ -12,9 +12,48 @@ build:
 test:
 	go test ./... -v
 
+# Run all tests with the race detector enabled. Slower (~2x) but catches
+# data races that only surface under concurrent load.
+test-race:
+	go test -race ./...
+
 # Lint (gosec + errcheck + govet + staticcheck via golangci-lint)
 lint:
 	golangci-lint run ./...
+
+# Coverage measurement + 90% threshold gate, currently scoped to the
+# packages that have completed the PICT-backed test sweep. As each new
+# native package lands its coverage retrofit, add it to COVER_STRICT_PKGS.
+# Broader internal/native/ coverage debt is tracked separately -- see
+# docs/tracking04plus.md under "Testing standards".
+NATIVE_COVER_MIN := 90.0
+COVER_STRICT_PKGS := ./internal/native/extraction/...
+cover:
+	@go test -race -coverprofile=cover.out $(COVER_STRICT_PKGS) > /dev/null
+	@total=$$(go tool cover -func=cover.out | tail -1 | awk '{print $$3}' | tr -d '%'); \
+	echo "coverage: strict-pkgs=$${total}%"; \
+	awk -v p="$$total" -v m="$(NATIVE_COVER_MIN)" \
+	    'BEGIN { exit (p+0 < m+0) }' || \
+	    { echo "FAIL: strict-pkgs coverage $${total}% below threshold $(NATIVE_COVER_MIN)%"; exit 1; }
+
+# HTML report for local exploration. Writes cover.html in the repo root.
+cover-html: cover
+	go tool cover -html=cover.out -o cover.html
+	@echo "open cover.html"
+
+# Run benchmarks for the hot paths. -benchmem reports allocs/op so we
+# can see when a change trades cpu for heap pressure.
+bench:
+	go test -bench=. -benchmem -run=^$$ ./internal/native/...
+
+# Regenerate PICT matrices from .pict source files. CI runs this and
+# fails if the committed .tsv drifts from a fresh generation.
+pict-regen:
+	@which pict > /dev/null || { \
+	    echo "pict not installed -- brew install pict"; exit 1; }
+	pict internal/native/extraction/testdata/entities.pict \
+	    > internal/native/extraction/testdata/entities.pict.tsv
+	@echo "regenerated entities.pict.tsv"
 
 # Pre-commit checks
 check: lint test

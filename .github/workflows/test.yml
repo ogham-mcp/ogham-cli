@@ -1,0 +1,72 @@
+name: test
+
+# Triggers on every push (any branch) and every pull request. Separate
+# from release.yml, which only fires on vX.Y.Z tag pushes. One workflow
+# per concern.
+on:
+  push:
+    branches: ['**']
+  pull_request:
+    branches: ['**']
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: test (${{ matrix.os }}, go ${{ matrix.go }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+        go: ['1.26']
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ matrix.go }}
+          cache: true
+
+      - name: Install PICT
+        # PICT is Microsoft's pairwise test-case generator. We use it to
+        # regenerate testdata/<pkg>.pict.tsv in the regen-check step and
+        # fail the build if the committed matrix doesn't match a fresh
+        # generation.
+        run: |
+          if [[ "${{ matrix.os }}" == "macos-latest" ]]; then
+            brew install pict
+          else
+            sudo apt-get update && sudo apt-get install -y pict
+          fi
+
+      - name: Verify PICT matrices are in sync with .pict sources
+        # If a maintainer edits a .pict model without regenerating the
+        # .tsv, this catches it before the test suite runs against a
+        # stale matrix.
+        run: |
+          for pict_file in internal/native/extraction/testdata/*.pict; do
+            [[ -f "$pict_file" ]] || continue
+            tsv="${pict_file}.tsv"
+            tmp=$(mktemp)
+            pict "$pict_file" > "$tmp"
+            if ! diff -q "$tsv" "$tmp" > /dev/null; then
+              echo "FAIL: $tsv is out of sync with $pict_file"
+              diff "$tsv" "$tmp" || true
+              echo "Run: make pict-regen"
+              exit 1
+            fi
+          done
+          echo "all PICT matrices are in sync"
+
+      - name: Run tests with race detector
+        run: go test -race ./...
+
+      - name: Coverage threshold (internal/native/extraction/)
+        # Scoped gate per testing-standards decision 2026-04-20. As each
+        # additional internal/native/ package lands its coverage retrofit
+        # (task #141), add it to COVER_STRICT_PKGS in the Makefile.
+        run: make cover
