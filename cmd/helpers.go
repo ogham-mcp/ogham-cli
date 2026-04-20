@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"strings"
 
@@ -189,11 +190,32 @@ func notImplemented(tool string) error {
 // is not implemented yet. Suppressed when the user explicitly passed
 // --legacy / --python (they already know) or --quiet. Stderr so it
 // never pollutes stdout JSON that scripts / LLMs are parsing.
+//
+// Coverage audit (2026-04-20, task #138d):
+//
+//   - Called at: cmd/store.go, cmd/export.go, cmd/import.go -- the three
+//     commands that always fall through to the sidecar today.
+//   - list / search / health: only hit the sidecar when the user opted in
+//     with --legacy; this helper already no-ops in that case, so calling
+//     it would be a noop. Left as-is.
+//   - audit / cleanup / decay / delete / profile / stats / config show:
+//     native-only, no sidecar path to announce.
+//   - dashboard: prints its own "[ogham dashboard] launching: ..." banner
+//     with the full argv, which is strictly more informative than the
+//     generic fallback notice. Left as-is.
+//   - serve: runs our own MCP server; not a fallback.
 func noteSidecarFallback(tool string) {
+	writeSidecarFallbackNotice(os.Stderr, tool)
+}
+
+// writeSidecarFallbackNotice is the testable core of noteSidecarFallback.
+// Factored out so helpers_test.go can exercise the --legacy / --quiet
+// suppression without reassigning os.Stderr.
+func writeSidecarFallbackNotice(w io.Writer, tool string) {
 	if useLegacy() || useQuiet() {
 		return
 	}
-	fmt.Fprintf(os.Stderr,
+	fmt.Fprintf(w,
 		"[ogham] %q has no native Go path yet; routing through the Python sidecar. Pass --legacy (or --quiet) to suppress this notice.\n",
 		tool)
 }

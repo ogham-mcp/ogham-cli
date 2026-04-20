@@ -1,7 +1,9 @@
 package cmd
 
 import (
+	"bytes"
 	"reflect"
+	"strings"
 	"testing"
 )
 
@@ -98,5 +100,53 @@ func TestNotImplemented(t *testing.T) {
 	}
 	if err.Error() == "" {
 		t.Error("error should have a message")
+	}
+}
+
+// writeSidecarFallbackNotice must emit a visible notice by default but
+// stay silent under --legacy (user already knows) or --quiet (user
+// suppressed). Tests the global-flag-driven suppression without
+// clobbering os.Stderr.
+func TestWriteSidecarFallbackNotice(t *testing.T) {
+	// Restore globals after each subtest.
+	origLegacy, origPython, origQuiet := rootLegacyFlag, rootPythonAlias, rootQuietFlag
+	t.Cleanup(func() {
+		rootLegacyFlag, rootPythonAlias, rootQuietFlag = origLegacy, origPython, origQuiet
+	})
+
+	cases := []struct {
+		name        string
+		legacy      bool
+		pythonAlias bool
+		quiet       bool
+		wantEmit    bool
+	}{
+		{"default emits", false, false, false, true},
+		{"--legacy silences", true, false, false, false},
+		{"--python silences (alias for --legacy)", false, true, false, false},
+		{"--quiet silences", false, false, true, false},
+		{"combined flags still silent", true, false, true, false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			rootLegacyFlag = tc.legacy
+			rootPythonAlias = tc.pythonAlias
+			rootQuietFlag = tc.quiet
+
+			var buf bytes.Buffer
+			writeSidecarFallbackNotice(&buf, "store")
+
+			got := buf.String()
+			if tc.wantEmit {
+				if got == "" {
+					t.Error("expected notice, got empty")
+				}
+				if !strings.Contains(got, `"store"`) {
+					t.Errorf("notice missing tool name: %q", got)
+				}
+			} else if got != "" {
+				t.Errorf("expected silence, got: %q", got)
+			}
+		})
 	}
 }
