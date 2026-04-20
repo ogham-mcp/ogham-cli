@@ -33,6 +33,12 @@ Defaults (v0.3.0-rc4+):
   - JSON output for stable scripting / LLM consumption -- use --text for humans
   - Native path (direct Postgres / Supabase / Gemini) for speed -- use --legacy
     (or --python) to route through the Python MCP sidecar instead`,
+	// PersistentPreRunE fires before every subcommand. Installs the
+	// shared slog handler so -v / --quiet apply everywhere.
+	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+		initLogging()
+		return nil
+	},
 	RunE: func(cmd *cobra.Command, args []string) error {
 		return serveCmd.RunE(cmd, args)
 	},
@@ -70,4 +76,9 @@ func init() {
 		"Alias for --legacy")
 	rootCmd.PersistentFlags().BoolVarP(&rootQuietFlag, "quiet", "q", false,
 		"Suppress stderr informational notices (sidecar fallback message)")
+	// -v raises the stderr log level one step: default=warn, -v=info, -vv=debug.
+	// --quiet overrides (error-only). Every slog.* call in the tree lands
+	// in the same stderr stream once this is set in PersistentPreRunE.
+	rootCmd.PersistentFlags().CountVarP(&verboseCount, "verbose", "v",
+		"Increase stderr log verbosity (-v = info, -vv = debug)")
 }

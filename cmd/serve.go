@@ -22,11 +22,12 @@ var serveCmd = &cobra.Command{
 	Use:   "serve",
 	Short: "Start MCP server over stdio",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		level := slog.LevelWarn
+		// Root's PersistentPreRunE has already installed a shared slog
+		// handler driven by -v / --quiet. --debug on this command is a
+		// legacy opt-in that forces debug level regardless.
 		if debugFlag {
-			level = slog.LevelDebug
+			slog.SetDefault(slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelDebug})))
 		}
-		slog.SetDefault(slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: level})))
 
 		path := config.DefaultPath()
 		cfg, err := config.Load(path)
