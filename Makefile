@@ -51,7 +51,10 @@ bench:
 pict-regen:
 	@which pict > /dev/null || { \
 	    echo "pict not installed -- brew install pict"; exit 1; }
-	pict internal/native/extraction/testdata/entities.pict \
+	# /r:1 pins the PRNG seed so the output is byte-identical across
+	# platforms. Without this, Ubuntu + macOS produce equivalent-coverage
+	# matrices with different row orders and the CI regen check diverges.
+	pict internal/native/extraction/testdata/entities.pict /r:1 \
 	    > internal/native/extraction/testdata/entities.pict.tsv
 	@echo "regenerated entities.pict.tsv"
 
