@@ -51,16 +51,17 @@ bench:
 pict-regen:
 	@which pict > /dev/null || { \
 	    echo "pict not installed -- brew install pict"; exit 1; }
-	# PICT versions (homebrew vs built-from-source) emit rows in
-	# different orders even with /r:1. Sort the body (keep header) so
-	# the committed matrix is canonical regardless of PICT version and
-	# platform.
-	@tmp=$$(mktemp); \
-	pict internal/native/extraction/testdata/entities.pict /r:1 > "$$tmp"; \
-	{ head -n 1 "$$tmp"; tail -n +2 "$$tmp" | LC_ALL=C sort; } \
-	    > internal/native/extraction/testdata/entities.pict.tsv; \
-	rm -f "$$tmp"
-	@echo "regenerated entities.pict.tsv (canonical-sorted)"
+	# Loop over every .pict model, regenerate its .tsv, canonical-sort
+	# the body (keep header) so the committed matrix is version- and
+	# platform-independent. /r:1 pins the PRNG seed across PICT builds.
+	@for pf in internal/native/extraction/testdata/*.pict; do \
+	    [ -f "$$pf" ] || continue; \
+	    tmp=$$(mktemp); \
+	    pict "$$pf" /r:1 > "$$tmp"; \
+	    { head -n 1 "$$tmp"; tail -n +2 "$$tmp" | LC_ALL=C sort; } > "$$pf.tsv"; \
+	    rm -f "$$tmp"; \
+	    echo "regenerated $$(basename $$pf).tsv (canonical-sorted)"; \
+	done
 
 # Pre-commit checks
 check: lint test

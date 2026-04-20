@@ -1,0 +1,52 @@
+# PICT model for Importance() pairwise combinatorial test coverage.
+#
+# Mirrors src/ogham/extraction.py::compute_importance:
+#
+#   score = 0.2                                         # base
+#         + 0.3 if DECISION_WORDS signal
+#         + 0.2 if ERROR_WORDS signal or ErrorType regex
+#         + 0.2 if ARCHITECTURE_WORDS signal
+#         + 0.1 if file path present
+#         + 0.1 if code fence (``` or `) present
+#         + 0.1 if len(content) > 500
+#         + 0.1 if len(tags) >= 3
+#   score = min(score, 1.0)
+#
+# The PICT matrix drives an Importance() test that builds a fixture
+# per row and asserts the score equals the expected sum (capped).
+#
+# Regenerate:  make pict-regen
+
+
+# --- Axes ---------------------------------------------------------------
+
+# Decision signal word present in content (Python DECISION_WORDS set).
+DecisionSignal: Present, Absent
+
+# Error signal word OR "...Error" / "...Exception" regex match.
+ErrorSignal: Present, Absent
+
+# Architecture signal word in content (Python ARCHITECTURE_WORDS set).
+ArchSignal: Present, Absent
+
+# File path token in content (regex matches e.g. "./cmd/root.go").
+FilePathSignal: Present, Absent
+
+# Code fence marker in content ("```" block or "`" inline).
+CodeFenceSignal: Present, Absent
+
+# Content length bucket. Python checks len(content) > 500.
+#   Short -> <= 500 chars
+#   Long  -> >  500 chars
+LengthBucket: Short, Long
+
+# Number of tags passed to Importance(). Python checks len(tags) >= 3.
+#   Few  -> 0..2 tags
+#   Many -> 3+ tags
+TagCountBucket: Few, Many
+
+
+# --- Constraints --------------------------------------------------------
+
+# No constraints: every axis is independently meaningful, no forbidden
+# combinations. Pairwise generator will pick a tight ~10-case matrix.

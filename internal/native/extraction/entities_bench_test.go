@@ -67,3 +67,20 @@ func BenchmarkDates(b *testing.B) {
 		_ = DatesAt(content, ref)
 	}
 }
+
+// BenchmarkImportance runs the scoring function on typical content
+// containing all signal classes. Called once per native `ogham store`.
+// Signal-word matching uses lowercased substring checks so the hot
+// path is dominated by the strings.ToLower copy.
+func BenchmarkImportance(b *testing.B) {
+	content := representativeContent() +
+		" we decided to refactor the architecture after a failed " +
+		"RuntimeException; see ./pkg/root.go and `ogham serve`."
+	tags := []string{"type:decision", "project:ogham", "v0.5"}
+
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_ = Importance(content, tags)
+	}
+}
