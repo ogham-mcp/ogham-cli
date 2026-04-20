@@ -1,0 +1,96 @@
+# PICT model for Entities() pairwise combinatorial test coverage.
+#
+# Consumed by TestEntities_PICT in entities_test.go: each generated row
+# becomes a test case. Content fixture is synthesised from axis values by
+# a small factory function, then fed to Entities() and the output checked
+# against per-row invariants (category-specific assertions).
+#
+# Source of truth for parity: src/ogham/extraction.py in the openbrain-
+# sharedmemory R&D repo. Any axis value added here must map cleanly to a
+# Python reference behaviour or it's noise.
+#
+# Regenerate the matrix:
+#   pict internal/native/extraction/testdata/entities.pict > \
+#        internal/native/extraction/testdata/entities.pict.tsv
+#
+# CI has a regen-check step that diffs the committed .tsv against a fresh
+# generation; if an edit here is pushed without regenerating, CI fails.
+
+
+# --- Axes ---------------------------------------------------------------
+
+# What pattern class(es) the content exercises.
+#   None       -> plain prose, no regex matches expected
+#   CamelCase  -> exactly one programming identifier
+#   FilePath   -> exactly one path/to/file.ext
+#   ErrorType  -> exactly one SomethingError or SomethingException
+#   PersonName -> exactly one capitalised pair
+#   Multiple   -> two or more of the above mixed in one chunk
+PatternCategory: None, CamelCase, FilePath, ErrorType, PersonName, Multiple
+
+# Where punctuation sits around candidate tokens. Person-name detection
+# uses strings.Fields + a punctuation-strip set; dates/paths/errors are
+# anchored by \b so internal punctuation also stress-tests the regexes.
+#   Leading  -> ",Kevin Burns"
+#   Trailing -> "Kevin Burns,"
+#   Embedded -> "Kevin, Burns"     (interesting: does Fields see a pair?)
+#   Clean    -> "Kevin Burns"
+PunctuationPosition: Leading, Trailing, Embedded, Clean
+
+# Whether a stopword appears adjacent to candidate person-name tokens.
+# Only meaningful when category includes PersonName (see constraints).
+#   Present -> "The Company" (must NOT produce person:)
+#   Absent  -> "Kevin Burns" (must produce person:)
+#   NA      -> axis is irrelevant for this category
+StopwordPresence: Present, Absent, NA
+
+# Script class of the content.
+#   ASCII     -> plain latin-alpha + punctuation
+#   Latin1    -> accented latin ("François", "Müller")
+#   NonLatin  -> CJK / Cyrillic / Arabic characters
+# The regexes in entities.go are ASCII-first by design; non-Latin content
+# should produce 0 matches for CamelCase / ErrorType / PersonName (the
+# regex anchors \b[A-Z][a-z]+ require ASCII letters). FilePath's regex
+# uses \w which in Go (RE2) is ASCII-only, so Latin1 paths with é also
+# match thinly.
+UnicodeClass: ASCII, Latin1, NonLatin
+
+# Whether the content repeats a matched entity. Entities() is set-backed
+# so any duplicate collapses -- this axis exercises that dedup.
+#   Unique      -> each entity appears once
+#   Duplicated  -> the same entity appears 3x in the content
+DuplicateDensity: Unique, Duplicated
+
+# Total entity count after Entities() processing. Exercises the final
+# cap (MaxEntities = 20) and the per-category cap (filePathCap = 5).
+#   LtFive      -> 0..4 entities
+#   FiveToTwenty -> 5..20 entities (within cap)
+#   GtTwenty    -> > 20 inputs (must saturate at 20)
+FinalEntityCount: LtFive, FiveToTwenty, GtTwenty
+
+
+# --- Constraints --------------------------------------------------------
+
+# StopwordPresence is only meaningful when the content exercises person-
+# name detection. For every other category it's semantically N/A.
+IF [PatternCategory] IN {"None", "CamelCase", "FilePath", "ErrorType"}
+THEN [StopwordPresence] = "NA";
+
+# Person-name and Multiple categories MUST have a real stopword choice;
+# "NA" is reserved for categories where the axis doesn't apply.
+IF [PatternCategory] IN {"PersonName", "Multiple"}
+THEN [StopwordPresence] <> "NA";
+
+# Plain prose with no pattern match cannot produce many entities.
+IF [PatternCategory] = "None"
+THEN [FinalEntityCount] = "LtFive";
+
+# A single-category content typically won't generate > 20 matches.
+# Saturating the 20-cap requires the Multiple mix.
+IF [FinalEntityCount] = "GtTwenty"
+THEN [PatternCategory] = "Multiple";
+
+# Duplicate density is only meaningful when there's at least one match
+# to duplicate.
+IF [PatternCategory] = "None"
+THEN [DuplicateDensity] = "Unique";
