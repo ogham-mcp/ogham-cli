@@ -12,10 +12,9 @@ build:
 test:
 	go test ./... -v
 
-# Lint
+# Lint (gosec + errcheck + govet + staticcheck via golangci-lint)
 lint:
-	go vet ./...
-	@gofmt -l . | grep . && echo "FAIL: files need gofmt" && exit 1 || true
+	golangci-lint run ./...
 
 # Pre-commit checks
 check: lint test

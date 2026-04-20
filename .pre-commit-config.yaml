@@ -5,6 +5,10 @@ repos:
       - id: go-fmt
       - id: go-vet
       - id: go-build
+  - repo: https://github.com/golangci/golangci-lint
+    rev: v2.1.6
+    hooks:
+      - id: golangci-lint
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v5.0.0
     hooks:

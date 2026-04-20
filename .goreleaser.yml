@@ -1,10 +1,30 @@
 version: 2
 
+# GoReleaser pipeline for the ogham CLI.
+# Fires when a vX.Y.Z tag is pushed; CI workflow in .github/workflows/release.yml.
+
+before:
+  hooks:
+    - go mod tidy
+    - go test ./...
+
 builds:
   - main: .
     binary: ogham
+    env:
+      - CGO_ENABLED=0
     ldflags:
+      # Strip symbol table + DWARF debug info (~30% size reduction).
+      - -s -w
+      # Version + commit + build date baked into the binary. `ogham version`
+      # prints these from cmd.Version / cmd.Commit / cmd.BuildDate.
       - -X github.com/ogham-mcp/ogham-cli/cmd.Version={{.Version}}
+      - -X github.com/ogham-mcp/ogham-cli/cmd.Commit={{.ShortCommit}}
+      - -X github.com/ogham-mcp/ogham-cli/cmd.BuildDate={{.Date}}
+    # Reproducible-build flag so the same source produces the same binary
+    # regardless of where it was built. Matters for supply-chain trust.
+    flags:
+      - -trimpath
     goos:
       - darwin
       - linux
@@ -16,16 +36,66 @@ builds:
       - goos: windows
         goarch: arm64
 
-brews:
-  - name: ogham
-    repository:
-      owner: ogham-mcp
-      name: homebrew-tap
-    description: "Ogham MCP client -- persistent shared memory for AI agents"
-    homepage: "https://ogham-mcp.dev"
-
 archives:
   - formats: ['tar.gz']
+    # Windows users expect .zip.
     format_overrides:
       - goos: windows
         formats: ['zip']
+    # Names match what dist/ uses today so existing README instructions
+    # stay valid (ogham-darwin-arm64, ogham-linux-amd64, etc.).
+    name_template: >-
+      {{ .ProjectName }}-{{ .Os }}-{{ .Arch }}
+    files:
+      - README.md
+      - LICENSE*
+
+checksum:
+  name_template: 'checksums.txt'
+  algorithm: sha256
+
+# Homebrew tap -- deferred until v0.4.1+. For v0.4.0 we ship only GitHub
+# Releases (archives + checksums); users download the binary directly and
+# follow the first-run instructions in the README (quarantine, SmartScreen,
+# chmod +x). Re-enable this stanza once the ogham-mcp/homebrew-tap repo
+# exists and GORELEASER_TAP_TOKEN is set as a repo secret.
+#
+# brews:
+#   - name: ogham
+#     repository:
+#       owner: ogham-mcp
+#       name: homebrew-tap
+#       token: "{{ .Env.GORELEASER_TAP_TOKEN }}"
+#     description: "Ogham MCP client -- persistent shared memory for AI agents"
+#     homepage: "https://ogham-mcp.dev"
+#     license: "MIT"
+#     test: |
+#       system "#{bin}/ogham version"
+#     install: |
+#       bin.install "ogham"
+#     caveats: |
+#       Ogham CLI is now installed. Run `ogham init` to configure.
+#       See https://github.com/ogham-mcp/ogham-cli for documentation.
+
+# Auto-generated changelog from commit messages. GoReleaser groups by
+# conventional-commit prefixes (feat:, fix:, docs:, chore:, etc.).
+changelog:
+  sort: asc
+  use: github
+  groups:
+    - title: Features
+      regexp: '^.*?feat(\(.+\))??!?:.+$'
+      order: 0
+    - title: Bug fixes
+      regexp: '^.*?fix(\(.+\))??!?:.+$'
+      order: 1
+    - title: Documentation
+      regexp: '^.*?docs(\(.+\))??!?:.+$'
+      order: 2
+    - title: Other
+      order: 999
+  filters:
+    exclude:
+      - '^test:'
+      - '^chore:'
+      - 'merge conflict'

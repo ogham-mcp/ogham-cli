@@ -1,0 +1,37 @@
+version: "2"
+
+linters:
+  enable:
+    - gosec
+    - errcheck
+    - govet
+    - staticcheck
+
+  settings:
+    gosec:
+      excludes:
+        # G204: exec.Command with variable -- intentional for browser open
+        - G204
+        # G304: file path from variable -- config paths are internal, not user input
+        - G304
+        # G101: hardcoded credentials -- false positives on struct field names and test data
+        - G101
+        # G117: API key in struct -- it's a config reader, not hardcoded secrets
+        - G117
+        # G118: context.Background in goroutine -- intentional for server shutdown
+        - G118
+        # G704: SSRF -- URL comes from config, not user input
+        - G704
+        # G706: log injection -- log values come from config, not user input
+        - G706
+
+  exclusions:
+    rules:
+      # test files: ignore errcheck and gosec (test data, not production)
+      - linters: [errcheck, gosec]
+        path: _test\.go$
+      # errcheck: ignore fmt.Fprint to http.ResponseWriter (standard Go pattern)
+      - linters: [errcheck]
+        text: "fmt.Fprint"
+    paths:
+      - vendor
