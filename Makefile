@@ -38,14 +38,16 @@ cross-compile:
 snapshot:
 	GORELEASER_TAP_TOKEN=dummy goreleaser release --snapshot --clean
 
-# Pre-tag safety gate. Fails fast if the working tree is dirty or
-# the target version isn't set.
+# Pre-tag safety gate. Fails fast if tracked files have uncommitted
+# changes or the target version isn't set. Untracked files (local
+# notes, tracking docs) are tolerated.
 release-check:
 	@if [ -z "$(VERSION)" ] || [ "$(VERSION)" = "dev" ]; then \
 		echo "ERROR: pass VERSION=vX.Y.Z"; exit 1; fi
-	@if [ -n "$$(git status --porcelain)" ]; then \
-		echo "ERROR: working tree is dirty"; git status --short; exit 1; fi
-	@echo "OK: tree clean, version set to $(VERSION)"
+	@if ! git diff-index --quiet HEAD --; then \
+		echo "ERROR: tracked files have uncommitted changes"; \
+		git diff-index --name-status HEAD --; exit 1; fi
+	@echo "OK: tracked tree clean, version set to $(VERSION)"
 
 # Tag + push. Triggers the GitHub Actions release workflow, which
 # runs GoReleaser and publishes archives + checksums to the Releases
