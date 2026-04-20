@@ -53,17 +53,21 @@ jobs:
       - name: Verify PICT matrices are in sync with .pict sources
         # If a maintainer edits a .pict model without regenerating the
         # .tsv, this catches it before the test suite runs against a
-        # stale matrix. /r:1 pins the PRNG seed so Ubuntu + macOS
-        # produce byte-identical output; must match make pict-regen.
+        # stale matrix. The committed matrix is canonical-sorted
+        # (header preserved, body sorted) so Homebrew PICT and git-
+        # source PICT compare equal regardless of internal row order.
+        # Must mirror make pict-regen exactly.
         run: |
           for pict_file in internal/native/extraction/testdata/*.pict; do
             [[ -f "$pict_file" ]] || continue
             tsv="${pict_file}.tsv"
-            tmp=$(mktemp)
-            pict "$pict_file" /r:1 > "$tmp"
-            if ! diff -q "$tsv" "$tmp" > /dev/null; then
+            raw=$(mktemp)
+            canon=$(mktemp)
+            pict "$pict_file" /r:1 > "$raw"
+            { head -n 1 "$raw"; tail -n +2 "$raw" | LC_ALL=C sort; } > "$canon"
+            if ! diff -q "$tsv" "$canon" > /dev/null; then
               echo "FAIL: $tsv is out of sync with $pict_file"
-              diff "$tsv" "$tmp" || true
+              diff "$tsv" "$canon" || true
               echo "Run: make pict-regen"
               exit 1
             fi
