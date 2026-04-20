@@ -12,6 +12,12 @@ on:
 permissions:
   contents: read
 
+# Opt the JS-based actions (checkout, setup-go) into Node.js 24 ahead of
+# the June 2026 default switch. Silences the deprecation warning and
+# matches what the runner will use once v24 ships as default.
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
+
 jobs:
   test:
     name: test (${{ matrix.os }}, go ${{ matrix.go }})

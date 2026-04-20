@@ -80,7 +80,26 @@ func NewEmbedder(cfg *Config) (Embedder, error) {
 			dim:     dim,
 			http:    &http.Client{Timeout: 60 * time.Second},
 		}, nil
-	case "openai", "voyage", "mistral", "onnx":
+	case "openai":
+		model := cfg.Embedding.Model
+		if model == "" {
+			model = "text-embedding-3-small"
+		}
+		if cfg.Embedding.APIKey == "" {
+			return nil, fmt.Errorf("native embedder: openai provider selected but OPENAI_API_KEY is not set")
+		}
+		baseURL := strings.TrimRight(strings.TrimSpace(cfg.Embedding.BaseURL), "/")
+		if baseURL == "" {
+			baseURL = "https://api.openai.com"
+		}
+		return &openaiEmbedder{
+			apiKey:  cfg.Embedding.APIKey,
+			model:   model,
+			dim:     dim,
+			baseURL: baseURL,
+			http:    &http.Client{Timeout: 30 * time.Second},
+		}, nil
+	case "voyage", "mistral", "onnx":
 		return nil, fmt.Errorf("native embedder: provider %q not yet absorbed -- use the sidecar path (default) until ported", provider)
 	default:
 		return nil, fmt.Errorf("native embedder: unknown provider %q", provider)
@@ -300,6 +319,114 @@ func (o *ollamaEmbedder) Embed(ctx context.Context, text string) ([]float32, err
 	vec := parsed.Embeddings[0]
 	if len(vec) != o.dim {
 		return nil, fmt.Errorf("ollama embed: expected dim=%d, got %d -- check EMBEDDING_DIM matches your schema, or use a model that supports MRL truncation (e.g. embeddinggemma) so the dimensions request is honoured", o.dim, len(vec))
+	}
+	return vec, nil
+}
+
+// -----------------------------------------------------------------------
+// OpenAI embedder -- HTTPS POST to /v1/embeddings.
+//
+// Request shape matches the OpenAI REST API documentation:
+//   POST {baseURL}/v1/embeddings
+//   Authorization: Bearer {api_key}
+//   {"model": "text-embedding-3-small", "input": "text", "dimensions": 512}
+// Response:
+//   {"data": [{"embedding": [0.1, ...], "index": 0}], "model": "...", "usage": {...}}
+// Error envelope (any non-200):
+//   {"error": {"message": "...", "type": "...", "code": "..."}}
+//
+// `dimensions` is supported by text-embedding-3-small and
+// text-embedding-3-large. Older models (ada-002) ignore it and always
+// emit 1536 dims; NewEmbedder will surface a dim mismatch in that case.
+//
+// baseURL override lets operators point at Azure OpenAI proxies,
+// LocalAI, or similar OpenAI-wire-compatible servers.
+
+type openaiEmbedder struct {
+	apiKey  string
+	model   string
+	dim     int
+	baseURL string
+	http    *http.Client
+}
+
+func (o *openaiEmbedder) Name() string   { return "openai/" + o.model }
+func (o *openaiEmbedder) Dimension() int { return o.dim }
+
+type openaiEmbedRequest struct {
+	Model      string `json:"model"`
+	Input      string `json:"input"`
+	Dimensions int    `json:"dimensions,omitempty"`
+}
+
+type openaiEmbedResponse struct {
+	Data  []openaiEmbeddingItem `json:"data"`
+	Error *openaiAPIError       `json:"error,omitempty"`
+}
+
+type openaiEmbeddingItem struct {
+	Embedding []float32 `json:"embedding"`
+	Index     int       `json:"index"`
+}
+
+type openaiAPIError struct {
+	Message string `json:"message"`
+	Type    string `json:"type"`
+	Code    string `json:"code"`
+}
+
+func (o *openaiEmbedder) Embed(ctx context.Context, text string) ([]float32, error) {
+	if text == "" {
+		return nil, fmt.Errorf("openai embed: empty text")
+	}
+
+	body := openaiEmbedRequest{Model: o.model, Input: text, Dimensions: o.dim}
+	jsonBody, err := json.Marshal(body)
+	if err != nil {
+		return nil, fmt.Errorf("openai embed: marshal: %w", err)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost,
+		o.baseURL+"/v1/embeddings", bytes.NewReader(jsonBody))
+	if err != nil {
+		return nil, fmt.Errorf("openai embed: build request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+o.apiKey)
+
+	resp, err := o.http.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("openai embed: http: %w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	respBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("openai embed: read: %w", err)
+	}
+
+	var parsed openaiEmbedResponse
+	if err := json.Unmarshal(respBody, &parsed); err != nil {
+		return nil, fmt.Errorf("openai embed: parse: %w (body: %s)", err, truncateForError(respBody))
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		if parsed.Error != nil {
+			// OpenAI error envelope: emit the typed message without
+			// leaking the endpoint URL (which could carry API-key-bearing
+			// Azure proxy paths in some deployments).
+			return nil, fmt.Errorf("openai embed: %s: %s (code=%s)",
+				parsed.Error.Type, parsed.Error.Message, parsed.Error.Code)
+		}
+		return nil, fmt.Errorf("openai embed: http %d: %s", resp.StatusCode, truncateForError(respBody))
+	}
+
+	if len(parsed.Data) == 0 || len(parsed.Data[0].Embedding) == 0 {
+		return nil, fmt.Errorf("openai embed: empty data array in response")
+	}
+	vec := parsed.Data[0].Embedding
+	if len(vec) != o.dim {
+		return nil, fmt.Errorf("openai embed: expected dim=%d, got %d -- check EMBEDDING_DIM matches your schema; text-embedding-3-small and -3-large honour the dimensions request, ada-002 does not", o.dim, len(vec))
 	}
 	return vec, nil
 }
