@@ -1,0 +1,66 @@
+# PICT model for Dates() pairwise combinatorial test coverage.
+#
+# Mirrors the contract of src/ogham/extraction.py::extract_dates:
+#   - ISO dates:   \b\d{4}[-/]\d{1,2}[-/]\d{1,2}\b  (slash normalised to dash)
+#   - Natural:     "<Month> <day><ordinal?>,? <year>" + "<day> <Month> <year>"
+#   - Relative:    "yesterday" / "today" / "tomorrow" /
+#                  "last|next|this <weekday|week|month|year>" /
+#                  "<N> days|weeks|months|years ago" /
+#                  "in <N> days|weeks|months|years"
+#   - Output:      sorted YYYY-MM-DD strings, deduplicated
+#   - Relative phrases only fire when no absolute date was found.
+#
+# Regenerate:  make pict-regen  (canonical-sorted)
+
+
+# --- Axes ---------------------------------------------------------------
+
+# Which family of date expressions the content contains.
+#   None      -> prose with no dates at all
+#   ISO       -> machine-readable YYYY-{sep}-MM-{sep}-DD
+#   Natural   -> English month name + day + year (either order)
+#   Relative  -> yesterday/today/tomorrow/last X/N ago/in N
+#   Mixed     -> ISO + Natural together (exercises dedup + sort)
+Category: None, ISO, Natural, Relative, Mixed
+
+# Per-category shape knob.
+#   V1       -> ISO=Dash-separated ; Natural=MonthFirst ; Relative=Anchored
+#   V2       -> ISO=Slash-separated; Natural=DayFirst   ; Relative=Quantified
+#   NA       -> axis doesn't apply (None category)
+FormatVariant: V1, V2, NA
+
+# Ordinal suffix on natural dates ("20th" vs "20"). ISO and Relative
+# phrases have no ordinals; axis is NA for those categories.
+OrdinalSuffix: Present, Absent, NA
+
+# Case of month names and weekday names in the content. ISO is
+# digits-only so only the content envelope varies with this axis.
+CaseMix: Lower, Title, Upper
+
+# Number of date expressions present. Zero is reserved for None.
+DateCount: Zero, One, Multiple
+
+
+# --- Constraints --------------------------------------------------------
+
+# None category -> no dates, no format, no ordinal
+IF [Category] = "None"
+THEN [DateCount] = "Zero"
+AND [FormatVariant] = "NA"
+AND [OrdinalSuffix] = "NA";
+
+# Only None produces zero dates
+IF [DateCount] = "Zero"
+THEN [Category] = "None";
+
+# Non-None categories must pick a real format variant
+IF [Category] IN {"ISO", "Natural", "Relative", "Mixed"}
+THEN [FormatVariant] <> "NA";
+
+# Ordinals only apply to Natural dates
+IF [Category] IN {"None", "ISO", "Relative"}
+THEN [OrdinalSuffix] = "NA";
+
+# Natural + Mixed must pick a real ordinal value
+IF [Category] IN {"Natural", "Mixed"}
+THEN [OrdinalSuffix] <> "NA";
