@@ -51,12 +51,16 @@ bench:
 pict-regen:
 	@which pict > /dev/null || { \
 	    echo "pict not installed -- brew install pict"; exit 1; }
-	# /r:1 pins the PRNG seed so the output is byte-identical across
-	# platforms. Without this, Ubuntu + macOS produce equivalent-coverage
-	# matrices with different row orders and the CI regen check diverges.
-	pict internal/native/extraction/testdata/entities.pict /r:1 \
-	    > internal/native/extraction/testdata/entities.pict.tsv
-	@echo "regenerated entities.pict.tsv"
+	# PICT versions (homebrew vs built-from-source) emit rows in
+	# different orders even with /r:1. Sort the body (keep header) so
+	# the committed matrix is canonical regardless of PICT version and
+	# platform.
+	@tmp=$$(mktemp); \
+	pict internal/native/extraction/testdata/entities.pict /r:1 > "$$tmp"; \
+	{ head -n 1 "$$tmp"; tail -n +2 "$$tmp" | LC_ALL=C sort; } \
+	    > internal/native/extraction/testdata/entities.pict.tsv; \
+	rm -f "$$tmp"
+	@echo "regenerated entities.pict.tsv (canonical-sorted)"
 
 # Pre-commit checks
 check: lint test
