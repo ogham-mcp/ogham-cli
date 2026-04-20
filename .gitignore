@@ -1,3 +1,23 @@
+# Build artifacts
 ogham
 dist/
 *.exe
+*.test
+
+# Test / profiling output
+coverage.out
+coverage.html
+*.prof
+
+# macOS noise
+.DS_Store
+
+# Editor / IDE
+.vscode/
+.idea/
+*.swp
+*~
+
+# Local environment files (never commit)
+.env
+.env.local
