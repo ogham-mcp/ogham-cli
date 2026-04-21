@@ -31,8 +31,12 @@ import (
 func newOllamaStub() *httptest.Server {
 	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		vec := make([]float64, 512)
+		// Shape: {"embeddings": [[...]]} -- array of arrays. Getting
+		// this wrong masquerades green on any dev machine with a real
+		// Ollama at :11434 (happened with rc2 CI; see commit fixing
+		// coverage_graph_test.go for the same bug).
 		_ = json.NewEncoder(w).Encode(map[string]any{
-			"embedding": vec,
+			"embeddings": [][]float64{vec},
 		})
 	}))
 }
