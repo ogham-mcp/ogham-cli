@@ -35,13 +35,21 @@ detail lives in the commit/PR that actually picks it up.
 
 ## Testing + coverage
 
-- **Lift `internal/mcp` coverage from 41%** via pgcontainer-tagged
-  handler round-trip tests.
-- **Lift `internal/sidecar` coverage from 37%** via a test-only stub
-  MCP server that exercises supervise + reconnect for real.
-- **Lift `cmd/` coverage** via cobra golden-file tests.
-- **Close `internal/native/...` to 90%** (#141) -- add Supabase
-  httptest for graph + search paths.
+- ~~Lift `internal/mcp` coverage from 41%~~ -- done, 67.7% (commit
+  e63f910).
+- ~~Lift `internal/sidecar` coverage from 37%~~ -- done, 87.6%
+  (commit ae776f2, self-referential binary pattern).
+- ~~Close `internal/native/...` to ~80%~~ -- done, 78.4% (commit
+  8bb2cdf). 90% gate remains aspirational for this package.
+- **Lift `cmd/` coverage beyond the current 15.8%** -- needs a
+  `NewRootCmd()` refactor so rootCmd can be rebuilt fresh per test
+  case. Cobra's help-state leaks across `Execute()` calls otherwise.
+- **Lift `internal/gateway` coverage from 44%** -- currently only
+  the happy-path JSON shapes are exercised; error branches uncovered.
+- **Managed Agents end-to-end validation pass** -- run the v0.7.0
+  binary in an Anthropic Managed Agents session with a scratch
+  Supabase project. Verify real MCP tool calls (store + search
+  round-trip, graph walk, profile switch). ~$5 per session.
 
 ## Known bugs / polish
 

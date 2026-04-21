@@ -2,7 +2,7 @@
 
 A single Go binary that gives AI agents persistent, searchable memory -- even on locked-down enterprise laptops where third-party MCP servers are blocked.
 
-> **Pre-release.** v0.4 tagged internally 2026-04-20; v0.5 native store shipped; v0.6 alpha adds a hybrid MCP proxy so `ogham serve` exposes every Python-only tool alongside native Go tools with no client reconfiguration. Public flip is gated on employer-disclosure + counsel review. Install paths below assume building from source.
+> **Pre-release.** v0.7.0-rc2 cut 2026-04-21. Hybrid MCP proxy, 24 native tools absorbed (CRUD + typed-store + stats + graph walk), sentinel-based active profile, 18-language word-list registry embedded (not yet wired into scoring), coverage retrofit landed (extraction 93% / sidecar 87.6% / native 78.4% / mcp 67.7%). Public flip is gated on employer-disclosure + counsel review. Install paths below assume building from source.
 
 ## Who this is for
 
