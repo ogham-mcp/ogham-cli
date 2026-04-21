@@ -416,3 +416,30 @@ negation_markers:
   - "застарілий"
   - "застаріла"
   - "замість"
+
+# --- Date anchors (v0.7) ---
+# Populated per-language as follow-up. Empty here so the schema stays
+# stable; Go dates.go falls back to the English base pack when a
+# language omits anchors.
+today_words: []
+tomorrow_words: []
+yesterday_words: []
+modifier_last: []
+modifier_next: []
+modifier_this: []
+period_week: []
+period_month: []
+period_year: []
+unit_day: []
+unit_week: []
+unit_month: []
+unit_year: []
+ago_markers: []
+in_markers: []
+
+# --- Recurrence (v0.7) ---
+recurrence_patterns: []
+
+# --- Person-name tightening (v0.7) ---
+person_name_denylist: []
+person_name_context_words: []

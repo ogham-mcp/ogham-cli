@@ -11,6 +11,12 @@ import (
 // content per axis combination, and asserts the computed score matches
 // the Python formula exactly. Each axis toggles a known delta, so the
 // expected score is fully deterministic from the row.
+//
+// Language axis: EN exercises the English signal-word path, DE exercises
+// the YAML-loaded German vocab, Unknown ("klingon") exercises the silent
+// English fallback. Expected score is identical across languages because
+// every language's word sets fire the same +0.3/+0.2/+0.2 axes when their
+// respective signal phrase is present.
 func TestImportance_PICT(t *testing.T) {
 	rows := readPICTMatrix(t, "testdata/scoring.pict.tsv")
 	if len(rows) == 0 {
@@ -19,18 +25,20 @@ func TestImportance_PICT(t *testing.T) {
 
 	for i, row := range rows {
 		row := row
-		name := fmt.Sprintf("row_%02d_%s_%s_%s_%s_%s_%s_%s", i,
+		name := fmt.Sprintf("row_%02d_%s_%s_%s_%s_%s_%s_%s_%s", i,
 			row["DecisionSignal"], row["ErrorSignal"], row["ArchSignal"],
 			row["FilePathSignal"], row["CodeFenceSignal"],
-			row["LengthBucket"], row["TagCountBucket"])
+			row["LengthBucket"], row["TagCountBucket"],
+			row["Language"])
 		t.Run(name, func(t *testing.T) {
 			content, tags := buildScoringFixture(row)
-			got := Importance(content, tags)
+			lang := languageCodeFromRow(row)
+			got := ImportanceForLang(content, tags, lang)
 			want := expectedScore(row)
 
 			if math.Abs(got-want) > 1e-9 {
-				t.Errorf("Importance = %.3f, want %.3f (content=%q tags=%v)",
-					got, want, content, tags)
+				t.Errorf("Importance = %.3f, want %.3f (content=%q tags=%v lang=%q)",
+					got, want, content, tags, lang)
 			}
 			if got < 0 || got > 1.0 {
 				t.Errorf("score %.3f out of [0,1] range", got)
@@ -39,24 +47,65 @@ func TestImportance_PICT(t *testing.T) {
 	}
 }
 
-// buildScoringFixture synthesises content + tags from a PICT row.
-// Intentionally deterministic: same row -> same content.
-func buildScoringFixture(row map[string]string) (string, []string) {
-	var parts []string
+// languageCodeFromRow maps the PICT Language axis value to the code
+// the extraction loader expects. Unknown -> a deliberately invalid
+// code so the resolveRules fallback path exercises itself.
+func languageCodeFromRow(row map[string]string) string {
+	switch row["Language"] {
+	case "EN":
+		return "en"
+	case "DE":
+		return "de"
+	case "Unknown":
+		return "klingon"
+	default:
+		return "en"
+	}
+}
 
+// buildScoringFixture synthesises content + tags from a PICT row.
+// Intentionally deterministic: same row -> same content. Signal phrases
+// are chosen per-language so the DE axis actually exercises the YAML
+// vocab and isn't just a pass-through over English-shaped content.
+func buildScoringFixture(row map[string]string) (string, []string) {
+	lang := row["Language"]
+	if lang == "" {
+		lang = "EN"
+	}
+	// Unknown falls back to English under the hood, so use English
+	// signal phrases for the Unknown axis.
+	if lang == "Unknown" {
+		lang = "EN"
+	}
+
+	var parts []string
 	if row["DecisionSignal"] == "Present" {
-		parts = append(parts, "we decided to ship early.")
+		switch lang {
+		case "DE":
+			parts = append(parts, "Wir haben uns entschieden, früh auszuliefern.")
+		default:
+			parts = append(parts, "we decided to ship early.")
+		}
 	} else {
-		parts = append(parts, "the discussion continues.")
+		switch lang {
+		case "DE":
+			parts = append(parts, "die Diskussion geht weiter.")
+		default:
+			parts = append(parts, "the discussion continues.")
+		}
 	}
 	if row["ErrorSignal"] == "Present" {
-		// "exception" is in errorWordsEN; also match the ErrorType regex
-		// via "RuntimeException" so this axis covers both paths. The
-		// score addition is capped at 0.2 regardless of which path matches.
+		// RuntimeException matches errorTypeRe in every language (regex
+		// is language-agnostic). Use it as the universal trigger.
 		parts = append(parts, "a RuntimeException surfaced.")
 	}
 	if row["ArchSignal"] == "Present" {
-		parts = append(parts, "decoupled the modular interface.")
+		switch lang {
+		case "DE":
+			parts = append(parts, "Refaktorisierung des modularen Clients.")
+		default:
+			parts = append(parts, "decoupled the modular interface.")
+		}
 	}
 	if row["FilePathSignal"] == "Present" {
 		parts = append(parts, "edit ./cmd/root.go please.")
@@ -70,7 +119,8 @@ func buildScoringFixture(row map[string]string) (string, []string) {
 	// LengthBucket Long requires > 500 chars. Pad with filler that
 	// contains no signal words so padding never inadvertently triggers
 	// another axis. "and then and then and then..." is safe -- none
-	// of those words appear in any decision/error/arch set.
+	// of those words appear in any decision/error/arch set for either
+	// English or German.
 	if row["LengthBucket"] == "Long" {
 		for len(content) <= 500 {
 			content += " and then and then and then"
@@ -88,7 +138,9 @@ func buildScoringFixture(row map[string]string) (string, []string) {
 }
 
 // expectedScore reproduces the Python formula bit-for-bit from axis
-// values, so PICT coverage doubles as a formula regression test.
+// values, so PICT coverage doubles as a formula regression test. The
+// Language axis does not change the expected score -- every language
+// adds the same deltas on signal hit.
 func expectedScore(row map[string]string) float64 {
 	score := 0.2
 	if row["DecisionSignal"] == "Present" {

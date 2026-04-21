@@ -45,6 +45,12 @@ LengthBucket: Short, Long
 #   Many -> 3+ tags
 TagCountBucket: Few, Many
 
+# Language code passed to ImportanceForLang. EN is the reference --
+# every signal-word axis is English by construction. DE exercises the
+# YAML-loaded German vocab (entschieden / fehler / architektur).
+# Unknown is the fallback path (klingon -> silent English).
+Language: EN, DE, Unknown
+
 
 # --- Constraints --------------------------------------------------------
 

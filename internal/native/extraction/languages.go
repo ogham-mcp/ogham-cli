@@ -70,6 +70,65 @@ type LanguageRules struct {
 	// gate; the keys are stable across languages but the values are
 	// localised.
 	QueryHints map[string][]string `yaml:"query_hints"`
+
+	// --- Date anchors + modifiers (v0.7) --------------------------------
+	// Today / tomorrow / yesterday equivalents. Single-token phrases --
+	// multi-word anchors like "the day after tomorrow" are out of scope
+	// (handled by parsedatetime on the Python side, not ported).
+	TodayWords     []string `yaml:"today_words"`
+	TomorrowWords  []string `yaml:"tomorrow_words"`
+	YesterdayWords []string `yaml:"yesterday_words"`
+
+	// Modifiers for "last/next/this <weekday|period>". English has one
+	// word per bucket; German has several (letzten/letzte/letzter).
+	ModifierLast []string `yaml:"modifier_last"`
+	ModifierNext []string `yaml:"modifier_next"`
+	ModifierThis []string `yaml:"modifier_this"`
+
+	// Periods: "week" / "month" / "year" equivalents.
+	PeriodWeek  []string `yaml:"period_week"`
+	PeriodMonth []string `yaml:"period_month"`
+	PeriodYear  []string `yaml:"period_year"`
+
+	// Units for "N <unit> ago" / "in N <unit>". English includes both
+	// singular + plural forms ("day", "days"); German inflects
+	// differently so YAML spells out every surface form.
+	UnitDay   []string `yaml:"unit_day"`
+	UnitWeek  []string `yaml:"unit_week"`
+	UnitMonth []string `yaml:"unit_month"`
+	UnitYear  []string `yaml:"unit_year"`
+
+	// Direction markers: "ago" = past, "in" = future.
+	AgoMarkers []string `yaml:"ago_markers"`
+	InMarkers  []string `yaml:"in_markers"`
+
+	// --- Recurrence (v0.7) ---------------------------------------------
+	// Additional recurrence anchor phrases beyond EveryWords+DayNames.
+	// Each entry: { pattern: regex, normalised: weekly|daily|... }.
+	// Regex is anchored at word boundaries by the recurrence matcher.
+	RecurrencePatterns []RecurrencePattern `yaml:"recurrence_patterns"`
+
+	// --- Person-name regex tightening (v0.7) ---------------------------
+	// PersonNameDenylist is the set of Capitalised bigrams / unigrams
+	// that SHOULD NOT be tagged as person: even if they pass the basic
+	// shape check. Case-insensitive match at lookup site.
+	PersonNameDenylist []string `yaml:"person_name_denylist"`
+
+	// PersonNameContextWords is the set of preceding-context tokens that
+	// license a standalone Capitalised bigram (e.g. "by Kevin Burns",
+	// "from John Doe"). Without a matching context word in the 3-token
+	// window before the candidate, the candidate is rejected. English-
+	// seed: by/from/user/person/with/met/said/told/asked.
+	PersonNameContextWords []string `yaml:"person_name_context_words"`
+}
+
+// RecurrencePattern is one entry in a language's recurrence_patterns
+// block. The regex is compiled once per pattern and cached inside the
+// recurrence package-level cache. normalised is the canonical form
+// exposed as metadata.recurrence + a recurrence:<normalised> tag.
+type RecurrencePattern struct {
+	Pattern    string `yaml:"pattern"`
+	Normalised string `yaml:"normalised"`
 }
 
 // Set returns a string set (map[string]struct{}) for O(1) membership

@@ -420,6 +420,119 @@ preference_words:
   - typischerweise
   - meistens
 
+
+# --- Date anchors (v0.7) ---
+
+today_words:
+  - heute
+
+tomorrow_words:
+  - morgen
+
+yesterday_words:
+  - gestern
+
+modifier_last:
+  - letzte
+  - letzten
+  - letzter
+  - letztes
+  - vorige
+  - vorigen
+  - voriges
+  - vergangene
+  - vergangenen
+
+modifier_next:
+  - "nächste"
+  - naechste
+  - "nächsten"
+  - naechsten
+  - "nächster"
+  - naechster
+  - kommende
+  - kommenden
+
+modifier_this:
+  - diese
+  - diesen
+  - dieser
+  - dieses
+
+period_week:
+  - woche
+
+period_month:
+  - monat
+
+period_year:
+  - jahr
+
+unit_day:
+  - tag
+  - tage
+  - tagen
+
+unit_week:
+  - woche
+  - wochen
+
+unit_month:
+  - monat
+  - monate
+  - monaten
+
+unit_year:
+  - jahr
+  - jahre
+  - jahren
+
+ago_markers:
+  - vor
+
+in_markers:
+  - in
+
+# --- Recurrence (v0.7) ---
+recurrence_patterns:
+  - pattern: "täglich"
+    normalised: "daily"
+  - pattern: "taeglich"
+    normalised: "daily"
+  - pattern: "wöchentlich"
+    normalised: "weekly"
+  - pattern: "wochentlich"
+    normalised: "weekly"
+  - pattern: "zweiwöchentlich"
+    normalised: "biweekly"
+  - pattern: "zweiwochentlich"
+    normalised: "biweekly"
+  - pattern: "alle zwei wochen"
+    normalised: "biweekly"
+  - pattern: "monatlich"
+    normalised: "monthly"
+  - pattern: "quartalsweise"
+    normalised: "quarterly"
+  - pattern: "jährlich"
+    normalised: "yearly"
+  - pattern: "jaehrlich"
+    normalised: "yearly"
+
+# --- Person-name tightening (v0.7) ---
+person_name_denylist: []
+
+person_name_context_words:
+  - von
+  - durch
+  - mit
+  - sagte
+  - sprach
+  - schrieb
+  - traf
+  - "erzählte"
+  - fragte
+  - antwortete
+
 # Negation / supersession markers. Triggers the contradiction producer when
 # present in a stored memory that has high similarity to an existing memory
 # with the opposite polarity. Conservative list.
