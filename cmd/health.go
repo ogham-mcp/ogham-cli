@@ -13,7 +13,7 @@ import (
 
 var (
 	// Deprecated: JSON is the default now (use --text), native is the
-	// default now (use --legacy).
+	// default now (use --sidecar to opt out).
 	healthJSONDeprecated   bool
 	healthNativeDeprecated bool
 	healthLiveEmbedder     bool
@@ -22,11 +22,12 @@ var (
 var healthCmd = &cobra.Command{
 	Use:   "health",
 	Short: "Check the Ogham stack is reachable and responsive",
-	Long: `Default path: spawn the Python MCP sidecar and call its health_check tool.
---native path: run parallel probes in-process against the configured
-backend (Supabase PostgREST or Postgres via pgx) and the configured
-embedding provider. Native mode is ~10x faster because it skips the
-sidecar startup.
+	Long: `Default path (native Go): run parallel probes in-process against
+the configured backend (Supabase PostgREST or Postgres via pgx) and
+the configured embedding provider. Native mode is ~10x faster because
+it skips the sidecar startup.
+--sidecar path: spawn the Python MCP sidecar and call its health_check
+tool. Useful for diagnosing sidecar-only installs.
 
 Embedder probe is config-validation-only by default to avoid a paid
 API call on every invocation. Pass --live-embedder to issue a real
@@ -37,7 +38,7 @@ round-trip embedding request.`,
 		ctx, cancelTimeout := context.WithTimeout(ctx, 30*time.Second)
 		defer cancelTimeout()
 
-		if useLegacy() {
+		if useSidecar() {
 			return runHealthSidecar(ctx)
 		}
 		return runHealthNative(ctx)

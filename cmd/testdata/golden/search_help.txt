@@ -1,10 +1,13 @@
 Run a hybrid (vector + keyword) search against the active profile.
 
-Default path: calls the Python MCP sidecar's hybrid_search tool.
---native path: generates the query embedding via the configured provider
-(Gemini today, others to follow) and runs hybrid_search_memories via
-pgx directly. Requires DATABASE_URL, EMBEDDING_PROVIDER, and the
-provider API key in your .env or config.toml.
+Default path (native Go): generates the query embedding via the
+configured provider (Gemini / Ollama / OpenAI / Voyage / Mistral) and
+runs hybrid_search_memories via pgx directly. Requires DATABASE_URL,
+EMBEDDING_PROVIDER, and the provider API key in your .env or
+config.toml.
+--sidecar path: calls the Python MCP sidecar's hybrid_search tool for
+the full retrieval pipeline (intent detection, strided retrieval,
+query reformulation, MMR, graph augmentation).
 
 Usage:
   ogham search <query> [flags]
@@ -16,8 +19,8 @@ Flags:
       --tags string      Filter by comma-separated tags
 
 Global Flags:
-      --legacy          Route through the Python MCP sidecar instead of native Go
-      --python          Alias for --legacy
+      --python          Alias for --sidecar
   -q, --quiet           Suppress stderr informational notices (sidecar fallback message)
+      --sidecar         Route through the Python MCP sidecar for the full retrieval pipeline (intent detection, strided retrieval, query reformulation, graph augmentation). Default is the fast native Go path.
       --text            Human-readable output (default is JSON for LLM / script consumption)
   -v, --verbose count   Increase stderr log verbosity (-v = info, -vv = debug)

@@ -8,7 +8,9 @@ Content source:
 
 The native Go pipeline (extraction -> parallel embed + search ->
 surprise -> auto-link candidates -> DB write) is the default in v0.5.
-Use --legacy (or --python) to route through the Python MCP sidecar.
+Use --sidecar (or --python) to route through the Python MCP sidecar
+for the full retrieval pipeline and tool-layer enrichment (contradiction
+detection, compression, supersedes).
 
   --dry-run  runs extraction + embed + search but skips the DB write,
              so you can preview what the pipeline would produce before
@@ -25,8 +27,8 @@ Flags:
       --tags string      Comma-separated tags (e.g. type:decision,project:foo)
 
 Global Flags:
-      --legacy          Route through the Python MCP sidecar instead of native Go
-      --python          Alias for --legacy
+      --python          Alias for --sidecar
   -q, --quiet           Suppress stderr informational notices (sidecar fallback message)
+      --sidecar         Route through the Python MCP sidecar for the full retrieval pipeline (intent detection, strided retrieval, query reformulation, graph augmentation). Default is the fast native Go path.
       --text            Human-readable output (default is JSON for LLM / script consumption)
   -v, --verbose count   Increase stderr log verbosity (-v = info, -vv = debug)

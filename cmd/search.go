@@ -26,11 +26,14 @@ var searchCmd = &cobra.Command{
 	Short: "Hybrid search across stored memories",
 	Long: `Run a hybrid (vector + keyword) search against the active profile.
 
-Default path: calls the Python MCP sidecar's hybrid_search tool.
---native path: generates the query embedding via the configured provider
-(Gemini today, others to follow) and runs hybrid_search_memories via
-pgx directly. Requires DATABASE_URL, EMBEDDING_PROVIDER, and the
-provider API key in your .env or config.toml.`,
+Default path (native Go): generates the query embedding via the
+configured provider (Gemini / Ollama / OpenAI / Voyage / Mistral) and
+runs hybrid_search_memories via pgx directly. Requires DATABASE_URL,
+EMBEDDING_PROVIDER, and the provider API key in your .env or
+config.toml.
+--sidecar path: calls the Python MCP sidecar's hybrid_search tool for
+the full retrieval pipeline (intent detection, strided retrieval,
+query reformulation, MMR, graph augmentation).`,
 	Args: cobra.MinimumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
@@ -40,7 +43,7 @@ provider API key in your .env or config.toml.`,
 
 		query := strings.Join(args, " ")
 
-		if useLegacy() {
+		if useSidecar() {
 			return runSearchSidecar(ctx, query)
 		}
 		return runSearchNative(ctx, query)
