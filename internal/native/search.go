@@ -2,6 +2,7 @@ package native
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strconv"
 	"strings"
@@ -12,16 +13,20 @@ import (
 
 // SearchResult mirrors the column set returned by hybrid_search_memories.
 // Narrower projection than the memories table -- only what the CLI surfaces.
+// Metadata carries the jsonb column as a decoded map so downstream callers
+// (BEAM harness, MCP tool handlers) can read keys like msg_ids / chat_id
+// without a second round-trip to fetch the same row.
 type SearchResult struct {
-	ID          string    `json:"id"`
-	Content     string    `json:"content"`
-	Source      string    `json:"source,omitempty"`
-	Profile     string    `json:"profile"`
-	Tags        []string  `json:"tags"`
-	Similarity  float64   `json:"similarity"`
-	KeywordRank float64   `json:"keyword_rank"`
-	Relevance   float64   `json:"relevance"`
-	CreatedAt   time.Time `json:"created_at"`
+	ID          string         `json:"id"`
+	Content     string         `json:"content"`
+	Source      string         `json:"source,omitempty"`
+	Profile     string         `json:"profile"`
+	Tags        []string       `json:"tags"`
+	Metadata    map[string]any `json:"metadata,omitempty"`
+	Similarity  float64        `json:"similarity"`
+	KeywordRank float64        `json:"keyword_rank"`
+	Relevance   float64        `json:"relevance"`
+	CreatedAt   time.Time      `json:"created_at"`
 }
 
 // SearchOptions captures the optional arguments hybrid_search_memories
@@ -117,6 +122,7 @@ func runHybridSearch(
 	// behave identically.
 	const sql = `
 SELECT id::text, content, coalesce(source, ''), profile, coalesce(tags, '{}'::text[]),
+       coalesce(metadata, '{}'::jsonb)::text AS metadata_json,
        similarity, keyword_rank, relevance, created_at
 FROM hybrid_search_memories(
     $1::text,          -- query_text
@@ -156,12 +162,24 @@ FROM hybrid_search_memories(
 
 	var out []SearchResult
 	for rows.Next() {
-		var r SearchResult
+		var (
+			r            SearchResult
+			metadataJSON string
+		)
 		if err := rows.Scan(
 			&r.ID, &r.Content, &r.Source, &r.Profile, &r.Tags,
+			&metadataJSON,
 			&r.Similarity, &r.KeywordRank, &r.Relevance, &r.CreatedAt,
 		); err != nil {
 			return nil, fmt.Errorf("native search: scan: %w", err)
+		}
+		// jsonb column arrives as text (::text cast in the SELECT) so we
+		// can decode into map[string]any without pgx type-registration
+		// gymnastics. Empty/NULL rows fall through as empty map.
+		if metadataJSON != "" && metadataJSON != "{}" {
+			if err := json.Unmarshal([]byte(metadataJSON), &r.Metadata); err != nil {
+				return nil, fmt.Errorf("native search: decode metadata: %w", err)
+			}
 		}
 		out = append(out, r)
 	}
