@@ -56,6 +56,14 @@ detail lives in the commit/PR that actually picks it up.
 - **`OLLAMA_URL` env var honoured in the cached embedder path** --
   verified via pg_coverage_test.go Store test; worth a dedicated
   regression test too.
+- **Stale-binary trap on `cmd/store.go` legacy-fallback notice** --
+  pre-v0.5 binaries print "store has no native Go path yet;
+  routing through the Python sidecar" and then fail if the sidecar
+  doesn't have a matching config. Current releases ship v0.5+ so
+  end users won't hit this, but dev-local rebuilds missed for a
+  few days will. Consider adding a `--version-check` guard on the
+  fallback path that errors out with "please upgrade" rather than
+  silently routing.
 
 ## Deferred / low priority
 
