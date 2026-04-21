@@ -1,0 +1,1391 @@
+{
+  "reference_date": "2026-04-21T12:00:00Z",
+  "shared_entity_prefixes": [
+    "entity:",
+    "file:",
+    "error:",
+    "person:"
+  ],
+  "count": 97,
+  "records": [
+    {
+      "index": 0,
+      "content": "We decided to use Voyage embeddings for Ogham because text-embedding-3-small underperformed on LoCoMo.",
+      "tags": [
+        "type:decision"
+      ],
+      "python_entities_full": [
+        "entity:LoCoMo",
+        "event:voyage"
+      ],
+      "python_entities_shared": [
+        "entity:LoCoMo"
+      ],
+      "python_dates": [],
+      "python_importance": 0.5
+    },
+    {
+      "index": 1,
+      "content": "Refactored internal/native/store.go to use errgroup.WithContext for the parallel embed + search legs.",
+      "tags": [
+        "project:ogham",
+        "type:refactor"
+      ],
+      "python_entities_full": [
+        "activity:refactored",
+        "entity:WithContext",
+        "file:internal/native/store.go"
+      ],
+      "python_entities_shared": [
+        "entity:WithContext",
+        "file:internal/native/store.go"
+      ],
+      "python_dates": [],
+      "python_importance": 0.5
+    },
+    {
+      "index": 2,
+      "content": "Agreed on 512-dim vectors across all providers to match the current Supabase schema vector(512).",
+      "tags": [
+        "type:decision",
+        "schema:vector-512"
+      ],
+      "python_entities_full": [
+        "event:match"
+      ],
+      "python_entities_shared": [],
+      "python_dates": [],
+      "python_importance": 0.2
+    },
+    {
+      "index": 3,
+      "content": "The gateway codepath is marked for deletion once the v0.5 MVP ships -- it's dead code after the pivot to pure technology layer.",
+      "tags": [
+        "type:decision"
+      ],
+      "python_entities_full": [],
+      "python_entities_shared": [],
+      "python_dates": [],
+      "python_importance": 0.2
+    },
+    {
+      "index": 4,
+      "content": "Locked testing standards for internal/native/: 90% coverage, PICT matrices, fuzz, benchmarks, live smoke tests.",
+      "tags": [
+        "type:decision",
+        "testing"
+      ],
+      "python_entities_full": [
+        "activity:testing"
+      ],
+      "python_entities_shared": [],
+      "python_dates": [],
+      "python_importance": 0.2
+    },
+    {
+      "index": 5,
+      "content": "Picked modernc.org/sqlite over mattn/go-sqlite3 to keep CGO_ENABLED=0 so cross-compile stays trivial.",
+      "tags": [
+        "type:decision"
+      ],
+      "python_entities_full": [],
+      "python_entities_shared": [],
+      "python_dates": [],
+      "python_importance": 0.5
+    },
+    {
+      "index": 6,
+      "content": "Decision: Gemini's raw-HTTP client stays, google.golang.org/genai rejected on binary-weight grounds (~15 MB grpc+protobuf).",
+      "tags": [
+        "type:decision",
+        "dependencies"
+      ],
+      "python_entities_full": [
+        "person:Decision Geminis"
+      ],
+      "python_entities_shared": [
+        "person:Decision Geminis"
+      ],
+      "python_dates": [],
+      "python_importance": 0.4
+    },
+    {
+      "index": 7,
+      "content": "We will normalize Gemini embeddings client-side when requested dim < 3072 to match Google's docs.",
+      "tags": [
+        "type:decision",
+        "gemini"
+      ],
+      "python_entities_full": [
+        "event:match"
+      ],
+      "python_entities_shared": [],
+      "python_dates": [],
+      "python_importance": 0.2
+    },
+    {
+      "index": 8,
+      "content": "Dedup threshold locked at 0.8 for v0.5; revisit at v0.6 if we see false merges in the field.",
+      "tags": [
+        "type:decision"
+      ],
+      "python_entities_full": [],
+      "python_entities_shared": [],
+      "python_dates": [],
+      "python_importance": 0.2
+    },
+    {
+      "index": 9,
+      "content": "Move intent detection patterns to YAML multilingual word lists so we can add languages without touching Go code.",
+      "tags": [
+        "type:decision"
+      ],
+      "python_entities_full": [],
+      "python_entities_shared": [],
+      "python_dates": [],
+      "python_importance": 0.4
+    },
+    {
+      "index": 10,
+      "content": "ConnectionRefusedError when hitting Ollama on localhost:11434 after Docker restart -- the container hadn't bound yet.",
+      "tags": [
+        "type:bug"
+      ],
+      "python_entities_full": [
+        "entity:ConnectionRefusedError",
+        "error:ConnectionRefusedError"
+      ],
+      "python_entities_shared": [
+        "entity:ConnectionRefusedError",
+        "error:ConnectionRefusedError"
+      ],
+      "python_dates": [],
+      "python_importance": 0.4
+    },
+    {
+      "index": 11,
+      "content": "ValueError: Embedding dimension mismatch: got 1024, expected 512 -- forgot to pass dimensions on ada-002.",
+      "tags": [
+        "type:bug",
+        "embeddings"
+      ],
+      "python_entities_full": [
+        "entity:ValueError",
+        "error:ValueError",
+        "person:ValueError Embedding"
+      ],
+      "python_entities_shared": [
+        "entity:ValueError",
+        "error:ValueError",
+        "person:ValueError Embedding"
+      ],
+      "python_dates": [],
+      "python_importance": 0.4
+    },
+    {
+      "index": 12,
+      "content": "FileNotFoundError on /Users/kevin/.ogham/config.toml during the first run -- init wizard hadn't been run yet.",
+      "tags": [
+        "type:bug"
+      ],
+      "python_entities_full": [
+        "entity:FileNotFoundError",
+        "error:FileNotFoundError",
+        "file:/Users/kevin/.ogham/config.toml"
+      ],
+      "python_entities_shared": [
+        "entity:FileNotFoundError",
+        "error:FileNotFoundError",
+        "file:/Users/kevin/.ogham/config.toml"
+      ],
+      "python_dates": [],
+      "python_importance": 0.5
+    },
+    {
+      "index": 13,
+      "content": "SSLCertVerificationError against api.voyageai.example.com -- Azure proxy certificate chain wasn't trusted.",
+      "tags": [
+        "type:bug"
+      ],
+      "python_entities_full": [
+        "error:SSLCertVerificationError"
+      ],
+      "python_entities_shared": [
+        "error:SSLCertVerificationError"
+      ],
+      "python_dates": [],
+      "python_importance": 0.4
+    },
+    {
+      "index": 14,
+      "content": "TimeoutError on 30-second HTTP client when Gemini cold-starts a new model.",
+      "tags": [
+        "type:bug",
+        "gemini"
+      ],
+      "python_entities_full": [
+        "entity:TimeoutError",
+        "error:TimeoutError"
+      ],
+      "python_entities_shared": [
+        "entity:TimeoutError",
+        "error:TimeoutError"
+      ],
+      "python_dates": [],
+      "python_importance": 0.4
+    },
+    {
+      "index": 15,
+      "content": "KeyError 'embedding' in response from Mistral when output_dimension was unexpectedly sent to mistral-embed.",
+      "tags": [
+        "type:bug",
+        "mistral"
+      ],
+      "python_entities_full": [
+        "entity:KeyError",
+        "error:KeyError"
+      ],
+      "python_entities_shared": [
+        "entity:KeyError",
+        "error:KeyError"
+      ],
+      "python_dates": [],
+      "python_importance": 0.4
+    },
+    {
+      "index": 16,
+      "content": "The health check returned UnauthorizedError because my OPENAI_API_KEY had expired last week.",
+      "tags": [
+        "type:bug"
+      ],
+      "python_entities_full": [
+        "entity:UnauthorizedError",
+        "error:UnauthorizedError"
+      ],
+      "python_entities_shared": [
+        "entity:UnauthorizedError",
+        "error:UnauthorizedError"
+      ],
+      "python_dates": [
+        "2026-04-14"
+      ],
+      "python_importance": 0.4
+    },
+    {
+      "index": 17,
+      "content": "Mixing IntegrityError with concurrent INSERT -- need to add ON CONFLICT DO NOTHING to the memories table.",
+      "tags": [
+        "type:bug",
+        "db"
+      ],
+      "python_entities_full": [
+        "entity:IntegrityError",
+        "error:IntegrityError",
+        "person:Mixing IntegrityError"
+      ],
+      "python_entities_shared": [
+        "entity:IntegrityError",
+        "error:IntegrityError",
+        "person:Mixing IntegrityError"
+      ],
+      "python_dates": [],
+      "python_importance": 0.4
+    },
+    {
+      "index": 18,
+      "content": "Updated internal/native/cache/embedding_cache.go to add the Default() singleton.",
+      "tags": [
+        "project:ogham"
+      ],
+      "python_entities_full": [
+        "file:internal/native/cache/embedding_cache.go"
+      ],
+      "python_entities_shared": [
+        "file:internal/native/cache/embedding_cache.go"
+      ],
+      "python_dates": [],
+      "python_importance": 0.30000000000000004
+    },
+    {
+      "index": 19,
+      "content": "Ported src/ogham/embeddings.py's _embed_gemini to Go at internal/native/embedding.go.",
+      "tags": [],
+      "python_entities_full": [
+        "file:internal/native/embedding.go",
+        "file:src/ogham/embeddings.py"
+      ],
+      "python_entities_shared": [
+        "file:internal/native/embedding.go",
+        "file:src/ogham/embeddings.py"
+      ],
+      "python_dates": [],
+      "python_importance": 0.30000000000000004
+    },
+    {
+      "index": 20,
+      "content": "Wrote tests/test_gemini_normalization.py with 5 cases covering the helper, sub-3072 fix, and 3072 no-op.",
+      "tags": [],
+      "python_entities_full": [
+        "activity:wrote",
+        "file:tests/test_gemini_normalization.py"
+      ],
+      "python_entities_shared": [
+        "file:tests/test_gemini_normalization.py"
+      ],
+      "python_dates": [],
+      "python_importance": 0.30000000000000004
+    },
+    {
+      "index": 21,
+      "content": "Bumped tests/conftest.py to include a shared fixture for the parity harness.",
+      "tags": [],
+      "python_entities_full": [
+        "file:tests/conftest.py"
+      ],
+      "python_entities_shared": [
+        "file:tests/conftest.py"
+      ],
+      "python_dates": [],
+      "python_importance": 0.30000000000000004
+    },
+    {
+      "index": 22,
+      "content": "Added testdata/cache/fixture.db as a cross-stack round-trip fixture for /Users/kevin/foo/bar.txt path extraction.",
+      "tags": [],
+      "python_entities_full": [
+        "file:/Users/kevin/foo/bar.txt",
+        "file:testdata/cache/fixture.db"
+      ],
+      "python_entities_shared": [
+        "file:/Users/kevin/foo/bar.txt",
+        "file:testdata/cache/fixture.db"
+      ],
+      "python_dates": [],
+      "python_importance": 0.30000000000000004
+    },
+    {
+      "index": 23,
+      "content": "Deleted internal/native/embedding_cached_test.go after moving the wrapping tests to testhelpers_test.go.",
+      "tags": [],
+      "python_entities_full": [
+        "file:internal/native/embedding_cached_test.go"
+      ],
+      "python_entities_shared": [
+        "file:internal/native/embedding_cached_test.go"
+      ],
+      "python_dates": [],
+      "python_importance": 0.30000000000000004
+    },
+    {
+      "index": 24,
+      "content": "The makefile target pict-regen now scans internal/native/**/testdata/*.pict so new packages pick it up.",
+      "tags": [],
+      "python_entities_full": [],
+      "python_entities_shared": [],
+      "python_dates": [],
+      "python_importance": 0.2
+    },
+    {
+      "index": 25,
+      "content": "Log output goes to /var/log/ogham/app.log on Linux; macOS uses ~/Library/Logs/ogham/app.log.",
+      "tags": [],
+      "python_entities_full": [
+        "file:/Library/Logs/ogham/app.log",
+        "file:/var/log/ogham/app.log"
+      ],
+      "python_entities_shared": [
+        "file:/Library/Logs/ogham/app.log",
+        "file:/var/log/ogham/app.log"
+      ],
+      "python_dates": [],
+      "python_importance": 0.30000000000000004
+    },
+    {
+      "index": 26,
+      "content": "The EmbeddingCache type has Open, Get, Put, Contains, Len, Clear, Stats methods plus a Key() helper.",
+      "tags": [],
+      "python_entities_full": [
+        "entity:EmbeddingCache"
+      ],
+      "python_entities_shared": [
+        "entity:EmbeddingCache"
+      ],
+      "python_dates": [],
+      "python_importance": 0.2
+    },
+    {
+      "index": 27,
+      "content": "Uses FastMCP with StdioTransport and exposes store_memory, hybrid_search, list_recent as tools.",
+      "tags": [],
+      "python_entities_full": [
+        "entity:FastMCP",
+        "entity:StdioTransport"
+      ],
+      "python_entities_shared": [
+        "entity:FastMCP",
+        "entity:StdioTransport"
+      ],
+      "python_dates": [],
+      "python_importance": 0.2
+    },
+    {
+      "index": 28,
+      "content": "Railway bundles Caddy, DashboardAPI, Gateway, BillingWorker, and Valkey into five containers.",
+      "tags": [],
+      "python_entities_full": [
+        "entity:BillingWorker",
+        "entity:DashboardAPI",
+        "person:Caddy DashboardAPI",
+        "person:DashboardAPI Gateway",
+        "person:Gateway BillingWorker"
+      ],
+      "python_entities_shared": [
+        "entity:BillingWorker",
+        "entity:DashboardAPI",
+        "person:Caddy DashboardAPI",
+        "person:DashboardAPI Gateway",
+        "person:Gateway BillingWorker"
+      ],
+      "python_dates": [],
+      "python_importance": 0.2
+    },
+    {
+      "index": 29,
+      "content": "The CachedEmbedder wraps GeminiEmbedder, OllamaEmbedder, OpenAIEmbedder, VoyageEmbedder, MistralEmbedder.",
+      "tags": [],
+      "python_entities_full": [
+        "entity:CachedEmbedder",
+        "entity:GeminiEmbedder",
+        "entity:MistralEmbedder",
+        "entity:OllamaEmbedder",
+        "entity:OpenAIEmbedder",
+        "entity:VoyageEmbedder",
+        "person:GeminiEmbedder OllamaEmbedder",
+        "person:OllamaEmbedder OpenAIEmbedder",
+        "person:OpenAIEmbedder VoyageEmbedder",
+        "person:VoyageEmbedder MistralEmbedder"
+      ],
+      "python_entities_shared": [
+        "entity:CachedEmbedder",
+        "entity:GeminiEmbedder",
+        "entity:MistralEmbedder",
+        "entity:OllamaEmbedder",
+        "entity:OpenAIEmbedder",
+        "entity:VoyageEmbedder",
+        "person:GeminiEmbedder OllamaEmbedder",
+        "person:OllamaEmbedder OpenAIEmbedder",
+        "person:OpenAIEmbedder VoyageEmbedder",
+        "person:VoyageEmbedder MistralEmbedder"
+      ],
+      "python_dates": [],
+      "python_importance": 0.2
+    },
+    {
+      "index": 30,
+      "content": "Supabase RPC hybrid_search_memories takes query_text, query_embedding, match_count, filter_profile arguments.",
+      "tags": [],
+      "python_entities_full": [
+        "person:Supabase RPC"
+      ],
+      "python_entities_shared": [
+        "person:Supabase RPC"
+      ],
+      "python_dates": [],
+      "python_importance": 0.2
+    },
+    {
+      "index": 31,
+      "content": "Rebuilt the NetworkInspector on top of httptest.Server so unit tests don't need real Voyage or Mistral endpoints.",
+      "tags": [],
+      "python_entities_full": [
+        "entity:NetworkInspector",
+        "event:voyage"
+      ],
+      "python_entities_shared": [
+        "entity:NetworkInspector"
+      ],
+      "python_dates": [],
+      "python_importance": 0.2
+    },
+    {
+      "index": 32,
+      "content": "We track OpenClaw, ByteRover, Cognee, Mem0, and SupermemoryAI in the competitor watch page.",
+      "tags": [
+        "competitors"
+      ],
+      "python_entities_full": [
+        "entity:ByteRover",
+        "entity:OpenClaw",
+        "entity:SupermemoryAI",
+        "person:ByteRover Cognee",
+        "person:OpenClaw ByteRover"
+      ],
+      "python_entities_shared": [
+        "entity:ByteRover",
+        "entity:OpenClaw",
+        "entity:SupermemoryAI",
+        "person:ByteRover Cognee",
+        "person:OpenClaw ByteRover"
+      ],
+      "python_dates": [],
+      "python_importance": 0.2
+    },
+    {
+      "index": 33,
+      "content": "FreiburgLab is the internal name for the research preview; rename before public launch.",
+      "tags": [],
+      "python_entities_full": [
+        "entity:FreiburgLab"
+      ],
+      "python_entities_shared": [
+        "entity:FreiburgLab"
+      ],
+      "python_dates": [],
+      "python_importance": 0.2
+    },
+    {
+      "index": 34,
+      "content": "Kevin Burns shipped the Voyage + Mistral absorption in commit bfd3378 on 2026-04-21.",
+      "tags": [],
+      "python_entities_full": [
+        "event:voyage",
+        "person:Kevin Burns"
+      ],
+      "python_entities_shared": [
+        "person:Kevin Burns"
+      ],
+      "python_dates": [
+        "2026-04-21"
+      ],
+      "python_importance": 0.2
+    },
+    {
+      "index": 35,
+      "content": "Iain Bennett tested the v0.4 release against his self-hosted stack; found no regressions.",
+      "tags": [],
+      "python_entities_full": [
+        "activity:tested",
+        "person:Iain Bennett"
+      ],
+      "python_entities_shared": [
+        "person:Iain Bennett"
+      ],
+      "python_dates": [],
+      "python_importance": 0.2
+    },
+    {
+      "index": 36,
+      "content": "Nate Jones linked the Ogham demo video from his YouTube channel in the comments section.",
+      "tags": [],
+      "python_entities_full": [
+        "entity:YouTube",
+        "event:demo",
+        "person:Nate Jones"
+      ],
+      "python_entities_shared": [
+        "entity:YouTube",
+        "person:Nate Jones"
+      ],
+      "python_dates": [],
+      "python_importance": 0.2
+    },
+    {
+      "index": 37,
+      "content": "Cemre Topcu is interested in picking up the Agent Zero importer as a contributor task.",
+      "tags": [],
+      "python_entities_full": [
+        "person:Cemre Topcu"
+      ],
+      "python_entities_shared": [
+        "person:Cemre Topcu"
+      ],
+      "python_dates": [],
+      "python_importance": 0.2
+    },
+    {
+      "index": 38,
+      "content": "Tobias Schmidt mentioned Freiberufler status at the last VDA call, not Gewerbe.",
+      "tags": [],
+      "python_entities_full": [
+        "person:Tobias Schmidt"
+      ],
+      "python_entities_shared": [
+        "person:Tobias Schmidt"
+      ],
+      "python_dates": [],
+      "python_importance": 0.2
+    },
+    {
+      "index": 39,
+      "content": "Sarah Chen asked whether Ogham supports Clerk Organizations for team shared memory -- it's on the v0.7 roadmap.",
+      "tags": [],
+      "python_entities_full": [
+        "person:Clerk Organizations",
+        "person:Sarah Chen"
+      ],
+      "python_entities_shared": [
+        "person:Clerk Organizations",
+        "person:Sarah Chen"
+      ],
+      "python_dates": [],
+      "python_importance": 0.2
+    },
+    {
+      "index": 40,
+      "content": "The v0.5 release is scheduled for 2026-05-01 with a code freeze starting 2026-04-28.",
+      "tags": [],
+      "python_entities_full": [],
+      "python_entities_shared": [],
+      "python_dates": [
+        "2026-04-28",
+        "2026-05-01"
+      ],
+      "python_importance": 0.2
+    },
+    {
+      "index": 41,
+      "content": "We reviewed the BEAM benchmark on Tuesday and saw R@10 climb from 0.73 to 0.81.",
+      "tags": [],
+      "python_entities_full": [],
+      "python_entities_shared": [],
+      "python_dates": [],
+      "python_importance": 0.2
+    },
+    {
+      "index": 42,
+      "content": "Let's talk again tomorrow about the Rackspace pitch deck.",
+      "tags": [],
+      "python_entities_full": [],
+      "python_entities_shared": [],
+      "python_dates": [
+        "2026-04-22"
+      ],
+      "python_importance": 0.2
+    },
+    {
+      "index": 43,
+      "content": "Three weeks ago I pushed the Gateway refactor to staging; it's been stable since.",
+      "tags": [],
+      "python_entities_full": [],
+      "python_entities_shared": [],
+      "python_dates": [],
+      "python_importance": 0.4
+    },
+    {
+      "index": 44,
+      "content": "Yesterday Kevin signed off on the v0.4 private release.",
+      "tags": [],
+      "python_entities_full": [
+        "person:Yesterday Kevin"
+      ],
+      "python_entities_shared": [
+        "person:Yesterday Kevin"
+      ],
+      "python_dates": [
+        "2026-04-20"
+      ],
+      "python_importance": 0.2
+    },
+    {
+      "index": 45,
+      "content": "In five days the Hetzner migration kicks off and we cut over cloud.ogham-mcp.dev.",
+      "tags": [],
+      "python_entities_full": [],
+      "python_entities_shared": [],
+      "python_dates": [],
+      "python_importance": 0.4
+    },
+    {
+      "index": 46,
+      "content": "Last week the Clerk webhook flow went live; signup to first store latency dropped 40%.",
+      "tags": [],
+      "python_entities_full": [],
+      "python_entities_shared": [],
+      "python_dates": [
+        "2026-04-14"
+      ],
+      "python_importance": 0.2
+    },
+    {
+      "index": 47,
+      "content": "Mid-April 2026 we flip the ogham-cli repo public assuming Section 12.1 clears.",
+      "tags": [],
+      "python_entities_full": [],
+      "python_entities_shared": [],
+      "python_dates": [],
+      "python_importance": 0.2
+    },
+    {
+      "index": 48,
+      "content": "Meeting on 2026-04-25 at 10:00 CET with the DACH senior management team.",
+      "tags": [],
+      "python_entities_full": [
+        "event:meeting"
+      ],
+      "python_entities_shared": [],
+      "python_dates": [
+        "2026-04-25"
+      ],
+      "python_importance": 0.2
+    },
+    {
+      "index": 49,
+      "content": "The 2026-03-16 launch went smoothly; no PagerDuty alerts for 72 hours post-launch.",
+      "tags": [],
+      "python_entities_full": [
+        "entity:PagerDuty",
+        "event:launch"
+      ],
+      "python_entities_shared": [
+        "entity:PagerDuty"
+      ],
+      "python_dates": [
+        "2026-03-16"
+      ],
+      "python_importance": 0.2
+    },
+    {
+      "index": 50,
+      "content": "```go\nfunc Store(ctx context.Context, cfg *Config, content string, opts StoreOptions) (*StoreResult, error) {\n    // orchestrator body\n}\n```\nThis is the v0.5 store orchestrator signature.",
+      "tags": [
+        "type:snippet"
+      ],
+      "python_entities_full": [
+        "emotion:content",
+        "entity:StoreOptions",
+        "entity:StoreResult"
+      ],
+      "python_entities_shared": [
+        "entity:StoreOptions",
+        "entity:StoreResult"
+      ],
+      "python_dates": [],
+      "python_importance": 0.5
+    },
+    {
+      "index": 51,
+      "content": "Short note with `inline` backticks only, no fenced block.",
+      "tags": [],
+      "python_entities_full": [],
+      "python_entities_shared": [],
+      "python_dates": [],
+      "python_importance": 0.30000000000000004
+    },
+    {
+      "index": 52,
+      "content": "Long design doc: The store orchestrator chains extraction -> embed + search in parallel -> surprise -> auto-link -> DB write. The store orchestrator chains extraction -> embed + search in parallel -> surprise -> auto-link -> DB write. The store orchestrator chains extraction -> embed + search in parallel -> surprise -> auto-link -> DB write. The store orchestrator chains extraction -> embed + search in parallel -> surprise -> auto-link -> DB write. The store orchestrator chains extraction -> embed + search in parallel -> surprise -> auto-link -> DB write. The store orchestrator chains extraction -> embed + search in parallel -> surprise -> auto-link -> DB write. The store orchestrator chains extraction -> embed + search in parallel -> surprise -> auto-link -> DB write. The store orchestrator chains extraction -> embed + search in parallel -> surprise -> auto-link -> DB write. The store orchestrator chains extraction -> embed + search in parallel -> surprise -> auto-link -> DB write. The store orchestrator chains extraction -> embed + search in parallel -> surprise -> auto-link -> DB write. ",
+      "tags": [
+        "type:design"
+      ],
+      "python_entities_full": [
+        "emotion:surprise"
+      ],
+      "python_entities_shared": [],
+      "python_dates": [],
+      "python_importance": 0.5
+    },
+    {
+      "index": 53,
+      "content": "Kevin was frustrated that the first live Voyage call returned 401; turned out VOYAGE_API_KEY in .env was expired.",
+      "tags": [],
+      "python_entities_full": [
+        "emotion:frustrated",
+        "event:voyage"
+      ],
+      "python_entities_shared": [],
+      "python_dates": [],
+      "python_importance": 0.2
+    },
+    {
+      "index": 54,
+      "content": "Lisa's wedding on 2026-06-15 is a fun event; we're blocking the week before for prep.",
+      "tags": [],
+      "python_entities_full": [
+        "event:wedding"
+      ],
+      "python_entities_shared": [],
+      "python_dates": [
+        "2026-06-15"
+      ],
+      "python_importance": 0.2
+    },
+    {
+      "index": 55,
+      "content": "My favorite editor is still Neovim; wrote the init.lua at /Users/kevin/.config/nvim/init.lua.",
+      "tags": [],
+      "python_entities_full": [
+        "activity:wrote",
+        "file:/Users/kevin/.config/nvim/init.lua",
+        "preference:favorite"
+      ],
+      "python_entities_shared": [
+        "file:/Users/kevin/.config/nvim/init.lua"
+      ],
+      "python_dates": [],
+      "python_importance": 0.30000000000000004
+    },
+    {
+      "index": 56,
+      "content": "3 tanks of compressed CO2 arrived at the lab on 2026-04-20.",
+      "tags": [],
+      "python_entities_full": [
+        "quantity:3 tanks"
+      ],
+      "python_entities_shared": [],
+      "python_dates": [
+        "2026-04-20"
+      ],
+      "python_importance": 0.2
+    },
+    {
+      "index": 57,
+      "content": "My sister Anna Schmidt sent me a ClerkOrganization invite yesterday.",
+      "tags": [],
+      "python_entities_full": [
+        "entity:ClerkOrganization",
+        "person:Anna Schmidt"
+      ],
+      "python_entities_shared": [
+        "entity:ClerkOrganization",
+        "person:Anna Schmidt"
+      ],
+      "python_dates": [
+        "2026-04-20"
+      ],
+      "python_importance": 0.2
+    },
+    {
+      "index": 58,
+      "content": "The ResumeParser handles résumé uploads from the Career portal at /srv/careers/uploads.",
+      "tags": [],
+      "python_entities_full": [
+        "entity:ResumeParser"
+      ],
+      "python_entities_shared": [
+        "entity:ResumeParser"
+      ],
+      "python_dates": [],
+      "python_importance": 0.2
+    },
+    {
+      "index": 59,
+      "content": "München office asked for OghamMcp training; scheduled for 2026-05-10 in Frankfurt.",
+      "tags": [],
+      "python_entities_full": [
+        "entity:OghamMcp"
+      ],
+      "python_entities_shared": [
+        "entity:OghamMcp"
+      ],
+      "python_dates": [
+        "2026-05-10"
+      ],
+      "python_importance": 0.2
+    },
+    {
+      "index": 60,
+      "content": "日本語 support goes into v0.7; the YAML word list for Japanese is ~800 stopwords.",
+      "tags": [],
+      "python_entities_full": [
+        "location:JP"
+      ],
+      "python_entities_shared": [],
+      "python_dates": [],
+      "python_importance": 0.2
+    },
+    {
+      "index": 61,
+      "content": "Traceback (most recent call last):\n  File \"/src/ogham/cli.py\", line 42\n  RuntimeError: could not connect to Postgres at direct endpoint.",
+      "tags": [
+        "type:traceback"
+      ],
+      "python_entities_full": [
+        "entity:RuntimeError",
+        "error:RuntimeError",
+        "file:/src/ogham/cli.py"
+      ],
+      "python_entities_shared": [
+        "entity:RuntimeError",
+        "error:RuntimeError",
+        "file:/src/ogham/cli.py"
+      ],
+      "python_dates": [],
+      "python_importance": 0.5
+    },
+    {
+      "index": 62,
+      "content": "Caused by: PermissionDenied: service-account is missing storage.objects.get on bucket ogham-prod-backups.",
+      "tags": [
+        "type:traceback"
+      ],
+      "python_entities_full": [
+        "entity:PermissionDenied"
+      ],
+      "python_entities_shared": [
+        "entity:PermissionDenied"
+      ],
+      "python_dates": [],
+      "python_importance": 0.4
+    },
+    {
+      "index": 63,
+      "content": "panic: runtime error: invalid memory address or nil pointer dereference\ngoroutine 7 [running]: native.(*geminiEmbedder).Embed",
+      "tags": [
+        "type:traceback"
+      ],
+      "python_entities_full": [],
+      "python_entities_shared": [],
+      "python_dates": [],
+      "python_importance": 0.4
+    },
+    {
+      "index": 64,
+      "content": "On 2026-03-10 Kevin Burns ported src/ogham/extraction.py to internal/native/extraction/entities.go in a 3-hour session.",
+      "tags": [
+        "project:ogham"
+      ],
+      "python_entities_full": [
+        "file:internal/native/extraction/entities.go",
+        "file:src/ogham/extraction.py",
+        "person:Kevin Burns"
+      ],
+      "python_entities_shared": [
+        "file:internal/native/extraction/entities.go",
+        "file:src/ogham/extraction.py",
+        "person:Kevin Burns"
+      ],
+      "python_dates": [
+        "2026-03-10"
+      ],
+      "python_importance": 0.30000000000000004
+    },
+    {
+      "index": 65,
+      "content": "The CI workflow at .github/workflows/test.yml runs make cover against Go 1.26 since 2026-04-15.",
+      "tags": [],
+      "python_entities_full": [
+        "file:.github/workflows/test.yml"
+      ],
+      "python_entities_shared": [
+        "file:.github/workflows/test.yml"
+      ],
+      "python_dates": [
+        "2026-04-15"
+      ],
+      "python_importance": 0.30000000000000004
+    },
+    {
+      "index": 66,
+      "content": "Anna Lindgren merged PR #142 on 2026-04-21 fixing the GeminiEmbedder normalization bug.",
+      "tags": [
+        "type:merge"
+      ],
+      "python_entities_full": [
+        "entity:GeminiEmbedder",
+        "person:Anna Lindgren"
+      ],
+      "python_entities_shared": [
+        "entity:GeminiEmbedder",
+        "person:Anna Lindgren"
+      ],
+      "python_dates": [
+        "2026-04-21"
+      ],
+      "python_importance": 0.4
+    },
+    {
+      "index": 67,
+      "content": "Built an EmbeddingCacheBench to compare Gemini vs Voyage at /Users/kevin/bench/cache.go -- Voyage is 40% faster cold.",
+      "tags": [],
+      "python_entities_full": [
+        "entity:EmbeddingCacheBench",
+        "event:voyage",
+        "file:/Users/kevin/bench/cache.go"
+      ],
+      "python_entities_shared": [
+        "entity:EmbeddingCacheBench",
+        "file:/Users/kevin/bench/cache.go"
+      ],
+      "python_dates": [],
+      "python_importance": 0.30000000000000004
+    },
+    {
+      "index": 68,
+      "content": "ok.",
+      "tags": [],
+      "python_entities_full": [],
+      "python_entities_shared": [],
+      "python_dates": [],
+      "python_importance": 0.2
+    },
+    {
+      "index": 69,
+      "content": "Short note with no signals.",
+      "tags": [],
+      "python_entities_full": [],
+      "python_entities_shared": [],
+      "python_dates": [],
+      "python_importance": 0.2
+    },
+    {
+      "index": 70,
+      "content": "https://ogham-mcp.dev is the canonical site.",
+      "tags": [],
+      "python_entities_full": [],
+      "python_entities_shared": [],
+      "python_dates": [],
+      "python_importance": 0.2
+    },
+    {
+      "index": 71,
+      "content": "Short memo that should still score high on importance because of the 4-tag bundle.",
+      "tags": [
+        "type:decision",
+        "project:ogham",
+        "priority:high",
+        "owner:kevin"
+      ],
+      "python_entities_full": [],
+      "python_entities_shared": [],
+      "python_dates": [],
+      "python_importance": 0.30000000000000004
+    },
+    {
+      "index": 72,
+      "content": "EmbeddingCache EmbeddingCache EmbeddingCache EmbeddingCache -- make sure dedup works.",
+      "tags": [],
+      "python_entities_full": [
+        "entity:EmbeddingCache",
+        "person:EmbeddingCache EmbeddingCache"
+      ],
+      "python_entities_shared": [
+        "entity:EmbeddingCache",
+        "person:EmbeddingCache EmbeddingCache"
+      ],
+      "python_dates": [],
+      "python_importance": 0.2
+    },
+    {
+      "index": 73,
+      "content": "/var/log/ogham.log /var/log/ogham.log /var/log/ogham.log repeated paths should not all land as tags.",
+      "tags": [],
+      "python_entities_full": [
+        "file:/var/log/ogham.log"
+      ],
+      "python_entities_shared": [
+        "file:/var/log/ogham.log"
+      ],
+      "python_dates": [],
+      "python_importance": 0.30000000000000004
+    },
+    {
+      "index": 74,
+      "content": "Wir haben entschieden, EmbeddingCache zu verwenden. Kevin Burns prüft den Implementierungsstand am Dienstag.",
+      "tags": [],
+      "python_entities_full": [
+        "entity:EmbeddingCache",
+        "person:Kevin Burns"
+      ],
+      "python_entities_shared": [
+        "entity:EmbeddingCache",
+        "person:Kevin Burns"
+      ],
+      "python_dates": [],
+      "python_importance": 0.5
+    },
+    {
+      "index": 75,
+      "content": "El archivo /etc/ogham/config.env tiene todas las variables de entorno que necesitamos.",
+      "tags": [],
+      "python_entities_full": [
+        "file:/etc/ogham/config.env"
+      ],
+      "python_entities_shared": [
+        "file:/etc/ogham/config.env"
+      ],
+      "python_dates": [],
+      "python_importance": 0.30000000000000004
+    },
+    {
+      "index": 76,
+      "content": "Config file lives at ~/.config/ogham/config.toml on XDG systems, ~/.ogham/config.toml otherwise.",
+      "tags": [],
+      "python_entities_full": [
+        "file:/.config/ogham/config.toml",
+        "file:/.ogham/config.toml"
+      ],
+      "python_entities_shared": [
+        "file:/.config/ogham/config.toml",
+        "file:/.ogham/config.toml"
+      ],
+      "python_dates": [],
+      "python_importance": 0.30000000000000004
+    },
+    {
+      "index": 77,
+      "content": "Absolute windows path C:\\Users\\kevin\\ogham-cli\\go.mod should NOT tag a file:path entity (unix-style only).",
+      "tags": [],
+      "python_entities_full": [],
+      "python_entities_shared": [],
+      "python_dates": [],
+      "python_importance": 0.2
+    },
+    {
+      "index": 78,
+      "content": "Relative paths like ./scripts/sync.sh and ../ogham-mcp/README.md show up in commit messages.",
+      "tags": [],
+      "python_entities_full": [
+        "file:../ogham-mcp/README.md",
+        "file:./scripts/sync.sh",
+        "preference:like"
+      ],
+      "python_entities_shared": [
+        "file:../ogham-mcp/README.md",
+        "file:./scripts/sync.sh"
+      ],
+      "python_dates": [],
+      "python_importance": 0.30000000000000004
+    },
+    {
+      "index": 79,
+      "content": "Elizabeth Monroe-Parker (two-word hyphenated last name) reviewed the BEAM harness design.",
+      "tags": [],
+      "python_entities_full": [
+        "location:Parker",
+        "location:US"
+      ],
+      "python_entities_shared": [],
+      "python_dates": [],
+      "python_importance": 0.4
+    },
+    {
+      "index": 80,
+      "content": "McDonald Kim is a common misreading of two distinct people in the Rackspace EMEA org.",
+      "tags": [],
+      "python_entities_full": [
+        "entity:McDonald",
+        "person:Rackspace EMEA"
+      ],
+      "python_entities_shared": [
+        "entity:McDonald",
+        "person:Rackspace EMEA"
+      ],
+      "python_dates": [],
+      "python_importance": 0.2
+    },
+    {
+      "index": 81,
+      "content": "Dr. Alan Turing first formalised the halting problem; see Turing (1936).",
+      "tags": [],
+      "python_entities_full": [
+        "person:Alan Turing"
+      ],
+      "python_entities_shared": [
+        "person:Alan Turing"
+      ],
+      "python_dates": [],
+      "python_importance": 0.2
+    },
+    {
+      "index": 82,
+      "content": "Scheduled a 1:1 for next Tuesday at 14:00 CET to review the sprint.",
+      "tags": [],
+      "python_entities_full": [],
+      "python_entities_shared": [],
+      "python_dates": [
+        "2026-04-28"
+      ],
+      "python_importance": 0.2
+    },
+    {
+      "index": 83,
+      "content": "The last commit on this branch was 30 minutes ago; no further work pending.",
+      "tags": [],
+      "python_entities_full": [],
+      "python_entities_shared": [],
+      "python_dates": [],
+      "python_importance": 0.2
+    },
+    {
+      "index": 84,
+      "content": "Planning the Q3 2026 roadmap review for early July.",
+      "tags": [],
+      "python_entities_full": [],
+      "python_entities_shared": [],
+      "python_dates": [],
+      "python_importance": 0.2
+    },
+    {
+      "index": 85,
+      "content": "The FastAPIApp calls ValkeyClient, NeonPool, VoyageEmbedder, SupabaseBackend in a single request.",
+      "tags": [
+        "stack"
+      ],
+      "python_entities_full": [
+        "entity:FastAPIApp",
+        "entity:NeonPool",
+        "entity:SupabaseBackend",
+        "entity:ValkeyClient",
+        "entity:VoyageEmbedder",
+        "person:NeonPool VoyageEmbedder",
+        "person:ValkeyClient NeonPool",
+        "person:VoyageEmbedder SupabaseBackend"
+      ],
+      "python_entities_shared": [
+        "entity:FastAPIApp",
+        "entity:NeonPool",
+        "entity:SupabaseBackend",
+        "entity:ValkeyClient",
+        "entity:VoyageEmbedder",
+        "person:NeonPool VoyageEmbedder",
+        "person:ValkeyClient NeonPool",
+        "person:VoyageEmbedder SupabaseBackend"
+      ],
+      "python_dates": [],
+      "python_importance": 0.2
+    },
+    {
+      "index": 86,
+      "content": "See PR #42 at https://github.com/ogham-mcp/ogham-cli/pull/42 for the Gemini normalization fix.",
+      "tags": [],
+      "python_entities_full": [],
+      "python_entities_shared": [],
+      "python_dates": [],
+      "python_importance": 0.2
+    },
+    {
+      "index": 87,
+      "content": "Kevin pushed commit abc123 on 2026-04-21.",
+      "tags": [],
+      "python_entities_full": [],
+      "python_entities_shared": [],
+      "python_dates": [
+        "2026-04-21"
+      ],
+      "python_importance": 0.2
+    },
+    {
+      "index": 88,
+      "content": "Kevin pushed commit def456 on 2026-04-22.",
+      "tags": [],
+      "python_entities_full": [],
+      "python_entities_shared": [],
+      "python_dates": [
+        "2026-04-22"
+      ],
+      "python_importance": 0.2
+    },
+    {
+      "index": 89,
+      "content": "If You Run Into Trouble with the wizard, try the manual setup.",
+      "tags": [],
+      "python_entities_full": [],
+      "python_entities_shared": [],
+      "python_dates": [],
+      "python_importance": 0.2
+    },
+    {
+      "index": 90,
+      "content": "And She said the deployment was green on both regions.",
+      "tags": [],
+      "python_entities_full": [
+        "event:deployment"
+      ],
+      "python_entities_shared": [],
+      "python_dates": [],
+      "python_importance": 0.2
+    },
+    {
+      "index": 91,
+      "content": "Be Sure To check the health endpoint before cutting over.",
+      "tags": [],
+      "python_entities_full": [],
+      "python_entities_shared": [],
+      "python_dates": [],
+      "python_importance": 0.2
+    },
+    {
+      "index": 92,
+      "content": "The v0.5 MVP comprises five days of work: Day 1 entities, Day 2 dates + scoring, Day 3 embedders (OpenAI, Voyage, Mistral), Day 4 store orchestrator, Day 5 parity harness, Day 6 rc1 tag. Each day lands with PICT + fuzz + bench + CI gate and a Python-parity assertion. The orchestrator uses errgroup.WithContext for parallel embed + search legs, matches Python's store_memory tool shape exactly, and routes through the shared SQLite cache so sidecar + native users see identical vectors.",
+      "tags": [
+        "type:design"
+      ],
+      "python_entities_full": [
+        "entity:OpenAI",
+        "entity:WithContext",
+        "person:Mistral Day",
+        "person:OpenAI Voyage",
+        "person:Voyage Mistral"
+      ],
+      "python_entities_shared": [
+        "entity:OpenAI",
+        "entity:WithContext",
+        "person:Mistral Day",
+        "person:OpenAI Voyage",
+        "person:Voyage Mistral"
+      ],
+      "python_dates": [],
+      "python_importance": 0.2
+    },
+    {
+      "index": 93,
+      "content": "Actually we're not using Voyage -- switched to Gemini at dim 512 for the Hetzner deployment.",
+      "tags": [],
+      "python_entities_full": [
+        "event:voyage"
+      ],
+      "python_entities_shared": [],
+      "python_dates": [],
+      "python_importance": 0.5
+    },
+    {
+      "index": 94,
+      "content": "Scratch that: ByteRover is NOT a competitor; they sit in a different segment.",
+      "tags": [],
+      "python_entities_full": [
+        "entity:ByteRover"
+      ],
+      "python_entities_shared": [
+        "entity:ByteRover"
+      ],
+      "python_dates": [],
+      "python_importance": 0.2
+    },
+    {
+      "index": 95,
+      "content": "Sprint wrap: 6 commits landed, 510 Python tests passing, all Go packages green under race detector.",
+      "tags": [
+        "type:checkpoint"
+      ],
+      "python_entities_full": [
+        "event:race",
+        "event:sprint"
+      ],
+      "python_entities_shared": [],
+      "python_dates": [],
+      "python_importance": 0.2
+    },
+    {
+      "index": 96,
+      "content": "ArchitectureDecision 2026-04-21: MistralEmbedder rejects dim != 1024 for mistral-embed at construction. Kevin approved. See internal/native/embedding.go lines 102-107.",
+      "tags": [
+        "type:decision",
+        "arch:adr"
+      ],
+      "python_entities_full": [
+        "entity:ArchitectureDecision",
+        "entity:MistralEmbedder",
+        "file:internal/native/embedding.go"
+      ],
+      "python_entities_shared": [
+        "entity:ArchitectureDecision",
+        "entity:MistralEmbedder",
+        "file:internal/native/embedding.go"
+      ],
+      "python_dates": [
+        "2026-04-21"
+      ],
+      "python_importance": 0.5
+    }
+  ]
+}
