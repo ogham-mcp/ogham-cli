@@ -14,6 +14,7 @@ Usage:
 Available Commands:
   audit             Show the audit trail for a memory profile
   auth              Manage authentication
+  capabilities      Show which MCP tools are native Go vs require the Python sidecar
   cleanup           Remove expired memories from a profile
   completion        Generate the autocompletion script for the specified shell
   config            Inspect the current runtime configuration
