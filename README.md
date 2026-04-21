@@ -209,7 +209,7 @@ Every command outputs JSON by default and runs natively where possible. Pass `--
 | `ogham config show` | native | Dump resolved config with secrets masked |
 | `ogham init` | interactive | huh TUI wizard; writes TOML + env |
 | `ogham dashboard [--port N]` | Python subprocess | Starts the Prefab dashboard (Python stays Python for the frontend) |
-| `ogham serve` | MCP server | Run as an MCP stdio server |
+| `ogham serve` | MCP server | Run as an MCP stdio server. Native Go tools by default (store_memory, hybrid_search, list_recent, health_check) + Python sidecar auto-proxied for everything else (delete_memory, compression, graph, typed-store, etc.). Native handlers win on name collision. Pass `--no-sidecar` for strict native-only. |
 | `ogham hooks install / run <event>` | sidecar | Wire into Claude Code hooks |
 | `ogham plugin openclaw` / `agent-zero` | offline | Emit host plugin manifest |
 | `ogham auth login --api-key KEY` | gateway only | Gateway API-key management (build-tag gated) |

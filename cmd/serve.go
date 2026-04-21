@@ -37,15 +37,24 @@ Two modes:
     health_check). Reads ~/.ogham/config.toml for backend + embedder
     credentials. No gateway API key required. Set up with 'ogham init'.
 
+    Additionally, 'ogham serve' eager-spawns the Python ogham-mcp
+    sidecar and proxies every tool the sidecar exposes that isn't
+    already native (delete_memory, compress_old_memories, explore_
+    knowledge, the typed-store family, etc.). Native handlers win
+    on name collision -- store_memory / hybrid_search / list_recent /
+    health_check always run through Go.
+
+    If the sidecar fails to spawn (no uv, no Python, wheel fetch
+    timeout), the server logs a warning and keeps serving the native
+    subset. Pass --no-sidecar to skip the spawn entirely.
+
   - --gateway: forward tool calls to the managed gateway at
     ~/.ogham/config.toml's gateway_url. Requires an API key obtained
     via 'ogham auth login' -- gated until the managed service returns.
 
 Tool names match the Python ogham-mcp sidecar on purpose: an MCP
 client already wired for the Python server swaps to the Go binary
-without reconfiguring its tool calls. Tools the Go native layer
-hasn't absorbed yet (compression, graph, full stats) surface as
-"tool not found" -- route through the sidecar for those until v0.6.`,
+without reconfiguring its tool calls.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if debugFlag {
 			slog.SetDefault(slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelDebug})))
@@ -96,6 +105,7 @@ func runNativeServe(ctx context.Context, server *mcp.Server) error {
 		"tools", toolNamesFor(nativeNames))
 
 	var sidecarClient *sidecar.Client
+	proxiedCount := 0
 	if !serveNoSidecarOpt {
 		sidecarClient = tryConnectSidecar(ctx, cfg)
 		if sidecarClient != nil {
@@ -107,11 +117,20 @@ func runNativeServe(ctx context.Context, server *mcp.Server) error {
 				slog.Warn("proxied tool registration failed; serving native-only",
 					"err", perr)
 			} else {
+				proxiedCount = len(proxied)
 				slog.Info("registered proxied MCP tools",
-					"count", len(proxied), "tools", proxied)
+					"count", proxiedCount, "tools", proxied)
 			}
 		}
 	}
+
+	// Aggregate: one line that ops can grep for to see what the server
+	// actually exposes. native + proxied should match total unless the
+	// proxy registration half-failed (covered by the separate warn above).
+	slog.Info("registered tools",
+		"native", len(nativeNames),
+		"proxied", proxiedCount,
+		"total", len(nativeNames)+proxiedCount)
 
 	slog.Info("MCP server starting on stdio (native mode)",
 		"provider", cfg.Embedding.Provider,
