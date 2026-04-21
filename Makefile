@@ -62,6 +62,32 @@ bench:
 live:
 	go test -tags live -v -run Live ./internal/native/
 
+# Run the pgcontainer-tagged tests -- real pgvector via testcontainers-go.
+# Requires a Docker daemon; this target auto-detects OrbStack on macOS.
+# Tests that would otherwise need a live Supabase/Neon DB run here
+# against a disposable pgvector:pg17 container with the schema bootstrapped
+# from internal/native/testdata/schema_postgres.sql.
+pgcontainer:
+	@DOCKER_HOST=$$(test -S ~/.orbstack/run/docker.sock && echo unix://$$HOME/.orbstack/run/docker.sock || echo unix:///var/run/docker.sock) \
+	go test -tags pgcontainer -v -run TestPG_ ./internal/native/
+
+# Coverage number including the pgcontainer path. Slow (~30s boot) but
+# this is the number that counts against the 90% locked gate for
+# internal/native/.
+coverage-full:
+	@DOCKER_HOST=$$(test -S ~/.orbstack/run/docker.sock && echo unix://$$HOME/.orbstack/run/docker.sock || echo unix:///var/run/docker.sock) \
+	go test -tags pgcontainer -cover ./internal/native/
+
+# Refresh the vendored schema from the R&D repo. Run when the canonical
+# schema_postgres.sql in openbrain-sharedmemory has changed; the pg
+# tests key off the copy in testdata/.
+sync-schema:
+	@test -f ../openbrain-sharedmemory/sql/schema_postgres.sql \
+	  || { echo "openbrain-sharedmemory/sql/schema_postgres.sql not found"; exit 1; }
+	cp ../openbrain-sharedmemory/sql/schema_postgres.sql \
+	   internal/native/testdata/schema_postgres.sql
+	@echo "schema refreshed; rerun 'make pgcontainer' to verify tests still pass"
+
 # Regenerate PICT matrices from .pict source files. CI runs this and
 # fails if the committed .tsv drifts from a fresh generation.
 pict-regen:
