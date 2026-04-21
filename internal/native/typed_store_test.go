@@ -83,20 +83,19 @@ func TestStoreDecision_RejectsEmptyRationale(t *testing.T) {
 	}
 }
 
-func TestStoreDecision_RejectsRelatedMemoriesUntilBatchE(t *testing.T) {
-	// Gemini's proposal collapsed tags + metadata, which would break
-	// tag-filtered search. This test pins a different but related
-	// discipline: if the caller passes related_memories (a graph-walk
-	// feature we haven't absorbed natively), we error rather than
-	// silently dropping the linking step. Route via the Python sidecar
-	// or wait for Batch E.
+func TestStoreDecision_RelatedMemoriesNoLongerRejected(t *testing.T) {
+	// Batch E landed: store_decision now creates 'supports' edges to
+	// each related_memories UUID after the INSERT. Empty cfg still
+	// errors at backend resolution, but the error MUST NOT be the
+	// old 'related_memories not yet absorbed' message -- if it is, a
+	// regression has re-gated the feature.
 	_, err := StoreDecision(ctxBG(t), &Config{}, StoreDecisionOptions{
 		Decision:        "pick X",
 		Rationale:       "because",
 		RelatedMemories: []string{"abc-123"},
 	})
-	if err == nil || !contains(err.Error(), "related_memories") {
-		t.Errorf("want related_memories rejection; got %v", err)
+	if err != nil && contains(err.Error(), "not yet absorbed") {
+		t.Errorf("related_memories should be supported post-Batch-E; got %v", err)
 	}
 }
 

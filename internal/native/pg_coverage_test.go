@@ -316,6 +316,113 @@ func TestPG_HealthCheck_LivePostgres(t *testing.T) {
 	}
 }
 
+// --- Batch E graph walk --------------------------------------------------
+
+func TestPG_CreateRelationship_Idempotent(t *testing.T) {
+	cfg := testCfg(t, "work")
+	resetMemories(t, cfg)
+	a := insertMemory(t, cfg, "work", "memory A", nil)
+	b := insertMemory(t, cfg, "work", "memory B", nil)
+
+	opts := CreateRelationshipOptions{
+		SourceID: a, TargetID: b, Relationship: "supports",
+	}
+	if err := CreateRelationship(context.Background(), cfg, opts); err != nil {
+		t.Fatalf("first CreateRelationship: %v", err)
+	}
+	// Second call with the same triple must not error (ON CONFLICT DO
+	// NOTHING path). Protects callers who run store_decision twice.
+	if err := CreateRelationship(context.Background(), cfg, opts); err != nil {
+		t.Errorf("second (duplicate) CreateRelationship should be idempotent; got %v", err)
+	}
+}
+
+func TestPG_CreateRelationship_RejectsSelfLink(t *testing.T) {
+	cfg := testCfg(t, "work")
+	err := CreateRelationship(context.Background(), cfg, CreateRelationshipOptions{
+		SourceID: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+		TargetID: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+	})
+	if err == nil || !strings.Contains(err.Error(), "self-link") {
+		t.Errorf("want self-link rejection; got %v", err)
+	}
+}
+
+func TestPG_CreateRelationship_RejectsInvalidType(t *testing.T) {
+	cfg := testCfg(t, "work")
+	err := CreateRelationship(context.Background(), cfg, CreateRelationshipOptions{
+		SourceID:     "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+		TargetID:     "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
+		Relationship: "not-a-real-edge",
+	})
+	if err == nil || !strings.Contains(err.Error(), "relationship must be") {
+		t.Errorf("want invalid-type error; got %v", err)
+	}
+}
+
+func TestPG_LinkUnlinked_EmptyProfileReturnsZero(t *testing.T) {
+	cfg := testCfg(t, "work")
+	resetMemories(t, cfg)
+	result, err := LinkUnlinked(context.Background(), cfg, LinkUnlinkedOptions{})
+	if err != nil {
+		t.Fatalf("LinkUnlinked: %v", err)
+	}
+	if result.Processed != 0 {
+		t.Errorf("empty profile should process 0; got %d", result.Processed)
+	}
+	if result.Status != "nothing_to_link" {
+		t.Errorf("status = %q, want 'nothing_to_link'", result.Status)
+	}
+}
+
+func TestPG_FindRelated_FollowsCreatedEdge(t *testing.T) {
+	cfg := testCfg(t, "work")
+	resetMemories(t, cfg)
+	a := insertMemory(t, cfg, "work", "source memory", nil)
+	b := insertMemory(t, cfg, "work", "target memory", nil)
+
+	// Create the edge explicitly so the graph walk has something to
+	// follow from a.
+	if err := CreateRelationship(context.Background(), cfg, CreateRelationshipOptions{
+		SourceID: a, TargetID: b, Relationship: "supports", Strength: 1.0,
+	}); err != nil {
+		t.Fatalf("seed edge: %v", err)
+	}
+
+	results, err := FindRelated(context.Background(), cfg, a, FindRelatedOptions{
+		Depth: 1, MinStrength: 0.1,
+	})
+	if err != nil {
+		t.Fatalf("FindRelated: %v", err)
+	}
+	if len(results) != 1 {
+		t.Fatalf("want 1 related, got %d (%+v)", len(results), results)
+	}
+	if results[0].ID != b {
+		t.Errorf("expected related id %q, got %q", b, results[0].ID)
+	}
+	if results[0].Depth != 1 {
+		t.Errorf("depth = %d, want 1", results[0].Depth)
+	}
+	if results[0].Relationship != "supports" {
+		t.Errorf("relationship = %q, want 'supports'", results[0].Relationship)
+	}
+}
+
+func TestPG_SuggestConnections_NoEntitiesReturnsEmpty(t *testing.T) {
+	cfg := testCfg(t, "work")
+	resetMemories(t, cfg)
+	id := insertMemory(t, cfg, "work", "lone memory", nil)
+	// No memory_entities rows seeded -> no shared entities -> empty.
+	results, err := SuggestConnections(context.Background(), cfg, id, 1, 10)
+	if err != nil {
+		t.Fatalf("SuggestConnections: %v", err)
+	}
+	if len(results) != 0 {
+		t.Errorf("want 0 suggestions, got %d", len(results))
+	}
+}
+
 // --- Store orchestrator round-trip --------------------------------------
 //
 // Exercises the full Store -> writeMemoryPostgres path end-to-end,
