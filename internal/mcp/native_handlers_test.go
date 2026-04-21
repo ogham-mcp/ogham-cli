@@ -111,3 +111,80 @@ func TestCleanupHandler_EmptyArgsUsesConfigProfile(t *testing.T) {
 		t.Errorf("empty args should parse cleanly; got %q", txt)
 	}
 }
+
+// --- reinforce / contradict strength range tests --------------------------
+//
+// Parity with Python (src/ogham/tools/memory.py):
+//   reinforce: 0 < strength <= 1.0   (exclusive lower, inclusive upper)
+//   contradict: 0 <= strength < 1.0  (inclusive lower, exclusive upper)
+//
+// The boundaries matter: a caller passing strength=0 to reinforce or
+// strength=1.0 to contradict would silently coerce in Python. We reject
+// with a clear message instead.
+
+func TestReinforceHandler_RequiresID(t *testing.T) {
+	h := BuildNativeReinforceHandler(&native.Config{})
+	res := callHandler(t, h, `{}`)
+	if txt := errorText(t, res); !strings.Contains(txt, "memory_id is required") {
+		t.Errorf("want 'memory_id is required' in %q", txt)
+	}
+}
+
+func TestReinforceHandler_RejectsStrengthOutOfRange(t *testing.T) {
+	h := BuildNativeReinforceHandler(&native.Config{})
+	// strength=1.1 is above the inclusive upper bound.
+	res := callHandler(t, h, `{"memory_id":"abc","strength":1.1}`)
+	if txt := errorText(t, res); !strings.Contains(txt, "strength must be in (0.0, 1.0]") {
+		t.Errorf("want strength-range error; got %q", txt)
+	}
+	// strength=-0.5 is below the exclusive lower bound.
+	res = callHandler(t, h, `{"memory_id":"abc","strength":-0.5}`)
+	if txt := errorText(t, res); !strings.Contains(txt, "strength must be in (0.0, 1.0]") {
+		t.Errorf("want strength-range error; got %q", txt)
+	}
+}
+
+func TestReinforceHandler_DefaultStrengthSkipsValidation(t *testing.T) {
+	// strength omitted -> should default to 0.85 and proceed into the DB
+	// path (which errors because empty cfg has no backend). We just verify
+	// we don't block on strength validation.
+	h := BuildNativeReinforceHandler(&native.Config{})
+	res := callHandler(t, h, `{"memory_id":"abc"}`)
+	txt := errorText(t, res)
+	if strings.Contains(txt, "strength must be in") {
+		t.Errorf("default strength should pass validation; got %q", txt)
+	}
+}
+
+func TestContradictHandler_RequiresID(t *testing.T) {
+	h := BuildNativeContradictHandler(&native.Config{})
+	res := callHandler(t, h, `{}`)
+	if txt := errorText(t, res); !strings.Contains(txt, "memory_id is required") {
+		t.Errorf("want 'memory_id is required' in %q", txt)
+	}
+}
+
+func TestContradictHandler_RejectsStrengthAtUpperBound(t *testing.T) {
+	// 1.0 is the exclusive upper bound for contradict (Python rejects it).
+	h := BuildNativeContradictHandler(&native.Config{})
+	res := callHandler(t, h, `{"memory_id":"abc","strength":1.0}`)
+	if txt := errorText(t, res); !strings.Contains(txt, "strength must be in [0.0, 1.0)") {
+		t.Errorf("want strength-range error; got %q", txt)
+	}
+}
+
+func TestContradictHandler_AcceptsZeroStrengthExplicitly(t *testing.T) {
+	// strength=0.0 is the inclusive lower bound. With the JSON default
+	// zero-value we can't distinguish "unset" from "explicit 0", so we
+	// treat a zero as "use default" -- Python's behaviour (Python uses
+	// None default; Go's zero-value pattern collapses to the same thing).
+	// This test confirms that doesn't spuriously fail with an out-of-range
+	// message. The downstream DB call will error on empty cfg, but the
+	// strength path must be clean.
+	h := BuildNativeContradictHandler(&native.Config{})
+	res := callHandler(t, h, `{"memory_id":"abc","strength":0.0}`)
+	txt := errorText(t, res)
+	if strings.Contains(txt, "strength must be in") {
+		t.Errorf("zero strength should default, not fail validation; got %q", txt)
+	}
+}

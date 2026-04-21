@@ -78,6 +78,16 @@ type setProfileTTLArgs struct {
 	Clear   bool   `json:"clear,omitempty"    jsonschema:"description=If true, clear the TTL (equivalent to ttl_days=-1)."`
 }
 
+type reinforceMemoryArgs struct {
+	ID       string  `json:"memory_id"           jsonschema:"required,description=UUID of the memory to reinforce."`
+	Strength float64 `json:"strength,omitempty"  jsonschema:"description=Reinforcement strength in (0.0, 1.0]. Default 0.85. Higher = stronger boost to confidence."`
+}
+
+type contradictMemoryArgs struct {
+	ID       string  `json:"memory_id"           jsonschema:"required,description=UUID of the memory to contradict."`
+	Strength float64 `json:"strength,omitempty"  jsonschema:"description=Contradiction strength in [0.0, 1.0). Default 0.15. Lower = stronger push toward 0 confidence."`
+}
+
 // ---------------------------------------------------------------------
 // schemaFor reflects a Go struct's jsonschema tags into the inline JSON
 // Schema shape MCP expects. DoNotReference collapses nested types so
@@ -276,6 +286,74 @@ func BuildNativeListProfilesHandler(cfg *native.Config) mcp.ToolHandler {
 	}
 }
 
+// reinforceDefault / contradictDefault mirror the Python tool defaults.
+// Kept as const so test + handler agree.
+const (
+	reinforceDefaultStrength = 0.85
+	contradictDefaultStrength = 0.15
+)
+
+func BuildNativeReinforceHandler(cfg *native.Config) mcp.ToolHandler {
+	return func(ctx context.Context, req *mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		var args reinforceMemoryArgs
+		if fail := unmarshalArgs(req, &args); fail != nil {
+			return fail, nil
+		}
+		if args.ID == "" {
+			return errorResult("reinforce_memory: memory_id is required"), nil
+		}
+		strength := args.Strength
+		if strength == 0 {
+			strength = reinforceDefaultStrength
+		}
+		// Python: 0 < strength <= 1.0
+		if strength <= 0 || strength > 1.0 {
+			return errorResult(fmt.Sprintf("reinforce_memory: strength must be in (0.0, 1.0]; got %v", strength)), nil
+		}
+		result, err := native.UpdateConfidence(ctx, cfg, args.ID, strength, "")
+		if err != nil {
+			return errorResult(err.Error()), nil
+		}
+		return jsonResult(map[string]any{
+			"status":     "reinforced",
+			"id":         result.ID,
+			"profile":    result.Profile,
+			"confidence": result.Confidence,
+		})
+	}
+}
+
+func BuildNativeContradictHandler(cfg *native.Config) mcp.ToolHandler {
+	return func(ctx context.Context, req *mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		var args contradictMemoryArgs
+		if fail := unmarshalArgs(req, &args); fail != nil {
+			return fail, nil
+		}
+		if args.ID == "" {
+			return errorResult("contradict_memory: memory_id is required"), nil
+		}
+		strength := args.Strength
+		if strength == 0 {
+			strength = contradictDefaultStrength
+		}
+		// Python: 0 <= strength < 1.0. We additionally refuse negative
+		// values since Python does too (the range check fails).
+		if strength < 0 || strength >= 1.0 {
+			return errorResult(fmt.Sprintf("contradict_memory: strength must be in [0.0, 1.0); got %v", strength)), nil
+		}
+		result, err := native.UpdateConfidence(ctx, cfg, args.ID, strength, "")
+		if err != nil {
+			return errorResult(err.Error()), nil
+		}
+		return jsonResult(map[string]any{
+			"status":     "contradicted",
+			"id":         result.ID,
+			"profile":    result.Profile,
+			"confidence": result.Confidence,
+		})
+	}
+}
+
 func BuildNativeSetProfileTTLHandler(cfg *native.Config) mcp.ToolHandler {
 	return func(ctx context.Context, req *mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		var args setProfileTTLArgs
@@ -359,6 +437,18 @@ func RegisterNativeTools(server *mcp.Server, cfg *native.Config) map[string]stru
 			"Set or clear the TTL (in days) that applies to new memories stored in a profile. Pass clear=true (or ttl_days=-1) to remove the TTL entirely.",
 			setProfileTTLArgs{},
 			BuildNativeSetProfileTTLHandler(cfg),
+		},
+		{
+			"reinforce_memory",
+			"Reinforce a memory's confidence -- mark it as verified or confirmed. Increases the memory's confidence score, making it rank higher in future searches. strength must be in (0.0, 1.0]; default 0.85.",
+			reinforceMemoryArgs{},
+			BuildNativeReinforceHandler(cfg),
+		},
+		{
+			"contradict_memory",
+			"Contradict a memory's confidence -- mark it as disputed or outdated. Decreases the memory's confidence score, making it rank lower in future searches. The memory isn't deleted, just deprioritised. strength must be in [0.0, 1.0); default 0.15.",
+			contradictMemoryArgs{},
+			BuildNativeContradictHandler(cfg),
 		},
 	}
 

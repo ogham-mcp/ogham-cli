@@ -334,6 +334,95 @@ func Decay(ctx context.Context, cfg *Config, profile string, batchSize int, dryR
 }
 
 // -----------------------------------------------------------------------
+// Confidence (reinforce / contradict)
+
+// ConfidenceResult carries the post-update confidence score so callers
+// can surface the new value to the user. Mirrors the Python tool
+// shape -- reinforce/contradict both return the same payload, only the
+// "status" label differs.
+type ConfidenceResult struct {
+	ID         string  `json:"id"`
+	Profile    string  `json:"profile"`
+	Confidence float64 `json:"confidence"`
+}
+
+// UpdateConfidence applies a signal to an existing memory's confidence
+// via the database's update_confidence function. Both reinforce_memory
+// (strength 0.5-1.0) and contradict_memory (strength 0.0-0.5) route
+// through here -- the SQL function handles the math (EMA-style blend
+// of the existing confidence with the new signal).
+//
+// The strength parameter is validated at the MCP handler layer so we
+// don't reject legitimate migration / backfill calls from direct Go
+// callers that may want to force-set a value.
+func UpdateConfidence(ctx context.Context, cfg *Config, id string, signal float64, profile string) (*ConfidenceResult, error) {
+	if cfg == nil {
+		return nil, fmt.Errorf("native update_confidence: nil config")
+	}
+	if id == "" {
+		return nil, fmt.Errorf("native update_confidence: memory id required")
+	}
+	if profile == "" {
+		profile = cfg.Profile
+	}
+	if profile == "" {
+		profile = "default"
+	}
+	backend, err := cfg.ResolveBackend()
+	if err != nil {
+		return nil, err
+	}
+	switch backend {
+	case "postgres":
+		return updateConfidencePostgres(ctx, cfg, id, signal, profile)
+	case "supabase":
+		return updateConfidenceSupabase(ctx, cfg, id, signal, profile)
+	default:
+		return nil, fmt.Errorf("native update_confidence: unknown backend %q", backend)
+	}
+}
+
+func updateConfidencePostgres(ctx context.Context, cfg *Config, id string, signal float64, profile string) (*ConfidenceResult, error) {
+	conn, err := pgx.Connect(ctx, cfg.Database.URL)
+	if err != nil {
+		return nil, fmt.Errorf("native update_confidence: connect: %w", err)
+	}
+	defer func() { _ = conn.Close(ctx) }()
+
+	var conf float64
+	err = conn.QueryRow(ctx,
+		"SELECT update_confidence($1::uuid, $2::float, $3)",
+		id, signal, profile).Scan(&conf)
+	if err != nil {
+		return nil, fmt.Errorf("native update_confidence: exec: %w", err)
+	}
+	return &ConfidenceResult{ID: id, Profile: profile, Confidence: conf}, nil
+}
+
+func updateConfidenceSupabase(ctx context.Context, cfg *Config, id string, signal float64, profile string) (*ConfidenceResult, error) {
+	client, err := newSupabaseClient(cfg)
+	if err != nil {
+		return nil, err
+	}
+	// The RPC uses "memory_profile" (not "profile") to avoid colliding
+	// with PostgREST's built-in `profile` query parameter. Mirrors what
+	// the Python Supabase backend does.
+	raw, err := client.callRPC(ctx, "update_confidence", map[string]any{
+		"memory_id":      id,
+		"signal":         signal,
+		"memory_profile": profile,
+	})
+	if err != nil {
+		return nil, err
+	}
+	var conf float64
+	if err := json.Unmarshal(raw, &conf); err != nil {
+		return nil, fmt.Errorf("native update_confidence: parse: %w (body: %s)", err, truncateForError(raw))
+	}
+	return &ConfidenceResult{ID: id, Profile: profile, Confidence: conf}, nil
+}
+
+// -----------------------------------------------------------------------
 // Audit
 
 // Audit returns the most recent audit events for a profile.
