@@ -88,6 +88,12 @@ type contradictMemoryArgs struct {
 	Strength float64 `json:"strength,omitempty"  jsonschema:"description=Contradiction strength in [0.0, 1.0). Default 0.15. Lower = stronger push toward 0 confidence."`
 }
 
+type switchProfileArgs struct {
+	Profile string `json:"profile" jsonschema:"required,description=Profile name to activate. Becomes the active profile for subsequent tool calls in this session and persists to ~/.ogham/active_profile so later CLI invocations see it too."`
+}
+
+type currentProfileArgs struct{}
+
 // updateMemoryArgs uses pointer + nil-slice semantics so we can distinguish
 // an omitted field (leave untouched) from an explicit clear ([] / {}).
 // Content is *string: nil = untouched, "" = set to empty string, "..." = replace.
@@ -336,6 +342,46 @@ func BuildNativeReinforceHandler(cfg *native.Config) mcp.ToolHandler {
 	}
 }
 
+func BuildNativeSwitchProfileHandler(cfg *native.Config) mcp.ToolHandler {
+	return func(ctx context.Context, req *mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		var args switchProfileArgs
+		if fail := unmarshalArgs(req, &args); fail != nil {
+			return fail, nil
+		}
+		if args.Profile == "" {
+			return errorResult("switch_profile: profile is required"), nil
+		}
+		old := native.ActiveProfile(cfg)
+		if err := native.SwitchProfile(args.Profile); err != nil {
+			return errorResult(err.Error()), nil
+		}
+		// Mutate cfg.Profile in-process so the very next tool call in
+		// this MCP session sees the new profile without re-reading the
+		// sentinel. External processes (CLI invocations) will read the
+		// sentinel on their next Load(), which keeps the two surfaces
+		// in lockstep.
+		cfg.Profile = args.Profile
+		return jsonResult(map[string]any{
+			"status":  "switched",
+			"old":     old,
+			"new":     args.Profile,
+			"profile": args.Profile,
+		})
+	}
+}
+
+func BuildNativeCurrentProfileHandler(cfg *native.Config) mcp.ToolHandler {
+	return func(ctx context.Context, req *mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		var args currentProfileArgs
+		if fail := unmarshalArgs(req, &args); fail != nil {
+			return fail, nil
+		}
+		return jsonResult(map[string]any{
+			"profile": native.ActiveProfile(cfg),
+		})
+	}
+}
+
 func BuildNativeUpdateHandler(cfg *native.Config) mcp.ToolHandler {
 	return func(ctx context.Context, req *mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		var args updateMemoryArgs
@@ -503,6 +549,18 @@ func RegisterNativeTools(server *mcp.Server, cfg *native.Config) map[string]stru
 			"Update an existing memory. Re-embeds when content changes; omitting a field leaves it untouched, passing an empty array/object clears it. Returns id, updated_at, and the list of fields that were actually written.",
 			updateMemoryArgs{},
 			BuildNativeUpdateHandler(cfg),
+		},
+		{
+			"switch_profile",
+			"Switch the active profile for subsequent tool calls. Persists to ~/.ogham/active_profile so later CLI invocations and MCP sessions see the switch. config.toml's default_profile is the baseline and is never modified.",
+			switchProfileArgs{},
+			BuildNativeSwitchProfileHandler(cfg),
+		},
+		{
+			"current_profile",
+			"Return the currently active profile, resolving OGHAM_PROFILE env > ~/.ogham/active_profile > config.toml default_profile > \"default\".",
+			currentProfileArgs{},
+			BuildNativeCurrentProfileHandler(cfg),
 		},
 	}
 

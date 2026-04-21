@@ -107,6 +107,12 @@ func Load(path string) (*Config, error) {
 	}
 
 	applyEnv(cfg)
+
+	// Layer the sentinel file on top of env + TOML so MCP `switch_profile`
+	// and CLI `ogham profile switch` persist across restarts without
+	// mutating config.toml (which stays as the user's declared baseline).
+	// ActiveProfile enforces env > sentinel > cfg.Profile > "default".
+	cfg.Profile = ActiveProfile(cfg)
 	return cfg, nil
 }
 
