@@ -1,18 +1,24 @@
 # Ogham CLI — tracking (v0.4 → v0.6)
 
-Last updated: 2026-04-20
+Last updated: 2026-04-21
 
 ---
 
 ## Currently in progress
 
-- **#137 Day 1 retrofit** — PICT-generated combinatorial test matrix + coverage + fuzz for `internal/native/extraction/`.
+- **#137 v0.5 MVP** — Days 1–3 (first increment) + live smoke tests shipped. Day 3 second increment (Voyage + Mistral) + Day 4 orchestrator pending.
+- **#142** — Gemini L2-normalize sub-3072 dims. Go side shipped (`:embedContent` migration + `l2Normalize` helper + 5 new tests). Python parity pushed alongside in `openbrain-sharedmemory`.
+- **#143** — Go port of Python `EmbeddingCache` (shared SQLite file for cross-stack reuse). Next up.
 
 ## Just closed
 
-- **#138** — pre-v0.5 plumbing (all four sub-items landed, pushed on main).
-- **v0.4.0** — tagged, private release workflow green, artifacts on Releases page.
-- **Day 1 first pass** — entities.go + English stopwords + 14 subtests. Revised approach (below) augments with PICT.
+- **#138** — pre-v0.5 plumbing.
+- **v0.4.0** — tagged, private release green.
+- **Day 1** — entities.go + PICT matrix (28 rows) + 14 hand-picked tests + fuzz + bench. 95.7% coverage.
+- **Day 2** — dates.go + scoring.go shipped (importance scoring + PICT matrix + fuzz + bench). 95.0%+ coverage. Both Ubuntu + macOS CI green.
+- **Day 3 first increment** — OpenAI embedder absorbed (native POST /v1/embeddings, Bearer auth, dimensions param, OPENAI_BASE_URL anti-pollution). 8 httptest cases.
+- **Live smoke tests** — `//go:build live` harness + `make live` target. Ollama (embeddinggemma @ 512 + 768) and OpenAI (text-embedding-3-small @ 512) both verified against real endpoints.
+- **#141** — new task for coverage debt across the rest of `internal/native/`.
 
 ## Currently blocked
 

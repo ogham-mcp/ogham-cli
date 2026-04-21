@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math"
 	"net/http"
 	"strings"
 	"time"
@@ -107,9 +108,21 @@ func NewEmbedder(cfg *Config) (Embedder, error) {
 }
 
 // geminiEmbedder speaks the Gemini REST embeddings API directly --
-// POST /v1beta/models/{model}:batchEmbedContents -- to avoid pulling
-// in the full google-genai SDK for a single call shape. Matches the
-// request/response schema observed from the Python google-genai client.
+// POST /v1beta/models/{model}:embedContent -- to avoid pulling in the
+// full google-genai SDK (grpc + protobuf + cloud.google.com/* -- adds
+// ~15MB to the stripped binary for a single call shape).
+//
+// Two quality concerns the Python SDK handles opaquely but we handle
+// explicitly here:
+//   1. Endpoint: we use :embedContent (singular). The earlier
+//      :batchEmbedContents call carried a batch-of-one that worked
+//      but isn't the clean single-call path Google's docs recommend.
+//   2. Normalization: Gemini returns pre-normalized vectors only at the
+//      model's native 3072 dim. At 512 / 768 / 1536 the vector magnitude
+//      varies, which turns cosine similarity into a magnitude-weighted
+//      score. We L2-normalize client-side when dim < 3072; the docs at
+//      https://ai.google.dev/gemini-api/docs/embeddings explicitly
+//      recommend this.
 type geminiEmbedder struct {
 	apiKey string
 	model  string
@@ -121,20 +134,15 @@ type geminiEmbedder struct {
 	baseURL string
 }
 
-func (g *geminiEmbedder) Name() string    { return "gemini/" + g.model }
-func (g *geminiEmbedder) Dimension() int  { return g.dim }
+func (g *geminiEmbedder) Name() string   { return "gemini/" + g.model }
+func (g *geminiEmbedder) Dimension() int { return g.dim }
 
-// geminiBatchRequest / geminiBatchResponse mirror the public Gemini schema
-// for batchEmbedContents.
-type geminiBatchRequest struct {
-	Requests []geminiEmbedRequest `json:"requests"`
-}
-
+// geminiEmbedRequest is the single-embedding request body for :embedContent.
 type geminiEmbedRequest struct {
-	Model                string             `json:"model"`
-	Content              geminiContent      `json:"content"`
-	OutputDimensionality int                `json:"outputDimensionality,omitempty"`
-	TaskType             string             `json:"taskType,omitempty"`
+	Model                string        `json:"model"`
+	Content              geminiContent `json:"content"`
+	OutputDimensionality int           `json:"outputDimensionality,omitempty"`
+	TaskType             string        `json:"taskType,omitempty"`
 }
 
 type geminiContent struct {
@@ -145,13 +153,16 @@ type geminiPart struct {
 	Text string `json:"text"`
 }
 
-type geminiBatchResponse struct {
-	Embeddings []geminiEmbeddingValue `json:"embeddings"`
+// geminiEmbedResponse mirrors the :embedContent response shape. Note the
+// singular "embedding" field -- the legacy :batchEmbedContents endpoint
+// used "embeddings" (array).
+type geminiEmbedResponse struct {
+	Embedding *geminiEmbeddingPayload `json:"embedding"`
 	// Error envelope when status != 200. Gemini returns {"error":{"code":...,"message":"..."}}.
 	Error *geminiAPIError `json:"error,omitempty"`
 }
 
-type geminiEmbeddingValue struct {
+type geminiEmbeddingPayload struct {
 	Values []float32 `json:"values"`
 }
 
@@ -166,24 +177,21 @@ func (g *geminiEmbedder) endpoint() string {
 	if base == "" {
 		base = "https://generativelanguage.googleapis.com"
 	}
-	return fmt.Sprintf("%s/v1beta/models/%s:batchEmbedContents", base, g.model)
+	return fmt.Sprintf("%s/v1beta/models/%s:embedContent", base, g.model)
 }
 
-// Embed returns a single embedding for text. Uses the batch endpoint with
-// a single request because that matches what Python's google-genai does
-// and keeps a shared code path for future bulk embedding work.
+// Embed returns a single embedding for text. L2-normalizes the result
+// when dim < 3072 because Gemini only pre-normalizes at its native dim.
 func (g *geminiEmbedder) Embed(ctx context.Context, text string) ([]float32, error) {
 	if text == "" {
 		return nil, fmt.Errorf("gemini embed: empty text")
 	}
 
-	body := geminiBatchRequest{
-		Requests: []geminiEmbedRequest{{
-			Model:                "models/" + g.model,
-			Content:              geminiContent{Parts: []geminiPart{{Text: text}}},
-			OutputDimensionality: g.dim,
-			TaskType:             "RETRIEVAL_QUERY",
-		}},
+	body := geminiEmbedRequest{
+		Model:                "models/" + g.model,
+		Content:              geminiContent{Parts: []geminiPart{{Text: text}}},
+		OutputDimensionality: g.dim,
+		TaskType:             "RETRIEVAL_QUERY",
 	}
 	jsonBody, err := json.Marshal(body)
 	if err != nil {
@@ -208,7 +216,7 @@ func (g *geminiEmbedder) Embed(ctx context.Context, text string) ([]float32, err
 		return nil, fmt.Errorf("gemini embed: read response: %w", err)
 	}
 
-	var parsed geminiBatchResponse
+	var parsed geminiEmbedResponse
 	if err := json.Unmarshal(respBody, &parsed); err != nil {
 		return nil, fmt.Errorf("gemini embed: parse response: %w (body: %s)", err, truncateForError(respBody))
 	}
@@ -220,14 +228,35 @@ func (g *geminiEmbedder) Embed(ctx context.Context, text string) ([]float32, err
 		return nil, fmt.Errorf("gemini embed: http %d: %s", resp.StatusCode, truncateForError(respBody))
 	}
 
-	if len(parsed.Embeddings) == 0 || len(parsed.Embeddings[0].Values) == 0 {
+	if parsed.Embedding == nil || len(parsed.Embedding.Values) == 0 {
 		return nil, fmt.Errorf("gemini embed: empty embedding in response")
 	}
-	vec := parsed.Embeddings[0].Values
+	vec := parsed.Embedding.Values
 	if len(vec) != g.dim {
 		return nil, fmt.Errorf("gemini embed: expected dim=%d, got %d -- check EMBEDDING_DIM matches your schema", g.dim, len(vec))
 	}
+	if g.dim < 3072 {
+		vec = l2Normalize(vec)
+	}
 	return vec, nil
+}
+
+// l2Normalize rescales v to unit length in place and returns the same
+// slice. Zero vectors pass through unchanged (normalizing would divide
+// by zero). Callers needing an independent copy must clone first.
+func l2Normalize(v []float32) []float32 {
+	var sumSq float64
+	for _, x := range v {
+		sumSq += float64(x) * float64(x)
+	}
+	if sumSq == 0 {
+		return v
+	}
+	norm := float32(math.Sqrt(sumSq))
+	for i := range v {
+		v[i] /= norm
+	}
+	return v
 }
 
 func truncateForError(b []byte) string {

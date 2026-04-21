@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"io"
+	"math"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -67,14 +68,17 @@ func TestNewSupabaseClient_RequiresURLAndKey(t *testing.T) {
 func TestSearchSupabase_RoundTrip(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
-		case "/v1beta/models/gemini-embedding-2-preview:batchEmbedContents":
-			// Embedder hit.
+		case "/v1beta/models/gemini-embedding-2-preview:embedContent":
+			// Embedder hit. Unit vector so the L2 normalization we do
+			// client-side for sub-3072 dims is a no-op and downstream
+			// checks see the exact value we send.
+			unit := float32(1.0 / math.Sqrt(512.0))
 			vec := make([]float32, 512)
 			for i := range vec {
-				vec[i] = 0.1
+				vec[i] = unit
 			}
-			_ = json.NewEncoder(w).Encode(geminiBatchResponse{
-				Embeddings: []geminiEmbeddingValue{{Values: vec}},
+			_ = json.NewEncoder(w).Encode(geminiEmbedResponse{
+				Embedding: &geminiEmbeddingPayload{Values: vec},
 			})
 		case "/rest/v1/rpc/hybrid_search_memories":
 			// Validate auth headers + JSON body shape.
