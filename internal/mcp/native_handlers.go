@@ -88,6 +88,19 @@ type contradictMemoryArgs struct {
 	Strength float64 `json:"strength,omitempty"  jsonschema:"description=Contradiction strength in [0.0, 1.0). Default 0.15. Lower = stronger push toward 0 confidence."`
 }
 
+// updateMemoryArgs uses pointer + nil-slice semantics so we can distinguish
+// an omitted field (leave untouched) from an explicit clear ([] / {}).
+// Content is *string: nil = untouched, "" = set to empty string, "..." = replace.
+// Tags/Metadata use nil-slice / nil-map semantics instead of pointers, which
+// encoding/json handles cleanly (absent + explicit null both decode to nil).
+type updateMemoryArgs struct {
+	ID       string         `json:"memory_id"          jsonschema:"required,description=UUID of the memory to update."`
+	Content  *string        `json:"content,omitempty"  jsonschema:"description=New content. Triggers re-embedding. Omit to leave unchanged."`
+	Tags     []string       `json:"tags,omitempty"     jsonschema:"description=Replace tags entirely. Pass an empty array to clear. Omit to leave unchanged."`
+	Metadata map[string]any `json:"metadata,omitempty" jsonschema:"description=Replace metadata entirely. Pass an empty object to clear. Omit to leave unchanged."`
+	Profile  string         `json:"profile,omitempty"  jsonschema:"description=Profile override; defaults to the config profile."`
+}
+
 // ---------------------------------------------------------------------
 // schemaFor reflects a Go struct's jsonschema tags into the inline JSON
 // Schema shape MCP expects. DoNotReference collapses nested types so
@@ -323,6 +336,41 @@ func BuildNativeReinforceHandler(cfg *native.Config) mcp.ToolHandler {
 	}
 }
 
+func BuildNativeUpdateHandler(cfg *native.Config) mcp.ToolHandler {
+	return func(ctx context.Context, req *mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		var args updateMemoryArgs
+		if fail := unmarshalArgs(req, &args); fail != nil {
+			return fail, nil
+		}
+		if args.ID == "" {
+			return errorResult("update_memory: memory_id is required"), nil
+		}
+		if args.Content == nil && args.Tags == nil && args.Metadata == nil {
+			// Python raises ValueError("No updates provided") -- map to
+			// IsError so MCP clients see it as a tool-level rejection, not
+			// transport failure.
+			return errorResult("update_memory: no fields to update (pass content, tags, or metadata)"), nil
+		}
+		result, err := native.Update(ctx, cfg, args.ID, native.UpdateOptions{
+			Content:  args.Content,
+			Tags:     args.Tags,
+			Metadata: args.Metadata,
+			Profile:  args.Profile,
+		})
+		if err != nil {
+			return errorResult(err.Error()), nil
+		}
+		return jsonResult(map[string]any{
+			"status":          "updated",
+			"id":              result.ID,
+			"profile":         result.Profile,
+			"updated_at":      result.UpdatedAt,
+			"fields_updated":  result.FieldsUpdated,
+			"re_embedded":     result.ReEmbedded,
+		})
+	}
+}
+
 func BuildNativeContradictHandler(cfg *native.Config) mcp.ToolHandler {
 	return func(ctx context.Context, req *mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		var args contradictMemoryArgs
@@ -449,6 +497,12 @@ func RegisterNativeTools(server *mcp.Server, cfg *native.Config) map[string]stru
 			"Contradict a memory's confidence -- mark it as disputed or outdated. Decreases the memory's confidence score, making it rank lower in future searches. The memory isn't deleted, just deprioritised. strength must be in [0.0, 1.0); default 0.15.",
 			contradictMemoryArgs{},
 			BuildNativeContradictHandler(cfg),
+		},
+		{
+			"update_memory",
+			"Update an existing memory. Re-embeds when content changes; omitting a field leaves it untouched, passing an empty array/object clears it. Returns id, updated_at, and the list of fields that were actually written.",
+			updateMemoryArgs{},
+			BuildNativeUpdateHandler(cfg),
 		},
 	}
 
