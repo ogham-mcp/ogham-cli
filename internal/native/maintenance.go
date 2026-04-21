@@ -458,7 +458,12 @@ func Audit(ctx context.Context, cfg *Config, profile, operation string, limit in
 			where = append(where, fmt.Sprintf("operation = $%d", len(args)))
 		}
 		args = append(args, limit)
-		sql := `SELECT event_time, profile, operation, memory_id::text, details
+		// Schema renames since v0.3: resource_id (was memory_id),
+		// metadata (was details). We alias both in the projection so
+		// the Go + JSON field names stay stable for callers who've
+		// wired against the v0.3 shape. This keeps API parity while
+		// the schema evolves underneath.
+		sql := `SELECT event_time, profile, operation, resource_id::text AS memory_id, metadata AS details
 FROM audit_log
 WHERE ` + strings.Join(where, " AND ") + `
 ORDER BY event_time DESC
@@ -494,7 +499,10 @@ LIMIT $` + fmt.Sprintf("%d", len(args))
 			return nil, err
 		}
 		q := url.Values{}
-		q.Set("select", "event_time,profile,operation,memory_id,details")
+		// Schema renames since v0.3: resource_id (was memory_id),
+		// metadata (was details). PostgREST projection aliases both
+		// back to the v0.3 names for backward-compatibility.
+		q.Set("select", "event_time,profile,operation,memory_id:resource_id,details:metadata")
 		q.Set("profile", "eq."+profile)
 		if operation != "" {
 			q.Set("operation", "eq."+operation)
