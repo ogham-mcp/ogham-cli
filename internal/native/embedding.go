@@ -46,23 +46,25 @@ func NewEmbedder(cfg *Config) (Embedder, error) {
 		dim = 512
 	}
 
+	var inner Embedder
+	var model string
 	switch provider {
 	case "gemini":
-		model := cfg.Embedding.Model
+		model = cfg.Embedding.Model
 		if model == "" {
 			model = "gemini-embedding-2-preview"
 		}
 		if cfg.Embedding.APIKey == "" {
 			return nil, fmt.Errorf("native embedder: gemini provider selected but GEMINI_API_KEY is not set")
 		}
-		return &geminiEmbedder{
+		inner = &geminiEmbedder{
 			apiKey: cfg.Embedding.APIKey,
 			model:  model,
 			dim:    dim,
 			http:   &http.Client{Timeout: 30 * time.Second},
-		}, nil
+		}
 	case "ollama":
-		model := cfg.Embedding.Model
+		model = cfg.Embedding.Model
 		if model == "" {
 			model = "embeddinggemma"
 		}
@@ -75,14 +77,14 @@ func NewEmbedder(cfg *Config) (Embedder, error) {
 		if baseURL == "" {
 			baseURL = "http://localhost:11434"
 		}
-		return &ollamaEmbedder{
+		inner = &ollamaEmbedder{
 			baseURL: baseURL,
 			model:   model,
 			dim:     dim,
 			http:    &http.Client{Timeout: 60 * time.Second},
-		}, nil
+		}
 	case "openai":
-		model := cfg.Embedding.Model
+		model = cfg.Embedding.Model
 		if model == "" {
 			model = "text-embedding-3-small"
 		}
@@ -93,18 +95,23 @@ func NewEmbedder(cfg *Config) (Embedder, error) {
 		if baseURL == "" {
 			baseURL = "https://api.openai.com"
 		}
-		return &openaiEmbedder{
+		inner = &openaiEmbedder{
 			apiKey:  cfg.Embedding.APIKey,
 			model:   model,
 			dim:     dim,
 			baseURL: baseURL,
 			http:    &http.Client{Timeout: 30 * time.Second},
-		}, nil
+		}
 	case "voyage", "mistral", "onnx":
 		return nil, fmt.Errorf("native embedder: provider %q not yet absorbed -- use the sidecar path (default) until ported", provider)
 	default:
 		return nil, fmt.Errorf("native embedder: unknown provider %q", provider)
 	}
+
+	// Every provider returns via the shared SQLite cache. Disabled via
+	// OGHAM_EMBEDDING_CACHE=0 for troubleshooting or tests that want
+	// to exercise the raw provider path without hitting the cache.
+	return maybeWrapWithCache(inner, provider, model), nil
 }
 
 // geminiEmbedder speaks the Gemini REST embeddings API directly --
