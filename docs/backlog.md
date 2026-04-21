@@ -19,13 +19,30 @@ detail lives in the commit/PR that actually picks it up.
 
 ## Extraction + scoring
 
-- **Wire `scoring.go` / `dates.go` to the YAML language loader.**
-  Infrastructure landed in `a49ac7c`; needs a language-detection
-  signal (per-memory tag, config override, or content autodetect).
-- **Recurrence detection** -- "every Tuesday", "weekly standup".
-  Python shipped; Go not yet.
-- **Narrower person-name regex** -- current pattern over-triggers on
-  CamelCase code identifiers.
+- ~~Wire `scoring.go` / `dates.go` to the YAML language loader.~~ --
+  done. Per-memory language signal flows via `StoreOptions.Language`
+  (falls back to `metadata["language"]`, then `"en"`). Scoring +
+  date parsing now resolve word sets from the resolved language's
+  YAML; English baseline is preserved for mixed-language content.
+  Adding a new language: append to the 18-lang set under
+  `internal/native/extraction/languages/` and populate the
+  `today_words`, `tomorrow_words`, `yesterday_words`, `modifier_*`,
+  `period_*`, `unit_*`, `ago_markers`, `in_markers`, and
+  `recurrence_patterns` blocks (en.yaml + de.yaml are the reference).
+- ~~Recurrence detection~~ -- done. `internal/native/extraction/
+  recurrence.go` + `recurrence_patterns` YAML block, wired into
+  `native/store.go` so stored memories carry
+  `metadata.recurrence` + `recurrence:<normalised>` /
+  `recurrence:<dayname>` tags. English + German ship populated;
+  other 16 languages have empty blocks ready for content fill-in.
+- ~~Narrower person-name regex~~ -- done. Three-rule classifier
+  (punct gate / multi-lang stopwords union / per-language denylist)
+  lifts parity from 93.8% to 97.9% and drops all known tech-term
+  false positives (Docker Postgres, Scratch DB, Next.js, Managed
+  Agents, method-enumeration bigrams). See
+  `internal/native/extraction/entities.go` and
+  `internal/native/extraction/languages/multilang_stopwords.txt`
+  (regenerate with the `stop_words` Python package union).
 
 ## Graph
 
