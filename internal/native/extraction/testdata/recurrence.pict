@@ -1,0 +1,52 @@
+# PICT model for Recurrence() pairwise combinatorial test coverage.
+#
+# Mirrors src/ogham/extraction.py::extract_recurrence. Recurrence
+# fires on one of two signals:
+#
+#   1. An explicit recurrence phrase (recurrence_patterns YAML list):
+#      daily / weekly / biweekly / monthly / quarterly / yearly +
+#      German / localised equivalents.
+#
+#   2. every_word + day_name pair: "every Monday", "jeden Dienstag",
+#      and German adverbial "montags" short-forms.
+#
+# Expected output:
+#   (pattern=<normalised>, tags=[recurrence:<n>, ...], ok=true)
+#
+# The PICT matrix exercises the axes that toggle these signals and the
+# language path.
+#
+# Regenerate:  make pict-regen
+
+
+# --- Axes ---------------------------------------------------------------
+
+# Language of the content. EN / DE today. Unknown falls back to English
+# via resolveRules so signal detection still works for English content
+# accidentally flagged with an unsupported code.
+Language: EN, DE, Unknown
+
+# Phrase family driving the recurrence signal.
+#   None         -> neither explicit nor every+day signal present
+#   Explicit     -> a recurrence_patterns entry ("daily", "monthly", ...)
+#   EveryDay     -> every_word + weekday ("every Monday" / "jeden Dienstag")
+#   Adverbial    -> German "montags" style without any every_word
+PhraseType: None, Explicit, EveryDay, Adverbial
+
+# Unit of the explicit phrase when PhraseType=Explicit.
+#   Daily / Weekly / Biweekly / Monthly / Quarterly / Yearly
+# Ignored for other PhraseTypes; the constraint below forces None.
+TimeUnit: Daily, Weekly, Biweekly, Monthly, Quarterly, Yearly, NA
+
+
+# --- Constraints --------------------------------------------------------
+
+# TimeUnit is only meaningful with an Explicit phrase. Force NA
+# everywhere else so the matrix doesn't waste rows on Explicit+Daily
+# variants that never actually appear in the fixture.
+IF [PhraseType] <> "Explicit" THEN [TimeUnit] = "NA";
+IF [PhraseType] =  "Explicit" THEN [TimeUnit] <> "NA";
+
+# Adverbial is German-only (English has no equivalent morphology).
+# Filtering at the model layer keeps the PICT matrix clean.
+IF [PhraseType] = "Adverbial" THEN [Language] = "DE";

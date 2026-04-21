@@ -126,6 +126,7 @@ func Store(ctx context.Context, cfg *Config, content string, opts StoreOptions) 
 	entities := extraction.Entities(content)
 	dates := extraction.DatesAtForLang(content, time.Now(), lang)
 	importance := extraction.ImportanceForLang(content, opts.Tags, lang)
+	recurrencePattern, recurrenceTags, hasRecurrence := extraction.Recurrence(content, lang)
 
 	profile := opts.Profile
 	if profile == "" {
@@ -189,6 +190,10 @@ func Store(ctx context.Context, cfg *Config, content string, opts StoreOptions) 
 	// ogham uses the same prefixes (entity:/file:/person:/location:/
 	// date:) and the same dedup behaviour.
 	allTags := mergeTags(opts.Tags, entities, dates)
+	// Recurrence tags slot in alongside entity tags. Dedupe happens
+	// inside mergeTags' caller pass -- we append once here to keep
+	// the existing mergeTags signature stable.
+	allTags = mergeRecurrenceTags(allTags, recurrenceTags)
 
 	metadata := map[string]any{}
 	if len(dates) > 0 {
@@ -197,6 +202,13 @@ func Store(ctx context.Context, cfg *Config, content string, opts StoreOptions) 
 	// Language lands in metadata so re-embed / migration paths can
 	// recover the original locale without a separate column.
 	metadata["language"] = lang
+	// Recurrence metadata: canonical pattern string on the map, raw
+	// tags already in allTags for FTS. Matches Python's shape (a single
+	// normalised key rather than the day-index list Python returns) so
+	// dashboards can surface the signal without decoding the list.
+	if hasRecurrence {
+		metadata["recurrence"] = recurrencePattern
+	}
 	// Caller-supplied metadata wins on collision -- typed-store wrappers
 	// pass {type, confidence, ...} and those keys must survive over any
 	// extraction artefact that happened to share a name.
@@ -419,6 +431,34 @@ func pickAutoLinks(neighbors []SearchResult, threshold float64, n int) []AutoLin
 		picks = picks[:n]
 	}
 	return picks
+}
+
+// mergeRecurrenceTags adds recurrence:<x> tags to an existing tag slice,
+// dedup'd. Keeps mergeTags's signature small so the date + entity merge
+// path stays unchanged. Output is sorted to match Python's sorted()
+// semantics.
+func mergeRecurrenceTags(tags, recurrenceTags []string) []string {
+	if len(recurrenceTags) == 0 {
+		return tags
+	}
+	seen := make(map[string]struct{}, len(tags)+len(recurrenceTags))
+	out := make([]string, 0, len(tags)+len(recurrenceTags))
+	for _, t := range tags {
+		if _, ok := seen[t]; ok {
+			continue
+		}
+		seen[t] = struct{}{}
+		out = append(out, t)
+	}
+	for _, t := range recurrenceTags {
+		if _, ok := seen[t]; ok {
+			continue
+		}
+		seen[t] = struct{}{}
+		out = append(out, t)
+	}
+	sort.Strings(out)
+	return out
 }
 
 // mergeTags combines caller tags + entity tags + date:YYYY-MM-DD tags
