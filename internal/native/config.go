@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"github.com/BurntSushi/toml"
@@ -158,6 +159,15 @@ func applyEnv(cfg *Config) {
 	}
 	if v := strings.TrimSpace(os.Getenv("EMBEDDING_PROVIDER")); v != "" {
 		cfg.Embedding.Provider = v
+	}
+	// EMBEDDING_DIM: Python's pydantic-settings reads this; Go should too.
+	// Parity gap that previously required editing config.toml to change the
+	// native pipeline's dimension. Silent bad parses fall through to the
+	// TOML / default value rather than crashing.
+	if v := strings.TrimSpace(os.Getenv("EMBEDDING_DIM")); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			cfg.Embedding.Dimension = n
+		}
 	}
 	// Provider-scoped base-URL overrides. Each provider reads the env
 	// name it has historically used; only the one matching the selected
