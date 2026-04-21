@@ -2,8 +2,10 @@ A lightweight MCP client for the Ogham memory stack.
 
 Defaults (v0.3.0-rc4+):
   - JSON output for stable scripting / LLM consumption -- use --text for humans
-  - Native path (direct Postgres / Supabase / Gemini) for speed -- use --legacy
-    (or --python) to route through the Python MCP sidecar instead
+  - Native path (direct Postgres / Supabase / Gemini) for speed -- use
+    --sidecar (or --python) to route through the Python MCP sidecar for
+    the full retrieval pipeline (intent detection, strided retrieval,
+    query reformulation, MMR, graph augmentation)
 
 Usage:
   ogham [flags]
@@ -36,9 +38,9 @@ Available Commands:
 
 Flags:
   -h, --help            help for ogham
-      --legacy          Route through the Python MCP sidecar instead of native Go
-      --python          Alias for --legacy
+      --python          Alias for --sidecar
   -q, --quiet           Suppress stderr informational notices (sidecar fallback message)
+      --sidecar         Route through the Python MCP sidecar for the full retrieval pipeline (intent detection, strided retrieval, query reformulation, graph augmentation). Default is the fast native Go path.
       --text            Human-readable output (default is JSON for LLM / script consumption)
   -v, --verbose count   Increase stderr log verbosity (-v = info, -vv = debug)
 

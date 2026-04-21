@@ -18,7 +18,7 @@ import (
 // Python's own config loading: project ./.env, ~/.ogham/config.env, plus
 // the TOML-derived SidecarEnv on top. Later entries win. This means a user
 // whose Python sidecar works today works with the Go CLI too, and any
-// TOML fields (once populated) override legacy .env values.
+// TOML fields (once populated) override pre-existing .env values.
 func connectSidecar(ctx context.Context) (*sidecar.Client, error) {
 	cfg, err := native.Load(native.DefaultPath())
 	if err != nil {
@@ -188,15 +188,15 @@ func notImplemented(tool string) error {
 // noteSidecarFallback prints a one-line info to stderr announcing that a
 // command is running through the Python sidecar because its native path
 // is not implemented yet. Suppressed when the user explicitly passed
-// --legacy / --python (they already know) or --quiet. Stderr so it
-// never pollutes stdout JSON that scripts / LLMs are parsing.
+// --sidecar / --legacy / --python (they already know) or --quiet. Stderr
+// so it never pollutes stdout JSON that scripts / LLMs are parsing.
 //
 // Coverage audit (2026-04-20, task #138d):
 //
 //   - Called at: cmd/store.go, cmd/export.go, cmd/import.go -- the three
 //     commands that always fall through to the sidecar today.
 //   - list / search / health: only hit the sidecar when the user opted in
-//     with --legacy; this helper already no-ops in that case, so calling
+//     with --sidecar; this helper already no-ops in that case, so calling
 //     it would be a noop. Left as-is.
 //   - audit / cleanup / decay / delete / profile / stats / config show:
 //     native-only, no sidecar path to announce.
@@ -209,13 +209,13 @@ func noteSidecarFallback(tool string) {
 }
 
 // writeSidecarFallbackNotice is the testable core of noteSidecarFallback.
-// Factored out so helpers_test.go can exercise the --legacy / --quiet
+// Factored out so helpers_test.go can exercise the --sidecar / --quiet
 // suppression without reassigning os.Stderr.
 func writeSidecarFallbackNotice(w io.Writer, tool string) {
-	if useLegacy() || useQuiet() {
+	if useSidecar() || useQuiet() {
 		return
 	}
 	fmt.Fprintf(w,
-		"[ogham] %q has no native Go path yet; routing through the Python sidecar. Pass --legacy (or --quiet) to suppress this notice.\n",
+		"[ogham] %q has no native Go path yet; routing through the Python sidecar. Pass --sidecar (or --quiet) to suppress this notice.\n",
 		tool)
 }

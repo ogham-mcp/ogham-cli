@@ -9,8 +9,8 @@ Flags:
   -y, --yes              Skip confirmation prompt
 
 Global Flags:
-      --legacy          Route through the Python MCP sidecar instead of native Go
-      --python          Alias for --legacy
+      --python          Alias for --sidecar
   -q, --quiet           Suppress stderr informational notices (sidecar fallback message)
+      --sidecar         Route through the Python MCP sidecar for the full retrieval pipeline (intent detection, strided retrieval, query reformulation, graph augmentation). Default is the fast native Go path.
       --text            Human-readable output (default is JSON for LLM / script consumption)
   -v, --verbose count   Increase stderr log verbosity (-v = info, -vv = debug)

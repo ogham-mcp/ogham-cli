@@ -18,7 +18,7 @@ var (
 	listTags    string
 	// Deprecated: kept as silent no-ops so pre-rc4 scripts keep working.
 	// JSON is now the default (use --text), native is now the default
-	// (use --legacy).
+	// (use --sidecar to opt out).
 	listJSONDeprecated   bool
 	listNativeDeprecated bool
 )
@@ -28,9 +28,11 @@ var listCmd = &cobra.Command{
 	Short: "List recent memories",
 	Long: `Return the most recent memories from the active profile.
 
-Default path: calls the Python MCP sidecar's list_recent tool.
---native path: connects to Postgres directly via pgx -- this is the first
-absorbed tool. Requires DATABASE_URL or [database] url in config.toml.`,
+Default path: native Go, connects to Postgres directly via pgx or
+Supabase PostgREST. Requires DATABASE_URL or [database] url in
+config.toml.
+--sidecar path: calls the Python MCP sidecar's list_recent tool (useful
+if you want the full retrieval pipeline around a list op).`,
 	Args: cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
@@ -38,7 +40,7 @@ absorbed tool. Requires DATABASE_URL or [database] url in config.toml.`,
 		ctx, cancelTimeout := context.WithTimeout(ctx, 30*time.Second)
 		defer cancelTimeout()
 
-		if useLegacy() {
+		if useSidecar() {
 			return runListSidecar(ctx)
 		}
 		return runListNative(ctx)

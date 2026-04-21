@@ -42,7 +42,9 @@ Content source:
 
 The native Go pipeline (extraction -> parallel embed + search ->
 surprise -> auto-link candidates -> DB write) is the default in v0.5.
-Use --legacy (or --python) to route through the Python MCP sidecar.
+Use --sidecar (or --python) to route through the Python MCP sidecar
+for the full retrieval pipeline and tool-layer enrichment (contradiction
+detection, compression, supersedes).
 
   --dry-run  runs extraction + embed + search but skips the DB write,
              so you can preview what the pipeline would produce before
@@ -74,11 +76,12 @@ Use --legacy (or --python) to route through the Python MCP sidecar.
 		ctx, cancelTimeout := context.WithTimeout(ctx, 60*time.Second)
 		defer cancelTimeout()
 
-		// --legacy opts out of the native path and routes through the
+		// --sidecar opts out of the native path and routes through the
 		// Python MCP sidecar, which still owns tool-layer enrichment
 		// (contradiction detection, compression, supersedes) that has
-		// not been absorbed yet.
-		if useLegacy() {
+		// not been absorbed yet. --legacy is a deprecated alias that
+		// still works but emits a warning in PersistentPreRunE.
+		if useSidecar() {
 			return runStoreSidecar(ctx, content)
 		}
 		return runStoreNative(ctx, content)
@@ -133,9 +136,9 @@ func runStoreNative(ctx context.Context, content string) error {
 	return nil
 }
 
-// runStoreSidecar is the --legacy path. Keeps the pre-v0.5 behaviour
-// available for anyone that depended on the sidecar's richer store_memory
-// tool (contradiction linking etc.).
+// runStoreSidecar is the --sidecar path (formerly --legacy). Keeps the
+// pre-v0.5 behaviour available for anyone that depended on the sidecar's
+// richer store_memory tool (contradiction linking etc.).
 func runStoreSidecar(ctx context.Context, content string) error {
 	noteSidecarFallback("store")
 
