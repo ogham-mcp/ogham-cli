@@ -102,7 +102,55 @@ func NewEmbedder(cfg *Config) (Embedder, error) {
 			baseURL: baseURL,
 			http:    &http.Client{Timeout: 30 * time.Second},
 		}
-	case "voyage", "mistral", "onnx":
+	case "voyage":
+		model = cfg.Embedding.Model
+		if model == "" {
+			model = "voyage-3-lite"
+		}
+		if cfg.Embedding.APIKey == "" {
+			return nil, fmt.Errorf("native embedder: voyage provider selected but VOYAGE_API_KEY is not set")
+		}
+		baseURL := strings.TrimRight(strings.TrimSpace(cfg.Embedding.BaseURL), "/")
+		if baseURL == "" {
+			baseURL = "https://api.voyageai.com"
+		}
+		inner = &voyageEmbedder{
+			apiKey:  cfg.Embedding.APIKey,
+			model:   model,
+			dim:     dim,
+			baseURL: baseURL,
+			// Voyage treats input_type semantically: "document" for the
+			// store path, "query" for the search path. v0.5 absorbs the
+			// store path only; query-side goes in when search absorbs.
+			inputType: "document",
+			http:      &http.Client{Timeout: 30 * time.Second},
+		}
+	case "mistral":
+		model = cfg.Embedding.Model
+		if model == "" {
+			model = "mistral-embed"
+		}
+		if cfg.Embedding.APIKey == "" {
+			return nil, fmt.Errorf("native embedder: mistral provider selected but MISTRAL_API_KEY is not set")
+		}
+		// mistral-embed is a fixed-dim 1024 model; it does not accept
+		// output_dimension. Reject any other dim so the schema/request
+		// mismatch surfaces at construction rather than at every call.
+		if model == "mistral-embed" && dim != 1024 {
+			return nil, fmt.Errorf("native embedder: mistral-embed only supports dim=1024, got %d -- update EMBEDDING_DIM to 1024 or switch to a different Mistral embedding model", dim)
+		}
+		baseURL := strings.TrimRight(strings.TrimSpace(cfg.Embedding.BaseURL), "/")
+		if baseURL == "" {
+			baseURL = "https://api.mistral.ai"
+		}
+		inner = &mistralEmbedder{
+			apiKey:  cfg.Embedding.APIKey,
+			model:   model,
+			dim:     dim,
+			baseURL: baseURL,
+			http:    &http.Client{Timeout: 30 * time.Second},
+		}
+	case "onnx":
 		return nil, fmt.Errorf("native embedder: provider %q not yet absorbed -- use the sidecar path (default) until ported", provider)
 	default:
 		return nil, fmt.Errorf("native embedder: unknown provider %q", provider)
@@ -463,6 +511,222 @@ func (o *openaiEmbedder) Embed(ctx context.Context, text string) ([]float32, err
 	vec := parsed.Data[0].Embedding
 	if len(vec) != o.dim {
 		return nil, fmt.Errorf("openai embed: expected dim=%d, got %d -- check EMBEDDING_DIM matches your schema; text-embedding-3-small and -3-large honour the dimensions request, ada-002 does not", o.dim, len(vec))
+	}
+	return vec, nil
+}
+
+// -----------------------------------------------------------------------
+// Voyage embedder -- HTTPS POST to /v1/embeddings.
+//
+// Differs from OpenAI in three specific ways:
+//   * body field is output_dimension (not dimensions)
+//   * input MUST be an array of strings, even for a single embed
+//   * input_type ("document" | "query") is semantic, not shape-related
+//     -- Voyage tokens the text slightly differently for retrieval vs
+//     document paths. v0.5 absorbs the store-side only, so we hard-code
+//     "document" at construction time.
+//
+// Auth is a Bearer token. Response shape matches OpenAI: data[].embedding.
+// baseURL is overridable via VOYAGE_BASE_URL (lifted onto
+// cfg.Embedding.BaseURL in applyEnv only when provider=voyage).
+
+type voyageEmbedder struct {
+	apiKey    string
+	model     string
+	dim       int
+	baseURL   string
+	inputType string
+	http      *http.Client
+}
+
+func (v *voyageEmbedder) Name() string   { return "voyage/" + v.model }
+func (v *voyageEmbedder) Dimension() int { return v.dim }
+
+type voyageEmbedRequest struct {
+	Model           string   `json:"model"`
+	Input           []string `json:"input"`
+	OutputDimension int      `json:"output_dimension,omitempty"`
+	InputType       string   `json:"input_type,omitempty"`
+}
+
+type voyageEmbedResponse struct {
+	Data  []voyageEmbeddingItem `json:"data"`
+	Error *voyageAPIError       `json:"error,omitempty"`
+}
+
+type voyageEmbeddingItem struct {
+	Embedding []float32 `json:"embedding"`
+	Index     int       `json:"index"`
+}
+
+type voyageAPIError struct {
+	Message string `json:"message"`
+	Detail  string `json:"detail"`
+}
+
+func (v *voyageEmbedder) Embed(ctx context.Context, text string) ([]float32, error) {
+	if text == "" {
+		return nil, fmt.Errorf("voyage embed: empty text")
+	}
+
+	body := voyageEmbedRequest{
+		Model:           v.model,
+		Input:           []string{text},
+		OutputDimension: v.dim,
+		InputType:       v.inputType,
+	}
+	jsonBody, err := json.Marshal(body)
+	if err != nil {
+		return nil, fmt.Errorf("voyage embed: marshal: %w", err)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost,
+		v.baseURL+"/v1/embeddings", bytes.NewReader(jsonBody))
+	if err != nil {
+		return nil, fmt.Errorf("voyage embed: build request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+v.apiKey)
+
+	resp, err := v.http.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("voyage embed: http: %w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	respBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("voyage embed: read: %w", err)
+	}
+
+	var parsed voyageEmbedResponse
+	if err := json.Unmarshal(respBody, &parsed); err != nil {
+		return nil, fmt.Errorf("voyage embed: parse: %w (body: %s)", err, truncateForError(respBody))
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		if parsed.Error != nil {
+			msg := parsed.Error.Message
+			if msg == "" {
+				msg = parsed.Error.Detail
+			}
+			return nil, fmt.Errorf("voyage embed: http %d: %s", resp.StatusCode, msg)
+		}
+		return nil, fmt.Errorf("voyage embed: http %d: %s", resp.StatusCode, truncateForError(respBody))
+	}
+
+	if len(parsed.Data) == 0 || len(parsed.Data[0].Embedding) == 0 {
+		return nil, fmt.Errorf("voyage embed: empty data array in response")
+	}
+	vec := parsed.Data[0].Embedding
+	if len(vec) != v.dim {
+		return nil, fmt.Errorf("voyage embed: expected dim=%d, got %d -- check EMBEDDING_DIM matches your schema (voyage-3-lite and voyage-3 honour output_dimension; older models do not)", v.dim, len(vec))
+	}
+	return vec, nil
+}
+
+// -----------------------------------------------------------------------
+// Mistral embedder -- HTTPS POST to /v1/embeddings.
+//
+// The default mistral-embed model is fixed 1024 dim; it does not accept
+// output_dimension. NewEmbedder rejects any dim != 1024 for that model
+// so the mismatch surfaces at construction rather than at every call.
+// Alternative Mistral embedding models that DO support output_dimension
+// can be configured via [embedding] model (constructor skips the dim
+// guard for non-default models).
+//
+// Auth is Bearer; response shape matches OpenAI: data[].embedding.
+// baseURL is overridable via MISTRAL_BASE_URL (lifted in applyEnv only
+// when provider=mistral).
+
+type mistralEmbedder struct {
+	apiKey  string
+	model   string
+	dim     int
+	baseURL string
+	http    *http.Client
+}
+
+func (m *mistralEmbedder) Name() string   { return "mistral/" + m.model }
+func (m *mistralEmbedder) Dimension() int { return m.dim }
+
+type mistralEmbedRequest struct {
+	Model           string   `json:"model"`
+	Input           []string `json:"input"`
+	OutputDimension int      `json:"output_dimension,omitempty"`
+}
+
+type mistralEmbedResponse struct {
+	Data  []mistralEmbeddingItem `json:"data"`
+	Error *mistralAPIError       `json:"error,omitempty"`
+}
+
+type mistralEmbeddingItem struct {
+	Embedding []float32 `json:"embedding"`
+	Index     int       `json:"index"`
+}
+
+type mistralAPIError struct {
+	Message string `json:"message"`
+	Type    string `json:"type"`
+}
+
+func (m *mistralEmbedder) Embed(ctx context.Context, text string) ([]float32, error) {
+	if text == "" {
+		return nil, fmt.Errorf("mistral embed: empty text")
+	}
+
+	body := mistralEmbedRequest{
+		Model: m.model,
+		Input: []string{text},
+	}
+	// Only request output_dimension for models other than the fixed-dim
+	// mistral-embed. Attaching it there returns a 400 from the API.
+	if m.model != "mistral-embed" {
+		body.OutputDimension = m.dim
+	}
+	jsonBody, err := json.Marshal(body)
+	if err != nil {
+		return nil, fmt.Errorf("mistral embed: marshal: %w", err)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost,
+		m.baseURL+"/v1/embeddings", bytes.NewReader(jsonBody))
+	if err != nil {
+		return nil, fmt.Errorf("mistral embed: build request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+m.apiKey)
+
+	resp, err := m.http.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("mistral embed: http: %w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	respBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("mistral embed: read: %w", err)
+	}
+
+	var parsed mistralEmbedResponse
+	if err := json.Unmarshal(respBody, &parsed); err != nil {
+		return nil, fmt.Errorf("mistral embed: parse: %w (body: %s)", err, truncateForError(respBody))
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		if parsed.Error != nil {
+			return nil, fmt.Errorf("mistral embed: %s: %s", parsed.Error.Type, parsed.Error.Message)
+		}
+		return nil, fmt.Errorf("mistral embed: http %d: %s", resp.StatusCode, truncateForError(respBody))
+	}
+
+	if len(parsed.Data) == 0 || len(parsed.Data[0].Embedding) == 0 {
+		return nil, fmt.Errorf("mistral embed: empty data array in response")
+	}
+	vec := parsed.Data[0].Embedding
+	if len(vec) != m.dim {
+		return nil, fmt.Errorf("mistral embed: expected dim=%d, got %d -- mistral-embed returns 1024 natively; use a model that honours output_dimension for smaller dims", m.dim, len(vec))
 	}
 	return vec, nil
 }

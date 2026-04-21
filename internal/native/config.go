@@ -169,6 +169,12 @@ func applyEnv(cfg *Config) {
 	if v := strings.TrimSpace(os.Getenv("OPENAI_BASE_URL")); v != "" && cfg.Embedding.Provider == "openai" {
 		cfg.Embedding.BaseURL = v
 	}
+	if v := strings.TrimSpace(os.Getenv("VOYAGE_BASE_URL")); v != "" && cfg.Embedding.Provider == "voyage" {
+		cfg.Embedding.BaseURL = v
+	}
+	if v := strings.TrimSpace(os.Getenv("MISTRAL_BASE_URL")); v != "" && cfg.Embedding.Provider == "mistral" {
+		cfg.Embedding.BaseURL = v
+	}
 	// Profile: honour both the Python name (DEFAULT_PROFILE) and the Go
 	// name (OGHAM_PROFILE). OGHAM_PROFILE wins if both are set.
 	if v := strings.TrimSpace(os.Getenv("DEFAULT_PROFILE")); v != "" {
@@ -217,6 +223,10 @@ func (c *Config) SidecarEnv() []string {
 			env = append(env, "OLLAMA_URL="+c.Embedding.BaseURL)
 		case "openai":
 			env = append(env, "OPENAI_BASE_URL="+c.Embedding.BaseURL)
+		case "voyage":
+			env = append(env, "VOYAGE_BASE_URL="+c.Embedding.BaseURL)
+		case "mistral":
+			env = append(env, "MISTRAL_BASE_URL="+c.Embedding.BaseURL)
 		}
 	}
 	if c.Profile != "" {

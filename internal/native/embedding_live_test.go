@@ -169,6 +169,109 @@ func TestLiveOpenAI_Embed(t *testing.T) {
 		model, dim, vec[0], vec[len(vec)-1])
 }
 
+// TestLiveVoyage_Embed drives a real Voyage AI embedding request.
+// Skips when VOYAGE_API_KEY is unset. Model defaults to voyage-3-lite,
+// dim to 512, overridable via OGHAM_LIVE_VOYAGE_MODEL /
+// OGHAM_LIVE_VOYAGE_DIM. Base URL override via VOYAGE_BASE_URL.
+func TestLiveVoyage_Embed(t *testing.T) {
+	apiKey := strings.TrimSpace(os.Getenv("VOYAGE_API_KEY"))
+	if apiKey == "" {
+		t.Skip("VOYAGE_API_KEY not set -- skipping live Voyage embed test")
+	}
+
+	model := os.Getenv("OGHAM_LIVE_VOYAGE_MODEL")
+	if model == "" {
+		model = "voyage-3-lite"
+	}
+	dim := 512
+	if v := os.Getenv("OGHAM_LIVE_VOYAGE_DIM"); v != "" {
+		parsed, err := parseDim(v)
+		if err != nil {
+			t.Fatalf("OGHAM_LIVE_VOYAGE_DIM: %v", err)
+		}
+		dim = parsed
+	}
+	baseURL := strings.TrimSpace(os.Getenv("VOYAGE_BASE_URL"))
+
+	// Bypass the shared cache so this test actually talks to Voyage
+	// rather than replaying a prior run's vector.
+	t.Setenv("OGHAM_EMBEDDING_CACHE", "0")
+	e, err := NewEmbedder(&Config{Embedding: Embedding{
+		Provider:  "voyage",
+		APIKey:    apiKey,
+		Model:     model,
+		Dimension: dim,
+		BaseURL:   baseURL,
+	}})
+	if err != nil {
+		t.Fatalf("NewEmbedder: %v", err)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	vec, err := e.Embed(ctx, "hello world from the ogham live smoke test")
+	if err != nil {
+		t.Fatalf("Embed: %v", err)
+	}
+	if len(vec) != dim {
+		t.Fatalf("vector length = %d, want %d", len(vec), dim)
+	}
+	t.Logf("ok: voyage model=%s dim=%d first=%g last=%g",
+		model, dim, vec[0], vec[len(vec)-1])
+}
+
+// TestLiveMistral_Embed drives a real Mistral embedding request.
+// Skips when MISTRAL_API_KEY is unset. Model defaults to mistral-embed
+// at its fixed 1024 dim. Override via OGHAM_LIVE_MISTRAL_MODEL /
+// OGHAM_LIVE_MISTRAL_DIM (only meaningful for non-default models).
+// Base URL override via MISTRAL_BASE_URL.
+func TestLiveMistral_Embed(t *testing.T) {
+	apiKey := strings.TrimSpace(os.Getenv("MISTRAL_API_KEY"))
+	if apiKey == "" {
+		t.Skip("MISTRAL_API_KEY not set -- skipping live Mistral embed test")
+	}
+
+	model := os.Getenv("OGHAM_LIVE_MISTRAL_MODEL")
+	if model == "" {
+		model = "mistral-embed"
+	}
+	dim := 1024
+	if v := os.Getenv("OGHAM_LIVE_MISTRAL_DIM"); v != "" {
+		parsed, err := parseDim(v)
+		if err != nil {
+			t.Fatalf("OGHAM_LIVE_MISTRAL_DIM: %v", err)
+		}
+		dim = parsed
+	}
+	baseURL := strings.TrimSpace(os.Getenv("MISTRAL_BASE_URL"))
+
+	t.Setenv("OGHAM_EMBEDDING_CACHE", "0")
+	e, err := NewEmbedder(&Config{Embedding: Embedding{
+		Provider:  "mistral",
+		APIKey:    apiKey,
+		Model:     model,
+		Dimension: dim,
+		BaseURL:   baseURL,
+	}})
+	if err != nil {
+		t.Fatalf("NewEmbedder: %v", err)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	vec, err := e.Embed(ctx, "hello world from the ogham live smoke test")
+	if err != nil {
+		t.Fatalf("Embed: %v", err)
+	}
+	if len(vec) != dim {
+		t.Fatalf("vector length = %d, want %d", len(vec), dim)
+	}
+	t.Logf("ok: mistral model=%s dim=%d first=%g last=%g",
+		model, dim, vec[0], vec[len(vec)-1])
+}
+
 func parseDim(s string) (int, error) {
 	n := 0
 	for _, c := range s {

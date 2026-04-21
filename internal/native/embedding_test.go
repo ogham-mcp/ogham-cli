@@ -31,10 +31,10 @@ func TestNewEmbedder_UnknownProvider(t *testing.T) {
 }
 
 func TestNewEmbedder_UnimplementedProvider(t *testing.T) {
-	// Providers not yet absorbed must fail clearly, not silently.
-	// Ollama absorbed in rc6 (Iain's stack); Gemini absorbed earlier;
-	// OpenAI absorbed in v0.5 Day 3.
-	for _, p := range []string{"voyage", "mistral", "onnx"} {
+	// Providers not yet absorbed must fail clearly, not silently. Today
+	// only onnx is left; Gemini / Ollama / OpenAI / Voyage / Mistral
+	// are all absorbed in v0.5.
+	for _, p := range []string{"onnx"} {
 		cfg := &Config{Embedding: Embedding{Provider: p, APIKey: "x", Dimension: 512}}
 		_, err := NewEmbedder(cfg)
 		if err == nil {
