@@ -6,7 +6,7 @@ Last updated: 2026-04-21
 
 ## Currently in progress
 
-- **#137 v0.5 MVP** — Days 1–4 shipped. Day 5 parity harness + Day 6 README + v0.5.0-rc1 still pending.
+- **#137 v0.5 MVP** — Days 1–6 shipped on main. v0.5.0-rc1 tag pending.
 
 ## Just closed
 
@@ -19,6 +19,10 @@ Last updated: 2026-04-21
 - **#142** — Gemini L2-normalize sub-3072 dims. Go side shipped (`:embedContent` migration + `l2Normalize` helper + 5 new tests). Python parity pushed alongside in `openbrain-sharedmemory`.
 - **#143** — Go port of Python `EmbeddingCache` (shared SQLite file via modernc.org/sqlite + WAL). 90.7% coverage, PICT matrix, fuzz, benchmarks, fixture-consumer test. Wrapped every embedder via `NewCachedEmbedder` so provider calls skip on cache hits.
 - **Day 4** — `internal/native/store.go` orchestrator shipped. Extraction → errgroup(embed, search) → surprise → auto-link candidates → Postgres INSERT. `cmd/store.go --native-store-preview --dry-run` wired in; verified end-to-end against local config (Gemini+Supabase): dates extracted, parallel embed+search, surprise 0.86 on fresh content.
+- **Day 5** — Python parity harness locked. 97-memory corpus in `internal/native/extraction/testdata/parity/` with generator + pinned JSON. Baselines: entities 93.8% / dates 100% / importance 96.9%. All above locked thresholds (75% / 70% / 85%).
+- **Supabase native store write** — `writeMemorySupabase` POSTs to `/rest/v1/memories` via PostgREST, sends embedding as pgvector text literal, gets uuid back via `Prefer: return=representation`. Live write verified (id `25611992-3cc0-...` committed in 690 ms).
+- **#139** — gateway client context + retry cleanup. Every `*gateway.Client` method takes `ctx` first; `http.NewRequestWithContext` throughout; retry backoff uses `select { case <-time.After(): case <-ctx.Done(): }` so Ctrl+C mid-retry returns within ms. 2 new tests lock the cancel-during-backoff guarantee.
+- **Day 6** — `--native-store-preview` flag removed; native is the default for `ogham store`. Kept as a hidden deprecated no-op. README updated: v0.5 architecture section, v0.5-v0.7 roadmap, Operators section on pooler-vs-direct DDL discipline.
 - **Live smoke tests** — `//go:build live` harness + `make live` target. Ollama (embeddinggemma @ 512 + 768), OpenAI (text-embedding-3-small @ 512), Voyage (voyage-3-lite @ 512), Mistral (mistral-embed @ 1024) all verified against real endpoints.
 - **#141** — new task for coverage debt across the rest of `internal/native/`.
 

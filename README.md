@@ -2,7 +2,7 @@
 
 A single Go binary that gives AI agents persistent, searchable memory -- even on locked-down enterprise laptops where third-party MCP servers are blocked.
 
-> **Pre-release.** v0.1-v0.3 are internal dogfood. **First public release is v0.4.0.** Expect breaking changes. Install paths below assume building from source.
+> **Pre-release.** v0.4 tagged internally 2026-04-20. v0.5 (in progress) absorbs the store path into native Go so the Python sidecar is optional for every write. Public flip is gated on employer-disclosure + counsel review. Install paths below assume building from source.
 
 ## Who this is for
 
@@ -44,16 +44,17 @@ The Go binary bypasses the lockdown because it is *not* an MCP registration. It 
       PostgreSQL + pgvector (Supabase / Neon / self-hosted)
 ```
 
-Three build modes, one codebase:
+Three runtime paths, one codebase:
 
-| Mode | How invoked | Default? | Use case |
+| Path | How invoked | Default? | Use case |
 |---|---|---|---|
-| **Sidecar** | `go build .` | yes | Talks MCP to the Python sidecar. All Python features available. |
-| **Native** | default for most subcommands | Go talks to Postgres/Supabase/Gemini directly. ~10× faster than sidecar for read paths. |
-| **Sidecar** | `--legacy` (or `--python`) | Routes through the Python MCP server. Use for tool-layer enrichment Python still owns (query reformulation, entity-overlap boost, Hebbian reinforcement on retrieval), or when a command has no native path yet (currently just `store`). |
+| **Native Go** | default for every subcommand in v0.5 | yes | Go talks to Postgres / Supabase / Gemini (+ Ollama / OpenAI / Voyage / Mistral) directly. ~10× faster than sidecar for read paths; store latency drops ~4× (2s → 500ms) compared to sidecar-backed v0.4. |
+| **Sidecar** | `--legacy` (or `--python`) | opt-in | Routes through the Python MCP server. Needed for tool-layer enrichment the sidecar still owns (contradiction detection, supersedes annotation, compression) or when you deliberately want the pre-v0.5 behaviour. |
 | **Gateway** | `go build -tags gateway .` | no | HTTPS against managed `api.ogham-mcp.dev`. Hidden in default build. |
 
-Tools will be absorbed into native Go over time (see Roadmap). The Python sidecar stays for the dashboard and features that would otherwise need a Node frontend we don't want to build.
+The v0.5 native path absorbs: `extraction` (entities, dates, importance), five embedders (Gemini / Ollama / OpenAI / Voyage / Mistral), hybrid search, and the full store pipeline (extraction → parallel embed + search → surprise → auto-link candidates → DB write). A shared SQLite embedding cache at `$HOME/.cache/ogham/embeddings.db` is wire-compatible with the Python sidecar: switching between the two warms the cache instead of paying cold start.
+
+Remaining sidecar-only features: dashboard (stays Python — absorbing it would require a Node frontend we don't want to build), `export` / `import` tools, and the tool-layer enrichment passes above.
 
 ## Install (pre-release -- build from source)
 
@@ -196,7 +197,7 @@ Every command outputs JSON by default and runs natively where possible. Pass `--
 | `ogham health` | native | Parallel errgroup probes (DB + embedder). Adds `--live-embedder` to burn a real provider token. |
 | `ogham list [--limit N] [--profile P] [--source S] [--tags a,b]` | native | Recent memories |
 | `ogham search <query> [--limit N] [--tags a,b] [--profile P]` | native | Hybrid search (vector + keyword + RRF). Native uses Gemini via REST + `hybrid_search_memories` RPC. Add `--legacy` for the Python tool-layer enrichment (query reformulation, entity-overlap boost, record_access). |
-| `ogham store [content] [--tags a,b] [--source s] [--profile P]` | sidecar | Store a memory. Content can be a positional arg or piped on stdin: `git diff \| ogham store --source git-diff`. Native path blocked on entity extractor port -- a stderr notice tells you on first run. |
+| `ogham store [content] [--tags a,b] [--source s] [--profile P] [--dry-run]` | native | Store a memory. Content can be a positional arg or piped on stdin: `git diff \| ogham store --source git-diff`. Native orchestrator runs extraction, parallel embed + search, surprise score, and auto-link candidate selection before writing. `--dry-run` skips the DB write and prints the preview. `--legacy` routes through the sidecar for contradiction / supersedes / compression passes. |
 | `ogham export [--profile P] [--format json\|markdown] [-o file]` | sidecar | Export a profile's memories. Stdout by default; write to file with `-o`. |
 | `ogham import <file.json> [--profile P] [--dedup 0.8]` | sidecar | Bulk-import from an `ogham export` JSON file (or `-` for stdin). |
 | `ogham profile current / switch / list / ttl` | native | Profile ops. `switch` persists to TOML + env. |
@@ -266,6 +267,37 @@ The Go CLI aims at parity with the Python `ogham` CLI for day-to-day use. Dev-on
 Go-only: `auth`, `plugin openclaw/agent-zero`, `import-agent-zero`, `profile ttl`, `version`.
 
 See `docs/plans/2026-04-16-go-cli-enterprise.md` in the R&D repo for the live feature-port tracker with per-tool status (Python MCP side and CLI side).
+
+## Operators: database connection paths
+
+The native store path writes through one of three routes, and each has a
+different pooler story. The code is route-agnostic -- this note is for
+operators who need to make the right choice in `DATABASE_URL` /
+`SUPABASE_URL` and for anyone running schema migrations.
+
+1. **Direct Postgres (`DATABASE_BACKEND=postgres`).** `writeMemoryPostgres`
+   uses `cfg.Database.URL` as-is via pgx. Works with either the direct
+   endpoint or the Supavisor pooler for plain `INSERT` / `UPDATE` /
+   `DELETE`. Full feature set if you point at the direct endpoint.
+2. **Supabase PostgREST (`DATABASE_BACKEND=supabase`).** `writeMemorySupabase`
+   goes through HTTPS `/rest/v1/memories` with a pgvector text literal for
+   the `embedding` column. Pooler vs direct is irrelevant here -- the
+   request travels over HTTPS to PostgREST, which fans out to Postgres
+   internally.
+3. **Supavisor pooler** (port 6543, `-pooler` hostname). Only a concern
+   if you're running DDL yourself. `ALTER TABLE` and other DDL silently
+   fail on the pooler. Switch to the direct endpoint (strip `-pooler`
+   from the host), run the migration, then `DISCARD ALL;` on the pooler
+   afterwards to refresh its plan cache.
+
+Regional caveat: Supabase's AP free tier has **no IPv4 direct host** --
+the Supavisor pooler is the only route into that region's databases.
+Modern Supavisor handles DDL there, so the "pooler can't do DDL" rule
+does not apply in that specific case.
+
+The v0.5 store path is pure DML, so the pooler is fine for every
+day-to-day `ogham store` call regardless of which of the three routes
+you configure.
 
 ## Tips for enterprise / locked-down machines
 
@@ -354,8 +386,11 @@ Everything is in `~/.ogham/config.toml` (Go canonical) and mirrored to `~/.ogham
 |---|---|---|
 | v0.1 | Sidecar subcommands: `search`, `store`, `list`, `health`. Python sidecar spawn via MCP go-sdk. Dotenv loader. | Internal dogfood |
 | v0.2 | `ogham plugin openclaw` and `ogham plugin agent-zero` manifest subcommands. Still sidecar-backed. | Internal dogfood |
-| v0.3 | Native path becomes default. huh TUI `ogham init` writes TOML + env + `OGHAM_SIDECAR_EXTRAS`. Native `list / search / health / stats / profile / delete / cleanup / decay / audit / config show`. `ogham dashboard` subprocess-exec's the Prefab dashboard. UX: JSON + native by default, `--text` / `--legacy` overrides. | Internal dogfood |
-| **v0.4** | Homebrew tap, cross-platform CI, Apple notarization, Windows signing. | **First public release** |
+| v0.3 | Native path becomes default for read subcommands. huh TUI `ogham init`, native `list / search / health / stats / profile / delete / cleanup / decay / audit / config show`. `ogham dashboard` subprocess-execs Prefab. | Internal dogfood |
+| v0.4 | Release infrastructure -- GoReleaser pipeline, GitHub Actions release workflow, release playbook. Private-repo release; Homebrew tap deferred to post-disclosure. | Internal dogfood (tagged 2026-04-20) |
+| **v0.5** | **Native store absorption.** Extraction (entities / dates / importance), five embedders absorbed (Gemini / Ollama / OpenAI / Voyage / Mistral -- all with shared SQLite cache). Native store orchestrator chains extraction → parallel embed + search → surprise → auto-link candidates → Postgres or Supabase PostgREST write. Python parity harness on a 97-memory corpus locks entity / date / importance agreement. Gateway client ctx-clean end to end. Preview flag promoted to default; `--legacy` keeps the sidecar path. | Internal dogfood |
+| v0.6 | Multi-language stopwords + extraction (de / fr / es / zh), contradiction detection, recurrence extraction, narrower person-name regex. | Planned |
+| v0.7 | Intent detection (reformulation / ordering / multi-hop / summary / temporal) + `record_access` on retrieved memories. After v0.7 the Python sidecar is strictly optional -- dashboard + compression + experimental tools only. | Planned |
 
 Dashboard and Prefab UI deliberately stay Python-side -- absorbing them would require rebuilding the frontend in Node, which the time saved does not justify.
 
