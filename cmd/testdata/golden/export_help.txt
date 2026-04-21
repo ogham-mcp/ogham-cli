@@ -1,0 +1,24 @@
+Exports every memory in the active (or specified) profile via the
+Python MCP sidecar's export_profile tool. Sidecar-only for now because
+the Python path handles pagination and Markdown rendering; a native
+port lives behind the same blocker as import (entity extractor).
+
+Output goes to stdout by default; pass --output path/to/file.json to
+write directly to disk instead. JSON is the default format (per rc4
+UX) -- pass --format markdown for the human-readable variant.
+
+Usage:
+  ogham export [flags]
+
+Flags:
+      --format string    Output format: json or markdown (default "json")
+  -h, --help             help for export
+  -o, --output string    Write to this file instead of stdout
+      --profile string   Profile to export (defaults to active)
+
+Global Flags:
+      --legacy          Route through the Python MCP sidecar instead of native Go
+      --python          Alias for --legacy
+  -q, --quiet           Suppress stderr informational notices (sidecar fallback message)
+      --text            Human-readable output (default is JSON for LLM / script consumption)
+  -v, --verbose count   Increase stderr log verbosity (-v = info, -vv = debug)

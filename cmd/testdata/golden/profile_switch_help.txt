@@ -1,0 +1,20 @@
+Write the given profile name to ~/.ogham/active_profile. Every
+subsequent Go CLI invocation and 'ogham serve' MCP session reads that
+file first, so the switch survives across process restarts.
+
+config.toml's default_profile is not modified -- it stays as your
+declared baseline. Delete ~/.ogham/active_profile (or set OGHAM_PROFILE
+to an empty string) to fall back to the baseline.
+
+Usage:
+  ogham profile switch <name> [flags]
+
+Flags:
+  -h, --help   help for switch
+
+Global Flags:
+      --legacy          Route through the Python MCP sidecar instead of native Go
+      --python          Alias for --legacy
+  -q, --quiet           Suppress stderr informational notices (sidecar fallback message)
+      --text            Human-readable output (default is JSON for LLM / script consumption)
+  -v, --verbose count   Increase stderr log verbosity (-v = info, -vv = debug)

@@ -1,0 +1,17 @@
+With one arg (profile name), prints the current TTL.
+With two args, upserts the TTL for that profile. Pass 'none' or '-' as
+the days value to clear the TTL (memories will then never expire
+unless expires_at is set at store time).
+
+Usage:
+  ogham profile ttl <profile> [<days>] [flags]
+
+Flags:
+  -h, --help   help for ttl
+
+Global Flags:
+      --legacy          Route through the Python MCP sidecar instead of native Go
+      --python          Alias for --legacy
+  -q, --quiet           Suppress stderr informational notices (sidecar fallback message)
+      --text            Human-readable output (default is JSON for LLM / script consumption)
+  -v, --verbose count   Increase stderr log verbosity (-v = info, -vv = debug)

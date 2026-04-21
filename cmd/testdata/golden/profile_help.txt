@@ -1,0 +1,30 @@
+Profile operations: show the active profile, switch to a different one,
+list profiles with memory counts, or read/set a profile's TTL.
+
+The active profile is persisted in ~/.ogham/active_profile (a single-line
+sentinel file). config.toml's default_profile is the baseline that applies
+when no sentinel is present; it is never mutated by 'profile switch'.
+
+Precedence (highest first): OGHAM_PROFILE env var, ~/.ogham/active_profile,
+config.toml default_profile, the literal "default".
+
+Usage:
+  ogham profile [command]
+
+Available Commands:
+  current     Show the active profile
+  list        List profiles with memory counts
+  switch      Switch the active profile (sentinel-file, TOML stays untouched)
+  ttl         Read or set a profile's TTL in days (omit days to read)
+
+Flags:
+  -h, --help   help for profile
+
+Global Flags:
+      --legacy          Route through the Python MCP sidecar instead of native Go
+      --python          Alias for --legacy
+  -q, --quiet           Suppress stderr informational notices (sidecar fallback message)
+      --text            Human-readable output (default is JSON for LLM / script consumption)
+  -v, --verbose count   Increase stderr log verbosity (-v = info, -vv = debug)
+
+Use "ogham profile [command] --help" for more information about a command.

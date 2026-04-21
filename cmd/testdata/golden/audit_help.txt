@@ -1,0 +1,22 @@
+Reads the audit_log table in reverse-chronological order, optionally
+filtered by operation (store / search / delete / update / …).
+
+The audit log is populated by the same hooks and tool calls that
+mutate the memories table, so this is the source of truth for "what
+happened when" across Python MCP and Go CLI activity.
+
+Usage:
+  ogham audit [flags]
+
+Flags:
+  -h, --help               help for audit
+      --limit int          Max events to display (default 20)
+      --operation string   Filter by operation (store/search/delete/update)
+      --profile string     Profile to query (defaults to active)
+
+Global Flags:
+      --legacy          Route through the Python MCP sidecar instead of native Go
+      --python          Alias for --legacy
+  -q, --quiet           Suppress stderr informational notices (sidecar fallback message)
+      --text            Human-readable output (default is JSON for LLM / script consumption)
+  -v, --verbose count   Increase stderr log verbosity (-v = info, -vv = debug)

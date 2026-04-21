@@ -1,0 +1,31 @@
+Multi-step TUI wizard (powered by charmbracelet/huh) that collects:
+
+  1. Embedding provider and model
+  2. Provider API key (masked input; skipped if already in env or config)
+  3. Database backend (Supabase or Postgres)
+  4. Backend credentials (URL / connection string, key)
+  5. Default memory profile
+
+Then writes ~/.ogham/config.toml (Go canonical) and ~/.ogham/config.env
+(Python-readable mirror), runs a pre-flight health check, and offers to
+register the binary with any detected MCP clients.
+
+If the user already has config, each step pre-fills with the current
+value and can be left unchanged. Run with --yes to accept all current
+values without prompting (useful for re-running after editing .env).
+
+Usage:
+  ogham init [flags]
+
+Flags:
+      --api-key string   (legacy) gateway API key -- prefer the wizard
+  -h, --help             help for init
+      --no-register      Skip MCP client registration at the end
+      --yes              Accept current config values without prompting
+
+Global Flags:
+      --legacy          Route through the Python MCP sidecar instead of native Go
+      --python          Alias for --legacy
+  -q, --quiet           Suppress stderr informational notices (sidecar fallback message)
+      --text            Human-readable output (default is JSON for LLM / script consumption)
+  -v, --verbose count   Increase stderr log verbosity (-v = info, -vv = debug)

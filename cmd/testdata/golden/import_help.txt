@@ -1,0 +1,22 @@
+Reads an 'ogham export' JSON file (or stdin if the path is '-') and
+calls the Python MCP sidecar's import_memories_tool. Sidecar-only
+because bulk import exercises the entity extractor + auto-link path
+that is not yet native.
+
+Dedup runs server-side with the configured similarity threshold --
+pass 0 to disable or a value between 0 and 1 to override.
+
+Usage:
+  ogham import <file.json> [flags]
+
+Flags:
+      --dedup float      Dedup threshold (0 to disable, 0-1 otherwise) (default 0.8)
+  -h, --help             help for import
+      --profile string   Profile to import into (defaults to active)
+
+Global Flags:
+      --legacy          Route through the Python MCP sidecar instead of native Go
+      --python          Alias for --legacy
+  -q, --quiet           Suppress stderr informational notices (sidecar fallback message)
+      --text            Human-readable output (default is JSON for LLM / script consumption)
+  -v, --verbose count   Increase stderr log verbosity (-v = info, -vv = debug)

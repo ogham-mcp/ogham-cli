@@ -1,0 +1,43 @@
+Expose Ogham tools to an MCP client (Claude Code, Cursor, Windsurf, Codex,
+Claude Desktop) over stdio.
+
+Two modes:
+
+  - default: native Go tools (store_memory, hybrid_search, list_recent,
+    health_check). Reads ~/.ogham/config.toml for backend + embedder
+    credentials. No gateway API key required. Set up with 'ogham init'.
+
+    Additionally, 'ogham serve' eager-spawns the Python ogham-mcp
+    sidecar and proxies every tool the sidecar exposes that isn't
+    already native (delete_memory, compress_old_memories, explore_
+    knowledge, the typed-store family, etc.). Native handlers win
+    on name collision -- store_memory / hybrid_search / list_recent /
+    health_check always run through Go.
+
+    If the sidecar fails to spawn (no uv, no Python, wheel fetch
+    timeout), the server logs a warning and keeps serving the native
+    subset. Pass --no-sidecar to skip the spawn entirely.
+
+  - --gateway: forward tool calls to the managed gateway at
+    ~/.ogham/config.toml's gateway_url. Requires an API key obtained
+    via 'ogham auth login' -- gated until the managed service returns.
+
+Tool names match the Python ogham-mcp sidecar on purpose: an MCP
+client already wired for the Python server swaps to the Go binary
+without reconfiguring its tool calls.
+
+Usage:
+  ogham serve [flags]
+
+Flags:
+      --debug        Enable debug logging (JSON-RPC traffic)
+      --gateway      Forward tool calls to the managed gateway instead of serving native tools
+  -h, --help         help for serve
+      --no-sidecar   Skip sidecar spawn -- serve only the native Go tools (useful in CI / air-gapped / to debug)
+
+Global Flags:
+      --legacy          Route through the Python MCP sidecar instead of native Go
+      --python          Alias for --legacy
+  -q, --quiet           Suppress stderr informational notices (sidecar fallback message)
+      --text            Human-readable output (default is JSON for LLM / script consumption)
+  -v, --verbose count   Increase stderr log verbosity (-v = info, -vv = debug)

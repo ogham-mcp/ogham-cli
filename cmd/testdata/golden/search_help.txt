@@ -1,0 +1,23 @@
+Run a hybrid (vector + keyword) search against the active profile.
+
+Default path: calls the Python MCP sidecar's hybrid_search tool.
+--native path: generates the query embedding via the configured provider
+(Gemini today, others to follow) and runs hybrid_search_memories via
+pgx directly. Requires DATABASE_URL, EMBEDDING_PROVIDER, and the
+provider API key in your .env or config.toml.
+
+Usage:
+  ogham search <query> [flags]
+
+Flags:
+  -h, --help             help for search
+      --limit int        Maximum number of results (default 10)
+      --profile string   Profile to search (defaults to config)
+      --tags string      Filter by comma-separated tags
+
+Global Flags:
+      --legacy          Route through the Python MCP sidecar instead of native Go
+      --python          Alias for --legacy
+  -q, --quiet           Suppress stderr informational notices (sidecar fallback message)
+      --text            Human-readable output (default is JSON for LLM / script consumption)
+  -v, --verbose count   Increase stderr log verbosity (-v = info, -vv = debug)

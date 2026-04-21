@@ -1,0 +1,18 @@
+Prints the CLI version, commit, build date, Go version, and platform.
+Useful for bug reports -- include this output when you file an issue.
+
+JSON is the default format (per the rc4 UX flip). Pass --text for a
+human-readable one-liner.
+
+Usage:
+  ogham version [flags]
+
+Flags:
+  -h, --help   help for version
+
+Global Flags:
+      --legacy          Route through the Python MCP sidecar instead of native Go
+      --python          Alias for --legacy
+  -q, --quiet           Suppress stderr informational notices (sidecar fallback message)
+      --text            Human-readable output (default is JSON for LLM / script consumption)
+  -v, --verbose count   Increase stderr log verbosity (-v = info, -vv = debug)

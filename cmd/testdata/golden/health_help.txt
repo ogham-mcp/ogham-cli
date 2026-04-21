@@ -1,0 +1,23 @@
+Default path: spawn the Python MCP sidecar and call its health_check tool.
+--native path: run parallel probes in-process against the configured
+backend (Supabase PostgREST or Postgres via pgx) and the configured
+embedding provider. Native mode is ~10x faster because it skips the
+sidecar startup.
+
+Embedder probe is config-validation-only by default to avoid a paid
+API call on every invocation. Pass --live-embedder to issue a real
+round-trip embedding request.
+
+Usage:
+  ogham health [flags]
+
+Flags:
+  -h, --help            help for health
+      --live-embedder   Native: make a real embedding API call (costs one provider token)
+
+Global Flags:
+      --legacy          Route through the Python MCP sidecar instead of native Go
+      --python          Alias for --legacy
+  -q, --quiet           Suppress stderr informational notices (sidecar fallback message)
+      --text            Human-readable output (default is JSON for LLM / script consumption)
+  -v, --verbose count   Increase stderr log verbosity (-v = info, -vv = debug)
