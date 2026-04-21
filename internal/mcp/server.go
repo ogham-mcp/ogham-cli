@@ -28,7 +28,7 @@ func BuildToolHandler(client *gateway.Client, toolName string) mcp.ToolHandler {
 
 		slog.Info("tool_call", "name", toolName)
 
-		result, err := client.CallTool(toolName, args)
+		result, err := client.CallTool(ctx, toolName, args)
 		if err != nil {
 			return &mcp.CallToolResult{
 				IsError: true,
@@ -49,8 +49,8 @@ func BuildToolHandler(client *gateway.Client, toolName string) mcp.ToolHandler {
 
 // RegisterTools fetches the tool manifest from the gateway and registers
 // each tool with the MCP server.
-func RegisterTools(server *mcp.Server, client *gateway.Client) (string, error) {
-	tools, err := client.FetchTools()
+func RegisterTools(ctx context.Context, server *mcp.Server, client *gateway.Client) (string, error) {
+	tools, err := client.FetchTools(ctx)
 	if err != nil {
 		return "", fmt.Errorf("fetch tools: %w", err)
 	}

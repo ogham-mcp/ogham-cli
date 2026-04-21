@@ -74,10 +74,13 @@ Manual login: ogham auth login --api-key YOUR_KEY`,
 }
 
 func loginWithKey(key string) error {
-	// Verify the key works
+	// Verify the key works. Bounded context so a dead gateway doesn't
+	// hang the login flow forever.
 	ua := fmt.Sprintf("ogham-cli/%s", Version)
 	client := gateway.New(config.DefaultGatewayURL, key, ua)
-	_, err := client.Health()
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	_, err := client.Health(ctx)
 	if err != nil {
 		return fmt.Errorf("API key verification failed: %w", err)
 	}
@@ -118,7 +121,9 @@ var authStatusCmd = &cobra.Command{
 
 		ua := fmt.Sprintf("ogham-cli/%s", Version)
 		client := gateway.New(cfg.GatewayURL, cfg.APIKey, ua)
-		_, err = client.Health()
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		_, err = client.Health(ctx)
 
 		if err != nil {
 			fmt.Fprintln(os.Stderr, "✗ Logged in but gateway unreachable")

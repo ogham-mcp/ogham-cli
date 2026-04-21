@@ -50,15 +50,15 @@ var serveCmd = &cobra.Command{
 			nil,
 		)
 
+		ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+		defer cancel()
+
 		slog.Info("fetching tool manifest", "gateway", cfg.GatewayURL)
-		hash, err := mcpserver.RegisterTools(server, client)
+		hash, err := mcpserver.RegisterTools(ctx, server, client)
 		if err != nil {
 			return fmt.Errorf("register tools: %w", err)
 		}
 		slog.Info("tools registered", "manifest_hash", hash[:16])
-
-		ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
-		defer cancel()
 
 		slog.Info("MCP server starting on stdio")
 		return server.Run(ctx, &mcp.StdioTransport{})
