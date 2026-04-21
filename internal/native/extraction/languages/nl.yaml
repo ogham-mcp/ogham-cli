@@ -387,24 +387,68 @@ negation_markers:
   - gedeprecieerd
 
 # --- Date anchors (v0.7) ---
-# Populated per-language as follow-up. Empty here so the schema stays
-# stable; Go dates.go falls back to the English base pack when a
-# language omits anchors.
-today_words: []
-tomorrow_words: []
-yesterday_words: []
-modifier_last: []
-modifier_next: []
-modifier_this: []
-period_week: []
-period_month: []
-period_year: []
-unit_day: []
-unit_week: []
-unit_month: []
-unit_year: []
-ago_markers: []
-in_markers: []
+# Dutch uses "geleden" as the universal suffix-ago marker ("2 weken
+# geleden" = "2 weeks ago"), and "over" as the prefix-in marker
+# ("over 3 dagen" = "in 3 days"). parsedatetime nl_NL ships these.
+
+today_words:
+  - vandaag
+
+tomorrow_words:
+  - morgen
+
+yesterday_words:
+  - gisteren
+
+modifier_last:
+  - vorige
+  - laatste
+  - afgelopen
+
+modifier_next:
+  - volgende
+  - aanstaande
+  - komende
+
+modifier_this:
+  - deze
+  - dit
+
+period_week:
+  - week
+
+period_month:
+  - maand
+
+period_year:
+  - jaar
+
+unit_day:
+  - dag
+  - dagen
+
+unit_week:
+  - week
+  - weken
+
+unit_month:
+  - maand
+  - maanden
+
+unit_year:
+  - jaar
+  - jaren
+
+# "geleden" is always suffix ("2 weken geleden"). No prefix-ago idiom
+# in Dutch -- parsedatetime nl_NL agrees.
+ago_markers:
+  - geleden
+
+# "over" for prefix-in ("over 3 dagen"). "in" is also grammatical
+# ("in 3 dagen") and matches English fallback.
+in_markers:
+  - over
+  - in
 
 # --- Recurrence (v0.7) ---
 recurrence_patterns: []

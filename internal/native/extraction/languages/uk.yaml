@@ -418,24 +418,84 @@ negation_markers:
   - "замість"
 
 # --- Date anchors (v0.7) ---
-# Populated per-language as follow-up. Empty here so the schema stays
-# stable; Go dates.go falls back to the English base pack when a
-# language omits anchors.
-today_words: []
-tomorrow_words: []
-yesterday_words: []
-modifier_last: []
-modifier_next: []
-modifier_this: []
-period_week: []
-period_month: []
-period_year: []
-unit_day: []
-unit_week: []
-unit_month: []
-unit_year: []
-ago_markers: []
-in_markers: []
+# Ukrainian uses suffix "тому" ("2 тижні тому" = "2 weeks ago") and
+# prefix "через" ("через 3 дні" = "in 3 days"). Mirrors the Russian
+# pattern -- common Slavic construction -- with Ukrainian lexicon.
+
+today_words:
+  - "сьогодні"
+
+tomorrow_words:
+  - "завтра"
+
+yesterday_words:
+  - "вчора"
+  - "учора"
+
+modifier_last:
+  - "минулий"
+  - "минула"
+  - "минуле"
+  - "минулого"
+  - "минулій"
+  - "минулі"
+  - "попередній"
+  - "попередня"
+
+modifier_next:
+  - "наступний"
+  - "наступна"
+  - "наступне"
+  - "наступного"
+  - "наступній"
+  - "наступні"
+
+modifier_this:
+  - "цей"
+  - "ця"
+  - "це"
+  - "ці"
+  - "цієї"
+
+period_week:
+  - "тиждень"
+  - "тижні"
+
+period_month:
+  - "місяць"
+  - "місяці"
+
+period_year:
+  - "рік"
+  - "році"
+
+unit_day:
+  - "день"
+  - "дня"
+  - "днів"
+  - "дні"
+
+unit_week:
+  - "тиждень"
+  - "тижні"
+  - "тижнів"
+
+unit_month:
+  - "місяць"
+  - "місяця"
+  - "місяці"
+  - "місяців"
+
+unit_year:
+  - "рік"
+  - "роки"
+  - "років"
+
+ago_markers:
+  - "тому"
+
+in_markers:
+  - "через"
 
 # --- Recurrence (v0.7) ---
 recurrence_patterns: []

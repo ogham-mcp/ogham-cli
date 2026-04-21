@@ -491,24 +491,89 @@ negation_markers:
   - "вместо"
 
 # --- Date anchors (v0.7) ---
-# Populated per-language as follow-up. Empty here so the schema stays
-# stable; Go dates.go falls back to the English base pack when a
-# language omits anchors.
-today_words: []
-tomorrow_words: []
-yesterday_words: []
-modifier_last: []
-modifier_next: []
-modifier_this: []
-period_week: []
-period_month: []
-period_year: []
-unit_day: []
-unit_week: []
-unit_month: []
-unit_year: []
-ago_markers: []
-in_markers: []
+# Russian uses suffix "назад" ("2 недели назад" = "2 weeks ago") and
+# prefix "через" ("через 3 дня" = "in 3 days"). Nouns decline so the
+# unit lists enumerate the most common nominative/genitive/plural forms
+# for the digit-unit carrier pattern.
+
+today_words:
+  - "сегодня"
+
+tomorrow_words:
+  - "завтра"
+
+yesterday_words:
+  - "вчера"
+
+modifier_last:
+  - "прошлый"
+  - "прошлая"
+  - "прошлое"
+  - "прошлой"
+  - "прошлом"
+  - "прошлые"
+  - "предыдущий"
+  - "предыдущая"
+
+modifier_next:
+  - "следующий"
+  - "следующая"
+  - "следующее"
+  - "следующей"
+  - "следующем"
+  - "следующие"
+  - "будущий"
+
+modifier_this:
+  - "этот"
+  - "эта"
+  - "это"
+  - "эти"
+  - "этой"
+  - "этом"
+
+period_week:
+  - "неделя"
+  - "неделю"
+  - "неделе"
+
+period_month:
+  - "месяц"
+  - "месяце"
+
+period_year:
+  - "год"
+  - "году"
+
+unit_day:
+  - "день"
+  - "дня"
+  - "дней"
+  - "дни"
+
+unit_week:
+  - "неделя"
+  - "неделю"
+  - "недели"
+  - "недель"
+
+unit_month:
+  - "месяц"
+  - "месяца"
+  - "месяцев"
+  - "месяцы"
+
+unit_year:
+  - "год"
+  - "года"
+  - "лет"
+  - "годы"
+
+ago_markers:
+  - "назад"
+
+in_markers:
+  - "через"
 
 # --- Recurrence (v0.7) ---
 recurrence_patterns: []

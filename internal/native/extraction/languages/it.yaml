@@ -442,24 +442,76 @@ negation_markers:
   - invece di
 
 # --- Date anchors (v0.7) ---
-# Populated per-language as follow-up. Empty here so the schema stays
-# stable; Go dates.go falls back to the English base pack when a
-# language omits anchors.
-today_words: []
-tomorrow_words: []
-yesterday_words: []
-modifier_last: []
-modifier_next: []
-modifier_this: []
-period_week: []
-period_month: []
-period_year: []
-unit_day: []
-unit_week: []
-unit_month: []
-unit_year: []
-ago_markers: []
-in_markers: []
+
+today_words:
+  - oggi
+
+tomorrow_words:
+  - domani
+
+yesterday_words:
+  - ieri
+
+modifier_last:
+  - scorso
+  - scorsa
+  - scorsi
+  - scorse
+  - ultimo
+  - ultima
+  - ultimi
+  - ultime
+  - passato
+  - passata
+
+modifier_next:
+  - prossimo
+  - prossima
+  - prossimi
+  - prossime
+  - seguente
+
+modifier_this:
+  - questo
+  - questa
+  - questi
+  - queste
+
+period_week:
+  - settimana
+
+period_month:
+  - mese
+
+period_year:
+  - anno
+
+unit_day:
+  - giorno
+  - giorni
+
+unit_week:
+  - settimana
+  - settimane
+
+unit_month:
+  - mese
+  - mesi
+
+unit_year:
+  - anno
+  - anni
+
+# "fa" is the canonical Italian suffix-ago marker ("2 settimane fa"
+# = "2 weeks ago"). Always follows the quantified unit phrase.
+ago_markers:
+  - fa
+
+# "fra" and "tra" are the prefix-in markers ("fra 3 giorni", "tra 3
+# giorni" = "in 3 days"). Both are equally idiomatic.
+in_markers:
+  - fra
+  - tra
 
 # --- Recurrence (v0.7) ---
 recurrence_patterns: []

@@ -480,24 +480,78 @@ negation_markers:
   - terkedildi
 
 # --- Date anchors (v0.7) ---
-# Populated per-language as follow-up. Empty here so the schema stays
-# stable; Go dates.go falls back to the English base pack when a
-# language omits anchors.
-today_words: []
-tomorrow_words: []
-yesterday_words: []
-modifier_last: []
-modifier_next: []
-modifier_this: []
-period_week: []
-period_month: []
-period_year: []
-unit_day: []
-unit_week: []
-unit_month: []
-unit_year: []
-ago_markers: []
-in_markers: []
+# Turkish is SOV and uses suffix-only markers for relative quantification:
+# "önce" (past) and "sonra" (future/later). Example: "2 hafta önce"
+# = "2 weeks ago", "3 gün sonra" = "in 3 days". Both sides use the
+# suffix branch of parseQuantifiedRelativePack.
+
+today_words:
+  - "bugün"
+  - bugun
+
+tomorrow_words:
+  - "yarın"
+  - yarin
+
+yesterday_words:
+  - "dün"
+  - dun
+
+modifier_last:
+  - "geçen"
+  - gecen
+  - "geçtiğimiz"
+  - gectigimiz
+  - "önceki"
+  - onceki
+
+modifier_next:
+  - gelecek
+  - "önümüzdeki"
+  - onumuzdeki
+  - "ertesi"
+  - "bir sonraki"
+
+modifier_this:
+  - bu
+  - "şu"
+  - su
+
+period_week:
+  - hafta
+
+period_month:
+  - ay
+
+period_year:
+  - "yıl"
+  - yil
+  - sene
+
+unit_day:
+  - "gün"
+  - gun
+
+unit_week:
+  - hafta
+
+unit_month:
+  - ay
+
+unit_year:
+  - "yıl"
+  - yil
+  - sene
+
+# "önce" is the universal suffix-ago marker.
+ago_markers:
+  - "önce"
+  - once
+
+# "sonra" is suffix-in ("3 gün sonra" = "in 3 days"). Placed as a
+# suffix marker (the parser handles both prefix and suffix in_markers).
+in_markers:
+  - sonra
 
 # --- Recurrence (v0.7) ---
 recurrence_patterns: []

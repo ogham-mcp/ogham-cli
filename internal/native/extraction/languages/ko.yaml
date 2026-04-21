@@ -376,24 +376,73 @@ negation_markers:
   - "대신에"
 
 # --- Date anchors (v0.7) ---
-# Populated per-language as follow-up. Empty here so the schema stays
-# stable; Go dates.go falls back to the English base pack when a
-# language omits anchors.
-today_words: []
-tomorrow_words: []
-yesterday_words: []
-modifier_last: []
-modifier_next: []
-modifier_this: []
-period_week: []
-period_month: []
-period_year: []
-unit_day: []
-unit_week: []
-unit_month: []
-unit_year: []
-ago_markers: []
-in_markers: []
+# Korean quantified relatives: "<N> <unit> 전" = "N units ago",
+# "<N> <unit> 후" = "in N units". Both suffix. Korean conventionally
+# writes with spaces between digit/unit/marker so the whitespace-based
+# parser handles the idiom directly ("2일 전" = "2 days ago").
+#
+# NOTE (v0.8): Korean modifiers "지난" (last) / "다음" (next) are
+# prefix and should wire into modifier_last/modifier_next, but the
+# relative regex currently only fires on anchors or quantified shapes,
+# not "<modifier> <weekday>" for non-space-tokenised day names. Wired
+# conservatively here; unknown fallback behaviour is safe.
+
+today_words:
+  - "오늘"
+
+tomorrow_words:
+  - "내일"
+
+yesterday_words:
+  - "어제"
+
+modifier_last:
+  - "지난"
+  - "저번"
+
+modifier_next:
+  - "다음"
+  - "오는"
+
+modifier_this:
+  - "이번"
+
+period_week:
+  - "주"
+  - "주일"
+
+period_month:
+  - "달"
+  - "월"
+  - "개월"
+
+period_year:
+  - "년"
+  - "해"
+
+unit_day:
+  - "일"
+  - "날"
+
+unit_week:
+  - "주"
+  - "주일"
+
+unit_month:
+  - "달"
+  - "개월"
+
+unit_year:
+  - "년"
+
+# "전" always suffix ("2일 전" = "2 days ago").
+ago_markers:
+  - "전"
+
+# "후" and "뒤" are suffix-in forms.
+in_markers:
+  - "후"
+  - "뒤"
 
 # --- Recurrence (v0.7) ---
 recurrence_patterns: []
