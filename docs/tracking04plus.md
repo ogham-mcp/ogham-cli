@@ -6,9 +6,7 @@ Last updated: 2026-04-21
 
 ## Currently in progress
 
-- **#137 v0.5 MVP** — Days 1–3 (first increment) + live smoke tests shipped. Day 3 second increment (Voyage + Mistral) + Day 4 orchestrator pending.
-- **#142** — Gemini L2-normalize sub-3072 dims. Go side shipped (`:embedContent` migration + `l2Normalize` helper + 5 new tests). Python parity pushed alongside in `openbrain-sharedmemory`.
-- **#143** — Go port of Python `EmbeddingCache` (shared SQLite file for cross-stack reuse). Next up.
+- **#137 v0.5 MVP** — Days 1–4 shipped. Day 5 parity harness + Day 6 README + v0.5.0-rc1 still pending.
 
 ## Just closed
 
@@ -17,7 +15,11 @@ Last updated: 2026-04-21
 - **Day 1** — entities.go + PICT matrix (28 rows) + 14 hand-picked tests + fuzz + bench. 95.7% coverage.
 - **Day 2** — dates.go + scoring.go shipped (importance scoring + PICT matrix + fuzz + bench). 95.0%+ coverage. Both Ubuntu + macOS CI green.
 - **Day 3 first increment** — OpenAI embedder absorbed (native POST /v1/embeddings, Bearer auth, dimensions param, OPENAI_BASE_URL anti-pollution). 8 httptest cases.
-- **Live smoke tests** — `//go:build live` harness + `make live` target. Ollama (embeddinggemma @ 512 + 768) and OpenAI (text-embedding-3-small @ 512) both verified against real endpoints.
+- **Day 3 second increment** — Voyage + Mistral embedders absorbed. Five of five providers native + cached. Live smoke tests verified against real Voyage/Mistral endpoints.
+- **#142** — Gemini L2-normalize sub-3072 dims. Go side shipped (`:embedContent` migration + `l2Normalize` helper + 5 new tests). Python parity pushed alongside in `openbrain-sharedmemory`.
+- **#143** — Go port of Python `EmbeddingCache` (shared SQLite file via modernc.org/sqlite + WAL). 90.7% coverage, PICT matrix, fuzz, benchmarks, fixture-consumer test. Wrapped every embedder via `NewCachedEmbedder` so provider calls skip on cache hits.
+- **Day 4** — `internal/native/store.go` orchestrator shipped. Extraction → errgroup(embed, search) → surprise → auto-link candidates → Postgres INSERT. `cmd/store.go --native-store-preview --dry-run` wired in; verified end-to-end against local config (Gemini+Supabase): dates extracted, parallel embed+search, surprise 0.86 on fresh content.
+- **Live smoke tests** — `//go:build live` harness + `make live` target. Ollama (embeddinggemma @ 512 + 768), OpenAI (text-embedding-3-small @ 512), Voyage (voyage-3-lite @ 512), Mistral (mistral-embed @ 1024) all verified against real endpoints.
 - **#141** — new task for coverage debt across the rest of `internal/native/`.
 
 ## Currently blocked
