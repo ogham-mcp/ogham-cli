@@ -32,6 +32,49 @@ const dbFileName = "embeddings.db"
 // Matches Python's EmbeddingCache default.
 const DefaultMaxSize = 10_000
 
+// Env var names honoured by Default(). OGHAM_CACHE_DIR is the Go-side
+// canonical override; EMBEDDING_CACHE_DIR mirrors the name pydantic-
+// settings uses on the Python side so operators that set it once have
+// it cover both stacks.
+const (
+	envOghamCacheDir     = "OGHAM_CACHE_DIR"
+	envEmbeddingCacheDir = "EMBEDDING_CACHE_DIR"
+)
+
+var (
+	defaultOnce  sync.Once
+	defaultCache *EmbeddingCache
+	defaultErr   error
+)
+
+// Default returns a process-wide singleton cache rooted at
+// $OGHAM_CACHE_DIR (or $EMBEDDING_CACHE_DIR, then $HOME/.cache/ogham/).
+// First call wins; subsequent calls return the same instance even if
+// the env vars have since changed. Safe to call from multiple goroutines.
+func Default() (*EmbeddingCache, error) {
+	defaultOnce.Do(func() {
+		dir := os.Getenv(envOghamCacheDir)
+		if dir == "" {
+			dir = os.Getenv(envEmbeddingCacheDir)
+		}
+		defaultCache, defaultErr = Open(dir, DefaultMaxSize)
+	})
+	return defaultCache, defaultErr
+}
+
+// ResetDefault is a test helper: it closes the singleton (ignoring any
+// close error) and clears the sync.Once so the next Default() call can
+// open a fresh cache -- for example under a newly set HOME. Not safe
+// to use from production code; only exported for cross-package tests.
+func ResetDefault() {
+	if defaultCache != nil {
+		_ = defaultCache.Close()
+	}
+	defaultCache = nil
+	defaultErr = nil
+	defaultOnce = sync.Once{}
+}
+
 // dsnPragmas are DSN-attached pragmas that apply to every connection
 // modernc.org/sqlite opens. WAL lets readers and writers proceed in
 // parallel (Python sidecar + Go binary can coexist without blocking).

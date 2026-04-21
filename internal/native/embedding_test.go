@@ -44,6 +44,10 @@ func TestNewEmbedder_UnimplementedProvider(t *testing.T) {
 }
 
 func TestNewEmbedder_OllamaNoKeyRequired(t *testing.T) {
+	// This test asserts the exact Name() of the inner provider. Skip the
+	// cache wrapper (which appends "+cache") by setting the opt-out env
+	// var; the wrapper itself is covered by cache-specific tests.
+	t.Setenv("OGHAM_EMBEDDING_CACHE", "0")
 	t.Setenv("OLLAMA_URL", "")
 	e, err := NewEmbedder(&Config{Embedding: Embedding{Provider: "ollama", Dimension: 512}})
 	if err != nil {
@@ -60,6 +64,9 @@ func TestNewEmbedder_OllamaNoKeyRequired(t *testing.T) {
 func TestNewEmbedder_OllamaURLOverride(t *testing.T) {
 	// BaseURL comes from cfg.Embedding now, not env. applyEnv lifts
 	// OLLAMA_URL into the config field; the constructor is env-agnostic.
+	// Type-assertion on the inner embedder requires bypassing the cache
+	// wrapper -- it's tested separately.
+	t.Setenv("OGHAM_EMBEDDING_CACHE", "0")
 	e, err := NewEmbedder(&Config{Embedding: Embedding{
 		Provider:  "ollama",
 		Dimension: 512,

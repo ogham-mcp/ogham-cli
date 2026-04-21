@@ -13,6 +13,9 @@ import (
 // Build-only coverage: confirm that selecting "openai" with all required
 // config fields produces the right *openaiEmbedder shape.
 func TestNewEmbedder_OpenAIDefaults(t *testing.T) {
+	// Type-assertion on the inner embedder requires bypassing the cache
+	// wrapper; the wrapper is exercised by cache-specific tests.
+	t.Setenv("OGHAM_EMBEDDING_CACHE", "0")
 	e, err := NewEmbedder(&Config{Embedding: Embedding{
 		Provider:  "openai",
 		APIKey:    "sk-test",
@@ -46,6 +49,8 @@ func TestNewEmbedder_OpenAIMissingKey(t *testing.T) {
 // Custom base URL (Azure proxy / LocalAI) is propagated via
 // cfg.Embedding.BaseURL. Trailing slash is stripped.
 func TestNewEmbedder_OpenAIBaseURLOverride(t *testing.T) {
+	// Type-assertion requires an unwrapped inner embedder.
+	t.Setenv("OGHAM_EMBEDDING_CACHE", "0")
 	e, err := NewEmbedder(&Config{Embedding: Embedding{
 		Provider:  "openai",
 		APIKey:    "sk-test",
