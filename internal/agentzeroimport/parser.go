@@ -11,9 +11,9 @@ import (
 type Memory struct {
 	Content   string            `json:"content"`
 	Source    string            `json:"source"`
-	Tags     []string          `json:"tags"`
-	Metadata map[string]string `json:"metadata"`
-	CreatedAt string           `json:"created_at,omitempty"`
+	Tags      []string          `json:"tags"`
+	Metadata  map[string]string `json:"metadata"`
+	CreatedAt string            `json:"created_at,omitempty"`
 }
 
 // parserScript is the embedded Python script that safely unpickles Agent Zero

@@ -42,10 +42,10 @@ import (
 // once per test binary and the container dies cleanly when the binary
 // exits.
 var (
-	pgOnce     sync.Once
-	pgDSN      string
-	pgErr      error
-	pgCleanup  func()
+	pgOnce    sync.Once
+	pgDSN     string
+	pgErr     error
+	pgCleanup func()
 )
 
 // testDSN returns the postgres DSN of the shared pgvector container,

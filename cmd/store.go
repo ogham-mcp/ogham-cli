@@ -24,9 +24,9 @@ var (
 	//   --json                     JSON is the default; flag is silent
 	//   --native                   native is the default; flag is silent
 	//   --native-store-preview     native is the default; flag is silent
-	storeJSONDeprecated           bool
-	storeNativeDeprecated         bool
-	storeNativePreviewDeprecated  bool
+	storeJSONDeprecated          bool
+	storeNativeDeprecated        bool
+	storeNativePreviewDeprecated bool
 )
 
 var storeCmd = &cobra.Command{

@@ -65,8 +65,8 @@ pass 0 to disable or a value between 0 and 1 to override.`,
 		defer func() { _ = client.Close() }()
 
 		toolArgs := map[string]any{
-			"data":             payload,
-			"dedup_threshold":  importDedup,
+			"data":            payload,
+			"dedup_threshold": importDedup,
 		}
 		if importProfile != "" {
 			toolArgs["profile"] = importProfile

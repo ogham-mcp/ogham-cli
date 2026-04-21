@@ -12,9 +12,9 @@ import (
 )
 
 var (
-	decayProfile   string
-	decayBatchSize int
-	decayDryRun    bool
+	decayProfile        string
+	decayBatchSize      int
+	decayDryRun         bool
 	decayJSONDeprecated bool
 )
 

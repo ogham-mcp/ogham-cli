@@ -15,12 +15,12 @@ import (
 // UpdateOptions captures per-request update semantics. Pointer / nil-slice
 // semantics let callers distinguish "field omitted" from "explicit clear":
 //
-//   Content  == nil        -> leave content untouched
-//   Content  != nil        -> replace content (and re-embed)
-//   Tags     == nil        -> leave tags untouched
-//   Tags     != nil, len 0 -> clear tags (PostgreSQL empty array)
-//   Metadata == nil        -> leave metadata untouched
-//   Metadata != nil, len 0 -> clear metadata (jsonb '{}')
+//	Content  == nil        -> leave content untouched
+//	Content  != nil        -> replace content (and re-embed)
+//	Tags     == nil        -> leave tags untouched
+//	Tags     != nil, len 0 -> clear tags (PostgreSQL empty array)
+//	Metadata == nil        -> leave metadata untouched
+//	Metadata != nil, len 0 -> clear metadata (jsonb '{}')
 //
 // Matches the Python update_memory tool contract (None vs [] vs {}).
 type UpdateOptions struct {

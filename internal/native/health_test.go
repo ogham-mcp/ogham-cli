@@ -103,7 +103,7 @@ func TestHealthCheck_EmbedderConfigValidationOnly(t *testing.T) {
 	defer server.Close()
 
 	cfg := &Config{
-		Database: Database{SupabaseURL: server.URL, SupabaseKey: "sb_test"},
+		Database:  Database{SupabaseURL: server.URL, SupabaseKey: "sb_test"},
 		Embedding: Embedding{Provider: "gemini"}, // no APIKey
 	}
 

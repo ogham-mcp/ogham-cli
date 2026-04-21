@@ -32,7 +32,7 @@ import (
 // cleanly without touching any t.* assertions.
 
 const (
-	mockRoleEnv    = "OGHAM_MOCK_MCP_ROLE"
+	mockRoleEnv     = "OGHAM_MOCK_MCP_ROLE"
 	mockBehaviorEnv = "OGHAM_MOCK_MCP_BEHAVIOR" // "serve", "die-after-init", "crash-mid-call"
 )
 
@@ -49,6 +49,7 @@ func TestMain(m *testing.M) {
 //   - initialize  -> handshake reply with server capabilities
 //   - tools/list  -> two canned tools
 //   - tools/call  -> echo back an IsError=false result
+//
 // Any other method silently drops the request; that's fine for our
 // tests because we only exercise the known-good paths.
 func runMockServer() {

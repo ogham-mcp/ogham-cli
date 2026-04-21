@@ -66,10 +66,10 @@ func TestNewEmbedder_VoyageBaseURLOverride(t *testing.T) {
 }
 
 // Round-trip test confirms the wire shape matches the Voyage docs:
-//   * POST /v1/embeddings
-//   * Authorization: Bearer ...
-//   * body { model, input[], output_dimension, input_type }
-//   * response data[].embedding
+//   - POST /v1/embeddings
+//   - Authorization: Bearer ...
+//   - body { model, input[], output_dimension, input_type }
+//   - response data[].embedding
 func TestVoyageEmbed_RoundTrip(t *testing.T) {
 	wantVec := make([]float32, 4)
 	for i := range wantVec {

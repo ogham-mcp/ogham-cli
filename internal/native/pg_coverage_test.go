@@ -527,4 +527,3 @@ func TestPG_Store_FullRoundTripThroughWriteMemoryPostgres(t *testing.T) {
 		t.Errorf("stored id %q not found in List result", result.ID)
 	}
 }
-

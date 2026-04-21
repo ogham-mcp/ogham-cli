@@ -7,7 +7,6 @@ import (
 	"time"
 )
 
-
 // Typed-store wrappers mirror the Python ogham-mcp tools
 // (store_decision, store_fact, store_event, store_preference). Each is
 // a thin shell over Store() that:
@@ -297,4 +296,3 @@ func nonNilSlice(s []string) []string {
 	}
 	return s
 }
-

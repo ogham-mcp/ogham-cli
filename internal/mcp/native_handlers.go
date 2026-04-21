@@ -395,7 +395,7 @@ func BuildNativeListProfilesHandler(cfg *native.Config) mcp.ToolHandler {
 // reinforceDefault / contradictDefault mirror the Python tool defaults.
 // Kept as const so test + handler agree.
 const (
-	reinforceDefaultStrength = 0.85
+	reinforceDefaultStrength  = 0.85
 	contradictDefaultStrength = 0.15
 )
 
@@ -725,12 +725,12 @@ func BuildNativeUpdateHandler(cfg *native.Config) mcp.ToolHandler {
 			return errorResult(err.Error()), nil
 		}
 		return jsonResult(map[string]any{
-			"status":          "updated",
-			"id":              result.ID,
-			"profile":         result.Profile,
-			"updated_at":      result.UpdatedAt,
-			"fields_updated":  result.FieldsUpdated,
-			"re_embedded":     result.ReEmbedded,
+			"status":         "updated",
+			"id":             result.ID,
+			"profile":        result.Profile,
+			"updated_at":     result.UpdatedAt,
+			"fields_updated": result.FieldsUpdated,
+			"re_embedded":    result.ReEmbedded,
 		})
 	}
 }

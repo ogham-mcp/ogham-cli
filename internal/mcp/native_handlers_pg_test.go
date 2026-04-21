@@ -67,8 +67,8 @@ type handlerCase struct {
 	name       string
 	builder    func(*native.Config) mcp.ToolHandler
 	payloadFn  func(seededID string) string // returns JSON arguments
-	wantError  bool                          // tool-level error expected?
-	wantInBody string                        // substring present in success result content
+	wantError  bool                         // tool-level error expected?
+	wantInBody string                       // substring present in success result content
 }
 
 // TestMCPHandlers_PGSweep runs every Build*Handler against a real
@@ -116,41 +116,41 @@ func TestMCPHandlers_PGSweep(t *testing.T) {
 			wantInBody: "work",
 		},
 		{
-			name:      "set_profile_ttl",
-			builder:   BuildNativeSetProfileTTLHandler,
-			payloadFn: func(string) string { return `{"profile":"work","ttl_days":7}` },
+			name:       "set_profile_ttl",
+			builder:    BuildNativeSetProfileTTLHandler,
+			payloadFn:  func(string) string { return `{"profile":"work","ttl_days":7}` },
 			wantInBody: `"ttl_days": 7`,
 		},
 		{
-			name:      "reinforce_memory",
-			builder:   BuildNativeReinforceHandler,
-			payloadFn: func(id string) string { return `{"memory_id":"` + id + `","strength":0.9}` },
+			name:       "reinforce_memory",
+			builder:    BuildNativeReinforceHandler,
+			payloadFn:  func(id string) string { return `{"memory_id":"` + id + `","strength":0.9}` },
 			wantInBody: "reinforced",
 		},
 		{
-			name:      "contradict_memory",
-			builder:   BuildNativeContradictHandler,
-			payloadFn: func(id string) string { return `{"memory_id":"` + id + `","strength":0.1}` },
+			name:       "contradict_memory",
+			builder:    BuildNativeContradictHandler,
+			payloadFn:  func(id string) string { return `{"memory_id":"` + id + `","strength":0.1}` },
 			wantInBody: "contradicted",
 		},
 		{
-			name:      "update_memory",
-			builder:   BuildNativeUpdateHandler,
+			name:    "update_memory",
+			builder: BuildNativeUpdateHandler,
 			payloadFn: func(id string) string {
 				return `{"memory_id":"` + id + `","tags":["renamed"]}`
 			},
 			wantInBody: "updated",
 		},
 		{
-			name:      "current_profile",
-			builder:   BuildNativeCurrentProfileHandler,
-			payloadFn: func(string) string { return `{}` },
+			name:       "current_profile",
+			builder:    BuildNativeCurrentProfileHandler,
+			payloadFn:  func(string) string { return `{}` },
 			wantInBody: "work",
 		},
 		{
-			name:      "switch_profile",
-			builder:   BuildNativeSwitchProfileHandler,
-			payloadFn: func(string) string { return `{"profile":"alt"}` },
+			name:       "switch_profile",
+			builder:    BuildNativeSwitchProfileHandler,
+			payloadFn:  func(string) string { return `{"profile":"alt"}` },
 			wantInBody: "switched",
 		},
 		{
@@ -172,14 +172,14 @@ func TestMCPHandlers_PGSweep(t *testing.T) {
 			wantInBody: "processed",
 		},
 		{
-			name:      "find_related",
-			builder:   BuildNativeFindRelatedHandler,
-			payloadFn: func(id string) string { return `{"memory_id":"` + id + `"}` },
+			name:       "find_related",
+			builder:    BuildNativeFindRelatedHandler,
+			payloadFn:  func(id string) string { return `{"memory_id":"` + id + `"}` },
 			wantInBody: `"count"`, // count=0 is fine; no edges exist
 		},
 		{
-			name:      "suggest_connections",
-			builder:   BuildNativeSuggestConnectionsHandler,
+			name:    "suggest_connections",
+			builder: BuildNativeSuggestConnectionsHandler,
 			payloadFn: func(id string) string {
 				return `{"memory_id":"` + id + `","min_shared_entities":1}`
 			},

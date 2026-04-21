@@ -12,10 +12,10 @@ import (
 )
 
 var (
-	cleanupProfile string
-	cleanupDryRun  bool
+	cleanupProfile        string
+	cleanupDryRun         bool
 	cleanupJSONDeprecated bool
-	cleanupYes     bool
+	cleanupYes            bool
 )
 
 var cleanupCmd = &cobra.Command{
