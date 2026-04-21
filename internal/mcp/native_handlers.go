@@ -10,6 +10,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/ogham-mcp/ogham-cli/internal/native"
+	"github.com/ogham-mcp/ogham-cli/internal/native/cache"
 )
 
 // Native MCP tool handlers. Expose the v0.5 native Go pipeline
@@ -132,6 +133,12 @@ type storeEventArgs struct {
 	Source       string   `json:"source,omitempty"      jsonschema:"description=Where this event was recorded."`
 	Profile      string   `json:"profile,omitempty"     jsonschema:"description=Profile override; defaults to the active profile."`
 }
+
+// --- Batch C stats / config args (all take no parameters) ---------------
+
+type getConfigArgs struct{}
+type getStatsArgs struct{}
+type getCacheStatsArgs struct{}
 
 type storePreferenceArgs struct {
 	Preference   string   `json:"preference"             jsonschema:"required,description=What is preferred (e.g. 'dark mode', 'PostgreSQL over MySQL')."`
@@ -388,6 +395,58 @@ func BuildNativeReinforceHandler(cfg *native.Config) mcp.ToolHandler {
 			"profile":    result.Profile,
 			"confidence": result.Confidence,
 		})
+	}
+}
+
+// --- Batch C stats / config handlers --------------------------------------
+
+func BuildNativeGetConfigHandler(cfg *native.Config) mcp.ToolHandler {
+	return func(ctx context.Context, req *mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		var args getConfigArgs
+		if fail := unmarshalArgs(req, &args); fail != nil {
+			return fail, nil
+		}
+		// native.Mask redacts URL passwords + API keys so the result is
+		// safe for an MCP client or log stream. Mirrors what `ogham
+		// config show` emits via the CLI.
+		return jsonResult(native.Mask(cfg))
+	}
+}
+
+func BuildNativeGetStatsHandler(cfg *native.Config) mcp.ToolHandler {
+	return func(ctx context.Context, req *mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		var args getStatsArgs
+		if fail := unmarshalArgs(req, &args); fail != nil {
+			return fail, nil
+		}
+		stats, err := native.GetStats(ctx, cfg)
+		if err != nil {
+			return errorResult(err.Error()), nil
+		}
+		return jsonResult(stats)
+	}
+}
+
+func BuildNativeGetCacheStatsHandler(cfg *native.Config) mcp.ToolHandler {
+	return func(ctx context.Context, req *mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		var args getCacheStatsArgs
+		if fail := unmarshalArgs(req, &args); fail != nil {
+			return fail, nil
+		}
+		// cache.Default() lazily opens ~/.cache/ogham/embeddings.db on
+		// first call. We don't Close() after -- the cache is a shared
+		// singleton consumed by the embedders, so closing here would
+		// break the next store_memory. Tests exercise Open/Close
+		// explicitly.
+		c, err := cache.Default()
+		if err != nil {
+			return errorResult(fmt.Sprintf("cache open: %v", err)), nil
+		}
+		stats, err := c.Stats()
+		if err != nil {
+			return errorResult(fmt.Sprintf("cache stats: %v", err)), nil
+		}
+		return jsonResult(stats)
 	}
 }
 
@@ -725,6 +784,24 @@ func RegisterNativeTools(server *mcp.Server, cfg *native.Config) map[string]stru
 			"Store a user preference with structured metadata. type:preference tag. strength distinguishes 'always' (strong) from 'usually' (normal) from 'sometimes' (weak).",
 			storePreferenceArgs{},
 			BuildNativeStorePreferenceHandler(cfg),
+		},
+		{
+			"get_config",
+			"Return the resolved Ogham configuration with URL passwords and API keys redacted. Useful for verifying which backend + embedder the server is actually using.",
+			getConfigArgs{},
+			BuildNativeGetConfigHandler(cfg),
+		},
+		{
+			"get_stats",
+			"Aggregate counts for the active profile: total memories, top sources, top tags, untagged count, with-TTL count, expiring-within-7-days count.",
+			getStatsArgs{},
+			BuildNativeGetStatsHandler(cfg),
+		},
+		{
+			"get_cache_stats",
+			"Snapshot of the shared embedding cache at $HOME/.cache/ogham/embeddings.db: row count, size bytes, hit/miss counters since process start.",
+			getCacheStatsArgs{},
+			BuildNativeGetCacheStatsHandler(cfg),
 		},
 	}
 
