@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"os/signal"
-	"path/filepath"
 	"strconv"
 	"syscall"
 	"time"
@@ -21,8 +20,12 @@ var profileCmd = &cobra.Command{
 	Long: `Profile operations: show the active profile, switch to a different one,
 list profiles with memory counts, or read/set a profile's TTL.
 
-The active profile is persisted in ~/.ogham/config.toml and mirrored to
-~/.ogham/config.env so the Python sidecar picks it up on its next start.`,
+The active profile is persisted in ~/.ogham/active_profile (a single-line
+sentinel file). config.toml's default_profile is the baseline that applies
+when no sentinel is present; it is never mutated by 'profile switch'.
+
+Precedence (highest first): OGHAM_PROFILE env var, ~/.ogham/active_profile,
+config.toml default_profile, the literal "default".`,
 }
 
 var profileCurrentCmd = &cobra.Command{
@@ -34,6 +37,7 @@ var profileCurrentCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
+		// Load() has already resolved env > sentinel > TOML > default.
 		name := cfg.Profile
 		if name == "" {
 			name = "default"
@@ -48,29 +52,33 @@ var profileCurrentCmd = &cobra.Command{
 
 var profileSwitchCmd = &cobra.Command{
 	Use:   "switch <name>",
-	Short: "Switch the active profile (persisted to config)",
-	Args:  cobra.ExactArgs(1),
+	Short: "Switch the active profile (sentinel-file, TOML stays untouched)",
+	Long: `Write the given profile name to ~/.ogham/active_profile. Every
+subsequent Go CLI invocation and 'ogham serve' MCP session reads that
+file first, so the switch survives across process restarts.
+
+config.toml's default_profile is not modified -- it stays as your
+declared baseline. Delete ~/.ogham/active_profile (or set OGHAM_PROFILE
+to an empty string) to fall back to the baseline.`,
+	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
+		// Resolve the "old" value before we overwrite the sentinel, so
+		// we can surface the transition in the result (parity with the
+		// MCP switch_profile tool's {old, new} shape).
 		cfg, err := native.Load(native.DefaultPath())
 		if err != nil {
 			return err
 		}
 		old := cfg.Profile
-		cfg.Profile = args[0]
 
-		tomlPath := native.DefaultPath()
-		envPath := filepath.Join(filepath.Dir(tomlPath), "config.env")
-		if err := native.Save(tomlPath, cfg); err != nil {
-			return err
-		}
-		if err := native.SaveEnvFile(envPath, cfg); err != nil {
+		if err := native.SwitchProfile(args[0]); err != nil {
 			return err
 		}
 
 		if !useText() {
-			return emitJSON(map[string]string{"old": old, "new": cfg.Profile})
+			return emitJSON(map[string]string{"old": old, "new": args[0]})
 		}
-		fmt.Printf("switched profile: %s → %s\n", displayProfile(old), cfg.Profile)
+		fmt.Printf("switched profile: %s → %s\n", displayProfile(old), args[0])
 		return nil
 	},
 }

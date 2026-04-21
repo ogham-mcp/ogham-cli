@@ -173,6 +173,71 @@ func TestContradictHandler_RejectsStrengthAtUpperBound(t *testing.T) {
 	}
 }
 
+// --- switch_profile / current_profile handler tests ----------------------
+
+func TestSwitchProfileHandler_RequiresProfile(t *testing.T) {
+	// Need a fake HOME so the test can't pollute the user's real
+	// ~/.ogham/active_profile.
+	t.Setenv("HOME", t.TempDir())
+	h := BuildNativeSwitchProfileHandler(&native.Config{Profile: "before"})
+	res := callHandler(t, h, `{}`)
+	if txt := errorText(t, res); !strings.Contains(txt, "profile is required") {
+		t.Errorf("want 'profile is required' in %q", txt)
+	}
+}
+
+func TestSwitchProfileHandler_UpdatesCfgInProcess(t *testing.T) {
+	// Verify the handler mutates cfg.Profile so the very next tool call
+	// in the same MCP session sees the switch without having to re-read
+	// the sentinel file. The sentinel also gets written (for external
+	// CLI processes), but that's covered by the active_profile unit
+	// tests -- here we just care about the in-process side.
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("OGHAM_PROFILE", "")
+	cfg := &native.Config{Profile: "old"}
+	h := BuildNativeSwitchProfileHandler(cfg)
+
+	req := &mcp.CallToolRequest{Params: &mcp.CallToolParamsRaw{
+		Arguments: json.RawMessage(`{"profile":"work"}`),
+	}}
+	res, err := h(context.Background(), req)
+	if err != nil {
+		t.Fatalf("handler err: %v", err)
+	}
+	if res.IsError {
+		t.Fatalf("unexpected tool error: %+v", res)
+	}
+	if cfg.Profile != "work" {
+		t.Errorf("cfg.Profile not updated in-process: got %q, want work", cfg.Profile)
+	}
+}
+
+func TestCurrentProfileHandler_ReadsActiveResolution(t *testing.T) {
+	// Empty args + nil cfg still returns a result -- the handler walks
+	// the precedence chain and lands on "default" as the terminal
+	// fallback. This keeps MCP clients from seeing an error in the
+	// brand-new-install case.
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("OGHAM_PROFILE", "")
+	h := BuildNativeCurrentProfileHandler(&native.Config{})
+	req := &mcp.CallToolRequest{Params: &mcp.CallToolParamsRaw{}}
+	res, err := h(context.Background(), req)
+	if err != nil {
+		t.Fatalf("handler err: %v", err)
+	}
+	if res.IsError {
+		t.Fatalf("unexpected tool error: %+v", res)
+	}
+	// The result body is a json-encoded {"profile":"default"} string.
+	tc, ok := res.Content[0].(*mcp.TextContent)
+	if !ok {
+		t.Fatalf("content not TextContent: %T", res.Content[0])
+	}
+	if !strings.Contains(tc.Text, `"profile": "default"`) {
+		t.Errorf("want default profile in result; got %q", tc.Text)
+	}
+}
+
 func TestUpdateHandler_RequiresID(t *testing.T) {
 	h := BuildNativeUpdateHandler(&native.Config{})
 	res := callHandler(t, h, `{"content":"hi"}`)
