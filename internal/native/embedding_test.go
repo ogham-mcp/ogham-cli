@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"io"
+	"math"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -170,9 +171,13 @@ func TestNewEmbedder_GeminiDefaults(t *testing.T) {
 }
 
 func TestGeminiEmbed_RoundTrip(t *testing.T) {
+	// Use a unit vector so the client-side L2 normalization applied
+	// after a sub-3072 response is a no-op and the round-trip still
+	// asserts bit-for-bit equality with the server's payload.
+	unit := float32(1.0 / math.Sqrt(512.0))
 	wantVec := make([]float32, 512)
 	for i := range wantVec {
-		wantVec[i] = float32(i) / 512.0
+		wantVec[i] = unit
 	}
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -180,8 +185,8 @@ func TestGeminiEmbed_RoundTrip(t *testing.T) {
 		if r.Method != http.MethodPost {
 			t.Errorf("method = %s, want POST", r.Method)
 		}
-		if !strings.Contains(r.URL.Path, "batchEmbedContents") {
-			t.Errorf("path = %s, want to contain batchEmbedContents", r.URL.Path)
+		if !strings.Contains(r.URL.Path, ":embedContent") {
+			t.Errorf("path = %s, want to contain :embedContent", r.URL.Path)
 		}
 		if got := r.Header.Get("x-goog-api-key"); got != "test-key" {
 			t.Errorf("missing/wrong API key header: %q", got)
@@ -191,26 +196,22 @@ func TestGeminiEmbed_RoundTrip(t *testing.T) {
 		}
 
 		body, _ := io.ReadAll(r.Body)
-		var parsed geminiBatchRequest
+		var parsed geminiEmbedRequest
 		if err := json.Unmarshal(body, &parsed); err != nil {
 			t.Fatalf("request body not JSON: %v\n%s", err, body)
 		}
-		if len(parsed.Requests) != 1 {
-			t.Fatalf("requests = %d, want 1", len(parsed.Requests))
+		if parsed.Model != "models/gemini-embedding-2-preview" {
+			t.Errorf("model = %s", parsed.Model)
 		}
-		req := parsed.Requests[0]
-		if req.Model != "models/gemini-embedding-2-preview" {
-			t.Errorf("model = %s", req.Model)
+		if parsed.OutputDimensionality != 512 {
+			t.Errorf("outputDimensionality = %d", parsed.OutputDimensionality)
 		}
-		if req.OutputDimensionality != 512 {
-			t.Errorf("outputDimensionality = %d", req.OutputDimensionality)
-		}
-		if len(req.Content.Parts) != 1 || req.Content.Parts[0].Text != "hello world" {
-			t.Errorf("text payload wrong: %+v", req.Content.Parts)
+		if len(parsed.Content.Parts) != 1 || parsed.Content.Parts[0].Text != "hello world" {
+			t.Errorf("text payload wrong: %+v", parsed.Content.Parts)
 		}
 
-		resp := geminiBatchResponse{
-			Embeddings: []geminiEmbeddingValue{{Values: wantVec}},
+		resp := geminiEmbedResponse{
+			Embedding: &geminiEmbeddingPayload{Values: wantVec},
 		}
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(resp)
@@ -233,10 +234,104 @@ func TestGeminiEmbed_RoundTrip(t *testing.T) {
 		t.Fatalf("embedding len = %d, want 512", len(got))
 	}
 	for i := 0; i < 512; i++ {
-		if got[i] != wantVec[i] {
+		if math.Abs(float64(got[i]-wantVec[i])) > 1e-6 {
 			t.Errorf("embedding[%d] = %v, want %v", i, got[i], wantVec[i])
 			break
 		}
+	}
+}
+
+// Gemini returns non-unit vectors for every output dimension below 3072.
+// The embedder must L2-normalize client-side so cosine similarity isn't
+// magnitude-weighted. Server-side bug: the response here is raw (1..512),
+// sum(v^2) nowhere near 1. Post-fix sum(v^2) must be ~1 ± 1e-3.
+func TestGeminiEmbed_L2Normalized(t *testing.T) {
+	rawVec := make([]float32, 512)
+	for i := range rawVec {
+		rawVec[i] = float32(i + 1)
+	}
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(geminiEmbedResponse{
+			Embedding: &geminiEmbeddingPayload{Values: rawVec},
+		})
+	}))
+	defer server.Close()
+
+	e := &geminiEmbedder{
+		apiKey: "k", model: "m", dim: 512,
+		http: server.Client(), baseURL: server.URL,
+	}
+	vec, err := e.Embed(context.Background(), "x")
+	if err != nil {
+		t.Fatalf("Embed: %v", err)
+	}
+	var sumSq float64
+	for _, x := range vec {
+		sumSq += float64(x) * float64(x)
+	}
+	if math.Abs(sumSq-1.0) > 1e-3 {
+		t.Errorf("sum(v^2) = %v, want within 1e-3 of 1.0 after L2 normalization", sumSq)
+	}
+}
+
+// At the native 3072 dim Gemini already returns unit vectors -- we must
+// not re-normalize (wasted work, and would mask a server-side regression
+// if the response ever drifted).
+func TestGeminiEmbed_3072NoNormalize(t *testing.T) {
+	rawVec := make([]float32, 3072)
+	// Non-unit magnitude on purpose so the test fails if we normalize.
+	for i := range rawVec {
+		rawVec[i] = float32(i + 1)
+	}
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(geminiEmbedResponse{
+			Embedding: &geminiEmbeddingPayload{Values: rawVec},
+		})
+	}))
+	defer server.Close()
+
+	e := &geminiEmbedder{
+		apiKey: "k", model: "m", dim: 3072,
+		http: server.Client(), baseURL: server.URL,
+	}
+	vec, err := e.Embed(context.Background(), "x")
+	if err != nil {
+		t.Fatalf("Embed: %v", err)
+	}
+	// Raw first element passes through untouched.
+	if vec[0] != 1.0 {
+		t.Errorf("vec[0] = %v, want 1.0 (no normalization at native dim)", vec[0])
+	}
+}
+
+func TestL2Normalize_Zero(t *testing.T) {
+	v := []float32{0, 0, 0, 0}
+	got := l2Normalize(v)
+	for i, x := range got {
+		if x != 0 {
+			t.Errorf("got[%d] = %v, want 0 (zero vector passes through)", i, x)
+		}
+	}
+}
+
+func TestL2Normalize_UnitLength(t *testing.T) {
+	// |{3, 4}| = 5, normalized = {0.6, 0.8}.
+	v := []float32{3, 4}
+	got := l2Normalize(v)
+	var sumSq float64
+	for _, x := range got {
+		sumSq += float64(x) * float64(x)
+	}
+	if math.Abs(sumSq-1.0) > 1e-6 {
+		t.Errorf("sum(v^2) = %v, want 1.0", sumSq)
+	}
+	if math.Abs(float64(got[0])-0.6) > 1e-6 {
+		t.Errorf("got[0] = %v, want 0.6", got[0])
+	}
+	if math.Abs(float64(got[1])-0.8) > 1e-6 {
+		t.Errorf("got[1] = %v, want 0.8", got[1])
 	}
 }
 
@@ -249,8 +344,8 @@ func TestGeminiEmbed_EmptyText(t *testing.T) {
 
 func TestGeminiEmbed_DimensionMismatch(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		resp := geminiBatchResponse{
-			Embeddings: []geminiEmbeddingValue{{Values: []float32{0.1, 0.2, 0.3}}},
+		resp := geminiEmbedResponse{
+			Embedding: &geminiEmbeddingPayload{Values: []float32{0.1, 0.2, 0.3}},
 		}
 		_ = json.NewEncoder(w).Encode(resp)
 	}))
@@ -269,7 +364,7 @@ func TestGeminiEmbed_DimensionMismatch(t *testing.T) {
 func TestGeminiEmbed_ServerError(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusBadRequest)
-		resp := geminiBatchResponse{Error: &geminiAPIError{
+		resp := geminiEmbedResponse{Error: &geminiAPIError{
 			Code:    400,
 			Message: "API key not valid",
 			Status:  "INVALID_ARGUMENT",
@@ -293,7 +388,7 @@ func TestGeminiEmbed_ServerError(t *testing.T) {
 
 func TestGeminiEmbed_EmptyEmbedding(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		_ = json.NewEncoder(w).Encode(geminiBatchResponse{Embeddings: nil})
+		_ = json.NewEncoder(w).Encode(geminiEmbedResponse{Embedding: nil})
 	}))
 	defer server.Close()
 
