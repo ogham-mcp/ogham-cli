@@ -27,7 +27,7 @@ lint:
 # Broader internal/native/ coverage debt is tracked separately -- see
 # docs/tracking04plus.md under "Testing standards".
 NATIVE_COVER_MIN := 90.0
-COVER_STRICT_PKGS := ./internal/native/extraction/...
+COVER_STRICT_PKGS := ./internal/native/extraction/... ./internal/native/cache/...
 cover:
 	@go test -race -coverprofile=cover.out $(COVER_STRICT_PKGS) > /dev/null
 	@total=$$(go tool cover -func=cover.out | tail -1 | awk '{print $$3}' | tr -d '%'); \
@@ -67,11 +67,11 @@ live:
 pict-regen:
 	@which pict > /dev/null || { \
 	    echo "pict not installed -- brew install pict"; exit 1; }
-	# Loop over every .pict model, regenerate its .tsv, canonical-sort
-	# the body (keep header) so the committed matrix is version- and
-	# platform-independent. /r:1 pins the PRNG seed across PICT builds.
-	@for pf in internal/native/extraction/testdata/*.pict; do \
-	    [ -f "$$pf" ] || continue; \
+	# Loop over every .pict model under internal/native/**/testdata,
+	# regenerate its .tsv, canonical-sort the body (keep header) so
+	# the committed matrix is version- and platform-independent.
+	# /r:1 pins the PRNG seed across PICT builds.
+	@for pf in $$(find internal/native -path '*/testdata/*.pict' -type f); do \
 	    tmp=$$(mktemp); \
 	    pict "$$pf" /r:1 > "$$tmp"; \
 	    { head -n 1 "$$tmp"; tail -n +2 "$$tmp" | LC_ALL=C sort; } > "$$pf.tsv"; \

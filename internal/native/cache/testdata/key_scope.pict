@@ -1,0 +1,19 @@
+# PICT model for the EmbeddingCache.Key() scoping function.
+#
+# Every row the generator emits must hash to a unique, non-empty 64-char
+# hex digest. Same formula as Python's src/ogham/embeddings._cache_key
+# so switching providers / models / dims automatically invalidates any
+# cached vector that predated the switch.
+#
+# Axes:
+#   Provider   -- the six providers ogham supports at v0.5
+#   Dim        -- the schema dimensions we care about (512, 768, 1024, 3072)
+#   TextShape  -- input text families; the hash input shouldn't care about
+#                 content beyond bytes, but the matrix confirms that.
+#
+# TextShape values are sentinels that the test expands to concrete text
+# before hashing. Keeps the .tsv tidy and avoids quoting horrors.
+
+Provider:  openai, ollama, gemini, voyage, mistral, onnx
+Dim:       512, 768, 1024, 3072
+TextShape: ascii, unicode, empty, very-long
