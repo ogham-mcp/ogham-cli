@@ -173,6 +173,49 @@ func TestContradictHandler_RejectsStrengthAtUpperBound(t *testing.T) {
 	}
 }
 
+func TestUpdateHandler_RequiresID(t *testing.T) {
+	h := BuildNativeUpdateHandler(&native.Config{})
+	res := callHandler(t, h, `{"content":"hi"}`)
+	if txt := errorText(t, res); !strings.Contains(txt, "memory_id is required") {
+		t.Errorf("want 'memory_id is required' in %q", txt)
+	}
+}
+
+func TestUpdateHandler_RejectsEmptyUpdate(t *testing.T) {
+	// Python raises ValueError("No updates provided"); we surface the
+	// same as a tool-level error so malformed callers don't silently
+	// touch updated_at for no reason.
+	h := BuildNativeUpdateHandler(&native.Config{})
+	res := callHandler(t, h, `{"memory_id":"abc"}`)
+	if txt := errorText(t, res); !strings.Contains(txt, "no fields to update") {
+		t.Errorf("want 'no fields to update' in %q", txt)
+	}
+}
+
+func TestUpdateHandler_EmptyTagsIsExplicitClear(t *testing.T) {
+	// "tags": [] must be treated as "clear the tags", not "omitted".
+	// This test confirms the nil-vs-empty distinction survives the JSON
+	// boundary. We can't verify the SQL without a live DB, but we can
+	// confirm we don't hit the "no fields" short-circuit.
+	h := BuildNativeUpdateHandler(&native.Config{})
+	res := callHandler(t, h, `{"memory_id":"abc","tags":[]}`)
+	txt := errorText(t, res)
+	if strings.Contains(txt, "no fields to update") {
+		t.Errorf("empty tags should count as an update; got %q", txt)
+	}
+}
+
+func TestUpdateHandler_EmptyStringContentIsAChange(t *testing.T) {
+	// "content": "" must be treated as "set content to empty string",
+	// not "omitted". *string pointer semantics make this work.
+	h := BuildNativeUpdateHandler(&native.Config{})
+	res := callHandler(t, h, `{"memory_id":"abc","content":""}`)
+	txt := errorText(t, res)
+	if strings.Contains(txt, "no fields to update") {
+		t.Errorf("empty-string content should count as an update; got %q", txt)
+	}
+}
+
 func TestContradictHandler_AcceptsZeroStrengthExplicitly(t *testing.T) {
 	// strength=0.0 is the inclusive lower bound. With the JSON default
 	// zero-value we can't distinguish "unset" from "explicit 0", so we
