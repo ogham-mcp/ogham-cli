@@ -173,6 +173,59 @@ func TestContradictHandler_RejectsStrengthAtUpperBound(t *testing.T) {
 	}
 }
 
+// --- Batch C stats / config handler tests ---------------------------------
+//
+// DB-backed round-trips defer to the live-tagged pass. We verify argument
+// parsing and the redaction boundary -- the things that break silently
+// in prod if regressed.
+
+func TestGetConfigHandler_RedactsSecrets(t *testing.T) {
+	cfg := &native.Config{
+		Profile: "work",
+	}
+	cfg.Embedding.Provider = "openai"
+	cfg.Embedding.APIKey = "sk-super-secret-12345"
+	cfg.Embedding.Dimension = 512
+	cfg.Database.URL = "postgres://user:s3cret@host:5432/db"
+
+	h := BuildNativeGetConfigHandler(cfg)
+	res := callHandler(t, h, `{}`)
+	if res.IsError {
+		t.Fatalf("unexpected error: %+v", res)
+	}
+	tc, ok := res.Content[0].(*mcp.TextContent)
+	if !ok {
+		t.Fatalf("content not TextContent: %T", res.Content[0])
+	}
+	body := tc.Text
+	// Redaction markers should appear. The full secret must not.
+	if strings.Contains(body, "sk-super-secret-12345") {
+		t.Error("API key leaked verbatim into config result")
+	}
+	if strings.Contains(body, "s3cret") {
+		t.Error("URL password leaked verbatim into config result")
+	}
+}
+
+func TestGetConfigHandler_EmptyArgsOK(t *testing.T) {
+	h := BuildNativeGetConfigHandler(&native.Config{Profile: "default"})
+	res := callHandler(t, h, ``)
+	if res.IsError {
+		t.Errorf("empty-args get_config should not error: %+v", res)
+	}
+}
+
+func TestGetStatsHandler_EmptyArgsReachesBackend(t *testing.T) {
+	// Empty cfg -> ResolveBackend errors. We verify the handler routes
+	// to it (not a parse error short-circuit above).
+	h := BuildNativeGetStatsHandler(&native.Config{})
+	res := callHandler(t, h, `{}`)
+	txt := errorText(t, res)
+	if strings.Contains(txt, "parse arguments") {
+		t.Errorf("empty args should parse cleanly; got %q", txt)
+	}
+}
+
 // --- switch_profile / current_profile handler tests ----------------------
 
 func TestSwitchProfileHandler_RequiresProfile(t *testing.T) {
