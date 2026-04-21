@@ -26,7 +26,7 @@ func BuildToolHandler(client *gateway.Client, toolName string) mcp.ToolHandler {
 			}
 		}
 
-		slog.Info("tool_call", "name", toolName)
+		slog.Info("gateway_tool_call", "name", toolName)
 
 		result, err := client.CallTool(ctx, toolName, args)
 		if err != nil {

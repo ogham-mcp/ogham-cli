@@ -2,6 +2,7 @@ package sidecar
 
 import (
 	"reflect"
+	"strings"
 	"testing"
 )
 
@@ -83,5 +84,36 @@ func TestClient_CloseBeforeConnectIsNoop(t *testing.T) {
 	c := New(Options{})
 	if err := c.Close(); err != nil {
 		t.Errorf("Close on unconnected client: %v", err)
+	}
+}
+
+func TestClient_CallToolAfterCloseIsUnavailable(t *testing.T) {
+	// After Close() the session is nilled; the supervisor's reconnect
+	// path checks c.closed and must not bring it back. We can't mock
+	// the full lifecycle without a real subprocess, but we can assert
+	// the CallTool-with-nil-session error wording matches the "dead
+	// sidecar" path that proxy handlers surface.
+	t.Setenv("OGHAM_SIDECAR_CMD", "echo stub")
+	c := New(Options{})
+	_ = c.Close() // no-op since never connected
+	_, err := c.CallTool(testCtx(t), "anything", nil)
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	if !strings.Contains(err.Error(), "not connected") {
+		t.Errorf("want 'not connected' in error; got %q", err.Error())
+	}
+}
+
+func TestBuildCmd_RebuildableAfterWait(t *testing.T) {
+	// The supervisor needs a fresh *exec.Cmd for every reconnect --
+	// exec.Cmd can't be Start()-ed twice. Verify buildCmd returns a
+	// new Cmd each call rather than reusing a pointer.
+	t.Setenv("OGHAM_SIDECAR_CMD", "echo stub")
+	opts := Options{}
+	first := buildCmd(opts)
+	second := buildCmd(opts)
+	if first == second {
+		t.Error("buildCmd returned the same *exec.Cmd twice; reconnect would fail")
 	}
 }
