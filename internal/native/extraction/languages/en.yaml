@@ -666,6 +666,8 @@ person_name_denylist:
   - Compose
   - PR
   - Dr
+  - Managed
+  - Agents
 
 # Bigrams are matched by joining both tokens with a single space and
 # lowercasing; the denylist above hits unigrams, while this list catches
