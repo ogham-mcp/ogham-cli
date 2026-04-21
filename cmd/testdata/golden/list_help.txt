@@ -1,0 +1,22 @@
+Return the most recent memories from the active profile.
+
+Default path: calls the Python MCP sidecar's list_recent tool.
+--native path: connects to Postgres directly via pgx -- this is the first
+absorbed tool. Requires DATABASE_URL or [database] url in config.toml.
+
+Usage:
+  ogham list [flags]
+
+Flags:
+  -h, --help             help for list
+      --limit int        Maximum number of memories to list (default 20)
+      --profile string   Profile to list from (defaults to config)
+      --source string    Filter by source label (e.g. claude-code, hook:post-tool)
+      --tags string      Filter by any of these comma-separated tags
+
+Global Flags:
+      --legacy          Route through the Python MCP sidecar instead of native Go
+      --python          Alias for --legacy
+  -q, --quiet           Suppress stderr informational notices (sidecar fallback message)
+      --text            Human-readable output (default is JSON for LLM / script consumption)
+  -v, --verbose count   Increase stderr log verbosity (-v = info, -vv = debug)

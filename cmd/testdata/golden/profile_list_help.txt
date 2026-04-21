@@ -1,0 +1,14 @@
+List profiles with memory counts
+
+Usage:
+  ogham profile list [flags]
+
+Flags:
+  -h, --help   help for list
+
+Global Flags:
+      --legacy          Route through the Python MCP sidecar instead of native Go
+      --python          Alias for --legacy
+  -q, --quiet           Suppress stderr informational notices (sidecar fallback message)
+      --text            Human-readable output (default is JSON for LLM / script consumption)
+  -v, --verbose count   Increase stderr log verbosity (-v = info, -vv = debug)

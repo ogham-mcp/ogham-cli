@@ -1,0 +1,23 @@
+Native-only command (no sidecar fallback yet) that reports the
+headline numbers for the active profile:
+  - total non-expired memories
+  - top 10 sources
+  - top 10 tags
+  - untagged count, TTL'd count, expiring-in-7-days count
+
+For Supabase the aggregation is client-side over the first 1000 rows
+(PostgREST default limit). Direct Postgres uses GROUP BY for accurate
+counts regardless of profile size.
+
+Usage:
+  ogham stats [flags]
+
+Flags:
+  -h, --help   help for stats
+
+Global Flags:
+      --legacy          Route through the Python MCP sidecar instead of native Go
+      --python          Alias for --legacy
+  -q, --quiet           Suppress stderr informational notices (sidecar fallback message)
+      --text            Human-readable output (default is JSON for LLM / script consumption)
+  -v, --verbose count   Increase stderr log verbosity (-v = info, -vv = debug)

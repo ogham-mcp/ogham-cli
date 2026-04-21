@@ -1,0 +1,45 @@
+A lightweight MCP client for the Ogham memory stack.
+
+Defaults (v0.3.0-rc4+):
+  - JSON output for stable scripting / LLM consumption -- use --text for humans
+  - Native path (direct Postgres / Supabase / Gemini) for speed -- use --legacy
+    (or --python) to route through the Python MCP sidecar instead
+
+Usage:
+  ogham [flags]
+  ogham [command]
+
+Available Commands:
+  audit             Show the audit trail for a memory profile
+  auth              Manage authentication
+  cleanup           Remove expired memories from a profile
+  completion        Generate the autocompletion script for the specified shell
+  config            Inspect the current runtime configuration
+  dashboard         Launch the Prefab dashboard (delegates to Python)
+  decay             Apply Hebbian decay to stale memories
+  delete            Delete a memory by ID from the active profile
+  export            Export memories from a profile (JSON or Markdown)
+  health            Check the Ogham stack is reachable and responsive
+  help              Help about any command
+  hooks             Lifecycle hooks for AI coding clients
+  import            Bulk-import memories from an export file via the sidecar
+  import-agent-zero Import memories from an Agent Zero FAISS pickle file
+  init              Interactive wizard: configure backend, embedder, profile; write config files; register MCP clients
+  list              List recent memories
+  plugin            Emit host-specific plugin manifests (OpenClaw, Agent Zero, ...)
+  profile           Manage memory profiles
+  search            Hybrid search across stored memories
+  serve             Start MCP server over stdio (native tools by default)
+  stats             Summarise the active profile: total, top sources, top tags
+  store             Store a memory in the active profile
+  version           Print the binary's version + build info
+
+Flags:
+  -h, --help            help for ogham
+      --legacy          Route through the Python MCP sidecar instead of native Go
+      --python          Alias for --legacy
+  -q, --quiet           Suppress stderr informational notices (sidecar fallback message)
+      --text            Human-readable output (default is JSON for LLM / script consumption)
+  -v, --verbose count   Increase stderr log verbosity (-v = info, -vv = debug)
+
+Use "ogham [command] --help" for more information about a command.

@@ -1,0 +1,21 @@
+Run hooks that inject memory context at session start, capture tool activity, and survive compaction.
+
+Usage:
+  ogham hooks [command]
+
+Available Commands:
+  install     Detect AI client and install hooks configuration
+  run         Run a hook event (session-start, post-tool, inscribe, recall)
+  status      Show installed hooks
+
+Flags:
+  -h, --help   help for hooks
+
+Global Flags:
+      --legacy          Route through the Python MCP sidecar instead of native Go
+      --python          Alias for --legacy
+  -q, --quiet           Suppress stderr informational notices (sidecar fallback message)
+      --text            Human-readable output (default is JSON for LLM / script consumption)
+  -v, --verbose count   Increase stderr log verbosity (-v = info, -vv = debug)
+
+Use "ogham hooks [command] --help" for more information about a command.

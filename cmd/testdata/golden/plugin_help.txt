@@ -1,0 +1,28 @@
+Each subcommand prints a manifest (JSON / config stanza) that registers
+the Ogham binary as a memory/knowledge plugin inside a host harness.
+
+Design intent (see docs/plans/2026-04-16-go-cli-enterprise.md v0.2 scope):
+the Go binary is the same everywhere; harnesses differ only in how they
+discover and invoke it. Emitting manifests keeps host-specific knowledge
+out of the install process -- you pipe or paste the output into the
+host's config, no curl-bash installer required.
+
+Usage:
+  ogham plugin [flags]
+  ogham plugin [command]
+
+Available Commands:
+  agent-zero  Emit Agent Zero memory backend config
+  openclaw    Emit OpenClaw native plugin manifest
+
+Flags:
+  -h, --help   help for plugin
+
+Global Flags:
+      --legacy          Route through the Python MCP sidecar instead of native Go
+      --python          Alias for --legacy
+  -q, --quiet           Suppress stderr informational notices (sidecar fallback message)
+      --text            Human-readable output (default is JSON for LLM / script consumption)
+  -v, --verbose count   Increase stderr log verbosity (-v = info, -vv = debug)
+
+Use "ogham plugin [command] --help" for more information about a command.

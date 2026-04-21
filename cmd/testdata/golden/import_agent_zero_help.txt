@@ -1,0 +1,26 @@
+Reads an Agent Zero memory directory (or index.pkl file),
+extracts memories via a safe Python unpickler, and uploads them
+to the Ogham gateway in batches of 100.
+
+Requires python3 in PATH.
+
+Examples:
+  ogham import-agent-zero /tmp/agent-zero-memory/default/
+  ogham import-agent-zero /tmp/agent-zero-memory/default/index.pkl --dry-run
+  ogham import-agent-zero ./memory --areas fragments,solutions
+
+Usage:
+  ogham import-agent-zero <path> [flags]
+
+Flags:
+      --areas string        Comma-separated areas to import (default: all)
+      --dry-run             Show what would be imported without uploading
+  -h, --help                help for import-agent-zero
+      --include-knowledge   Include knowledge imports
+
+Global Flags:
+      --legacy          Route through the Python MCP sidecar instead of native Go
+      --python          Alias for --legacy
+  -q, --quiet           Suppress stderr informational notices (sidecar fallback message)
+      --text            Human-readable output (default is JSON for LLM / script consumption)
+  -v, --verbose count   Increase stderr log verbosity (-v = info, -vv = debug)

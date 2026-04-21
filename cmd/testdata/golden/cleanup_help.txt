@@ -1,0 +1,21 @@
+Deletes every memory whose expires_at is in the past for the given
+profile via the cleanup_expired_memories(target_profile) RPC.
+
+Run with --dry-run to count first without deleting. Mirrors Python's
+'ogham cleanup' command with the same confirmation-on-stdin safety gate.
+
+Usage:
+  ogham cleanup [flags]
+
+Flags:
+      --dry-run          Count expired memories without deleting
+  -h, --help             help for cleanup
+      --profile string   Profile to clean (defaults to active)
+  -y, --yes              Skip confirmation prompt
+
+Global Flags:
+      --legacy          Route through the Python MCP sidecar instead of native Go
+      --python          Alias for --legacy
+  -q, --quiet           Suppress stderr informational notices (sidecar fallback message)
+      --text            Human-readable output (default is JSON for LLM / script consumption)
+  -v, --verbose count   Increase stderr log verbosity (-v = info, -vv = debug)

@@ -1,0 +1,22 @@
+Calls apply_hebbian_decay(target_profile, batch_size) to reduce the
+confidence of memories that haven't been accessed recently. Matches
+Python's 'ogham decay' command; same SQL RPC underneath.
+
+Use --dry-run to see how many memories would be affected without
+changing anything.
+
+Usage:
+  ogham decay [flags]
+
+Flags:
+      --batch-size int   Max memories to decay per run (default 1000)
+      --dry-run          Count eligible memories without decaying
+  -h, --help             help for decay
+      --profile string   Profile to decay (defaults to active)
+
+Global Flags:
+      --legacy          Route through the Python MCP sidecar instead of native Go
+      --python          Alias for --legacy
+  -q, --quiet           Suppress stderr informational notices (sidecar fallback message)
+      --text            Human-readable output (default is JSON for LLM / script consumption)
+  -v, --verbose count   Increase stderr log verbosity (-v = info, -vv = debug)

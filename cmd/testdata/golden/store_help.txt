@@ -1,0 +1,32 @@
+Store a memory in the active profile.
+
+Content source:
+  - positional args (joined by spaces), or
+  - piped stdin if no positional arg is given --
+      e.g. 'git diff | ogham store --source git-diff --tags review'
+      e.g. 'echo "meeting notes..." | ogham store --tags type:notes'
+
+The native Go pipeline (extraction -> parallel embed + search ->
+surprise -> auto-link candidates -> DB write) is the default in v0.5.
+Use --legacy (or --python) to route through the Python MCP sidecar.
+
+  --dry-run  runs extraction + embed + search but skips the DB write,
+             so you can preview what the pipeline would produce before
+             committing anything.
+
+Usage:
+  ogham store [content] [flags]
+
+Flags:
+      --dry-run          Run extraction + embed + surprise without the DB write. Use to preview the pipeline.
+  -h, --help             help for store
+      --profile string   Profile to store in (defaults to config)
+      --source string    Source label (e.g. claude-code)
+      --tags string      Comma-separated tags (e.g. type:decision,project:foo)
+
+Global Flags:
+      --legacy          Route through the Python MCP sidecar instead of native Go
+      --python          Alias for --legacy
+  -q, --quiet           Suppress stderr informational notices (sidecar fallback message)
+      --text            Human-readable output (default is JSON for LLM / script consumption)
+  -v, --verbose count   Increase stderr log verbosity (-v = info, -vv = debug)
