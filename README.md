@@ -2,7 +2,22 @@
 
 A single Go binary that gives AI agents persistent, searchable memory -- even on locked-down enterprise laptops where third-party MCP servers are blocked.
 
-> **Pre-release.** v0.7.0-rc2 cut 2026-04-21. Hybrid MCP proxy, 24 native tools absorbed (CRUD + typed-store + stats + graph walk), sentinel-based active profile, 18-language word-list registry embedded (not yet wired into scoring), coverage retrofit landed (extraction 93% / sidecar 87.6% / native 78.4% / mcp 67.7%). Public flip is gated on employer-disclosure + counsel review. Install paths below assume building from source.
+> **Pre-release.** v0.7.0-rc4 cut 2026-04-22. Hybrid MCP proxy, 24 native tools absorbed (CRUD + typed-store + stats + graph walk), sentinel-based active profile, 18-language word-list registry with scoring + date parsing wired through, recurrence detection (EN/DE), narrower person-name regex (parity 93.8% -> 97.9%), `--legacy` renamed to `--sidecar` (backward-compat alias retained), new `ogham capabilities` subcommand, coverage retrofit maintained (extraction 93% / sidecar 87.6% / native 78.4% / mcp 67.7%). Public flip is gated on employer-disclosure + counsel review. Install paths below assume building from source.
+
+## Architecture
+
+Ogham's memory server is a Python MCP -- that's where retrieval quality lives (strided retrieval, multi-hop intent patterns, MMR re-ranking, graph augmentation, query reformulation). The Go CLI (`ogham`) is an enterprise-friendly access door: a single static binary, zero runtime deps, suitable for environments where Python + pip aren't viable.
+
+Use `--sidecar` when you need the full retrieval pipeline; the native path is faster but applies a subset of the retrieval machinery:
+
+```bash
+ogham search "deployment incidents"              # native Go path (fast, subset)
+ogham search "deployment incidents" --sidecar    # routes through Python MCP (full pipeline)
+```
+
+Run `ogham capabilities --json` for the authoritative matrix of which MCP tools are native vs which require the sidecar. The human-readable `ogham capabilities` is grouped for reading.
+
+`--legacy` is a hidden backward-compat alias for `--sidecar`. It still works but emits a deprecation warning; it will be removed in v0.8.
 
 ## Who this is for
 
@@ -60,7 +75,7 @@ Three runtime paths, one codebase:
 |---|---|---|---|
 | **Native Go** | default for every subcommand in v0.5+ | yes | Go talks to Postgres / Supabase / Gemini (+ Ollama / OpenAI / Voyage / Mistral) directly. ~10× faster than sidecar for read paths; store latency drops ~4× (2s → 500ms) compared to sidecar-backed v0.4. |
 | **Hybrid proxy (`ogham serve`)** | default in v0.6+ | yes | Native tools + Python sidecar tools merged into one MCP manifest. Native handlers win on name collision. If the sidecar fails to spawn, the server logs a warning and keeps serving the native subset. `--no-sidecar` forces native-only. |
-| **Sidecar (subcommands)** | `--legacy` (or `--python`) | opt-in | Routes a single subcommand through the Python MCP server. Useful for tool-layer enrichment the sidecar still owns (compression) or when you want pre-v0.5 behaviour for diff. |
+| **Sidecar (subcommands)** | `--sidecar` (or `--python`; `--legacy` is a deprecated alias) | opt-in | Routes a single subcommand through the Python MCP server for the full retrieval pipeline (intent detection, strided retrieval, MMR, graph augmentation, query reformulation) and tool-layer enrichment the sidecar still owns (compression). |
 | **Gateway** | `go build -tags gateway .` | no | HTTPS against managed `api.ogham-mcp.dev`. Hidden in default build. |
 
 The v0.5 native path absorbs: `extraction` (entities, dates, importance), five embedders (Gemini / Ollama / OpenAI / Voyage / Mistral), hybrid search, and the full store pipeline (extraction → parallel embed + search → surprise → auto-link candidates → DB write). A shared SQLite embedding cache at `$HOME/.cache/ogham/embeddings.db` is wire-compatible with the Python sidecar: switching between the two warms the cache instead of paying cold start.
@@ -128,11 +143,11 @@ ogham store "content" --tags type:decision,project:foo
 
 **Output + backend are chosen for you.** JSON is the default (scripts and LLMs parse it cleanly). Native Go is the default backend (direct Postgres / Supabase / Gemini, ~10× faster than spinning up a Python process per call).
 
-Add `--text` for human-readable output, `--legacy` (or `--python`) to route through the Python sidecar:
+Add `--text` for human-readable output, `--sidecar` (or `--python`) to route through the Python MCP sidecar:
 
 ```bash
 ogham list --text --limit 5              # numbered, readable
-ogham search "query" --legacy --text     # Python tool-layer enrichment, human output
+ogham search "query" --sidecar --text    # full retrieval pipeline, human output
 ```
 
 ## Claude Code integration (the enterprise-lockdown unblock)
@@ -203,14 +218,15 @@ Then every `ogham` command starts in milliseconds instead of waiting for the eph
 
 ## Commands
 
-Every command outputs JSON by default and runs natively where possible. Pass `--text` for human output, `--legacy` (or `--python`) to route through the Python sidecar.
+Every command outputs JSON by default and runs natively where possible. Pass `--text` for human output, `--sidecar` (or `--python`) to route through the Python sidecar. Run `ogham capabilities` for the authoritative matrix of native-vs-sidecar tools.
 
 | Command | Default path | Purpose |
 |---|---|---|
 | `ogham health` | native | Parallel errgroup probes (DB + embedder). Adds `--live-embedder` to burn a real provider token. |
 | `ogham list [--limit N] [--profile P] [--source S] [--tags a,b]` | native | Recent memories |
-| `ogham search <query> [--limit N] [--tags a,b] [--profile P]` | native | Hybrid search (vector + keyword + RRF). Native uses Gemini via REST + `hybrid_search_memories` RPC. Add `--legacy` for the Python tool-layer enrichment (query reformulation, entity-overlap boost, record_access). |
-| `ogham store [content] [--tags a,b] [--source s] [--profile P] [--dry-run]` | native | Store a memory. Content can be a positional arg or piped on stdin: `git diff \| ogham store --source git-diff`. Native orchestrator runs extraction, parallel embed + search, surprise score, and auto-link candidate selection before writing. `--dry-run` skips the DB write and prints the preview. `--legacy` routes through the sidecar for contradiction / supersedes / compression passes. |
+| `ogham search <query> [--limit N] [--tags a,b] [--profile P]` | native | Hybrid search (vector + keyword + RRF). Native uses Gemini via REST + `hybrid_search_memories` RPC. Add `--sidecar` for the full Python retrieval pipeline (intent detection, strided retrieval, query reformulation, MMR, spreading activation). |
+| `ogham store [content] [--tags a,b] [--source s] [--profile P] [--dry-run]` | native | Store a memory. Content can be a positional arg or piped on stdin: `git diff \| ogham store --source git-diff`. Native orchestrator runs extraction, parallel embed + search, surprise score, and auto-link candidate selection before writing. `--dry-run` skips the DB write and prints the preview. `--sidecar` routes through the Python MCP for contradiction / supersedes / compression passes. |
+| `ogham capabilities [--json]` | offline | Print the native-vs-sidecar tool matrix (which MCP tools resolve in Go, which require `--sidecar`, which augmentations are sidecar-only). |
 | `ogham export [--profile P] [--format json\|markdown] [-o file]` | sidecar | Export a profile's memories. Stdout by default; write to file with `-o`. |
 | `ogham import <file.json> [--profile P] [--dedup 0.8]` | sidecar | Bulk-import from an `ogham export` JSON file (or `-` for stdin). |
 | `ogham profile current / switch / list / ttl` | native | Profile ops. `switch` persists to TOML + env. |
@@ -234,7 +250,8 @@ Every command outputs JSON by default and runs natively where possible. Pass `--
 | Flag | Effect |
 |---|---|
 | `--text` | Human-readable output instead of JSON |
-| `--legacy`, `--python` | Route through the Python MCP sidecar instead of native Go |
+| `--sidecar`, `--python` | Route through the Python MCP sidecar for the full retrieval pipeline (intent detection, strided retrieval, MMR, graph augmentation) |
+| `--legacy` | Deprecated alias for `--sidecar`; still works (hidden from --help) but emits a warning; removed in v0.8 |
 | `-q`, `--quiet` | Suppress stderr informational notices (e.g. the sidecar fallback message on `store`) |
 
 Deprecated silent no-ops (kept so pre-rc4 scripts don't break): `--json`, `--native`. Both are now the default; the flags do nothing.
@@ -324,7 +341,7 @@ The whole reason this binary exists. Follow in order:
    ```bash
    ogham health                    # parallel probes, DB + embedder config (native is default)
    ogham health --live-embedder    # burns one provider token; hits Gemini/Voyage/etc. for real
-   ogham health --legacy --text    # route through Python sidecar, human-readable
+   ogham health --sidecar --text   # route through Python sidecar, human-readable
    ```
 4. **Drop this into your project's `CLAUDE.md`:**
    ```markdown
@@ -405,7 +422,7 @@ Everything is in `~/.ogham/config.toml` (Go canonical) and mirrored to `~/.ogham
 | **v0.6-alpha** | **Hybrid MCP proxy + wizard + schema polish.** `ogham serve` eager-spawns the Python sidecar and proxies every tool it exposes that isn't already native -- native handlers always win on name collision. Reconnect-on-death supervisor with 1s backoff + 15s spawn timeout recovers from Python crashes mid-session. Graceful degradation: `--no-sidecar` or a spawn failure drops to native-only. Auto-generated MCP tool JSON schemas via `github.com/invopop/jsonschema`. `ogham init` skips the API-key field for Ollama. `EMBEDDING_DIM` + provider URL env vars honoured. `SearchResult.Metadata` exposed natively. Dim-agnostic hybrid search RPC. **v0.7 Batch A CRUD:** delete_memory, cleanup_expired, list_profiles, set_profile_ttl, reinforce_memory, contradict_memory, update_memory, switch_profile, current_profile (sentinel-file state at `~/.ogham/active_profile`, Python sidecar reads it too). **v0.7 Batch B typed-store:** store_decision, store_fact, store_event, store_preference (thin wrappers around `native.Store` that inject a `type:<kind>` tag and structured jsonb metadata; tags and metadata stay separate so tag-filtered search keeps working). **v0.7 Batch C stats + config:** get_config (redacted), get_stats (per-profile totals + top sources/tags + TTL counters), get_cache_stats (shared SQLite embedding cache row count, size, hit/miss). **v0.7 Batch E graph walk:** link_unlinked, explore_knowledge (hybrid search + relationship traversal via `explore_memory_graph` RPC), find_related (traverse from a known memory via `get_related_memories` RPC), suggest_connections (inline recursive CTE over `memory_entities`). `store_decision.related_memories` now creates 'supports' edges natively -- related_memories rejection lifted. **Native-tool total: 24.** Python sidecar still owns compression + `re_embed_all` + dashboard. | Internal dogfood |
 | v0.6 | Multi-language stopwords + extraction (18 languages embedded via `//go:embed`; loader + registry in `internal/native/extraction/languages.go`). Recurrence extraction, narrower person-name regex. Scoring/extraction still uses the English word lists hardcoded in `scoring.go`; swapping to the YAML-loaded rules is a follow-up once a language detector lands. | Infrastructure shipped; wiring follow-up |
 | v0.7 | Intent detection (reformulation / ordering / multi-hop / summary / temporal) + `record_access` on retrieved memories. | Planned |
-| v0.8 | `re_embed_all` (Go re-embed pipeline), compression port (needs Go LLM chat client -- dependency on OpenRouter/Ollama chat integration). | Planned |
+| v0.8 | `re_embed_all` (Go re-embed pipeline), compression port (needs Go LLM chat client -- dependency on OpenRouter/Ollama chat integration). Remove the `--legacy` backward-compat alias (introduced as a hidden alias for `--sidecar` in v0.7.0-rc4; emits deprecation warning throughout v0.7.x). | Planned |
 | v0.8+ | Graph-walk tools (`explore_knowledge`, `find_related`, `suggest_connections`) absorbed via recursive CTEs. Compression + re-embed stay Python (need Go LLM chat client we don't have). Dashboard stays Python forever. | Planned |
 
 Dashboard and Prefab UI deliberately stay Python-side -- absorbing them would require rebuilding the frontend in Node, which the time saved does not justify.
@@ -445,10 +462,11 @@ PICT models are designed **before** the implementation -- the test axes drive th
 ogham-cli/
 ├── cmd/                     # cobra subcommands
 │   ├── root.go
-│   ├── health.go            # native default, --legacy for sidecar
-│   ├── list.go              # native default, --legacy for sidecar
-│   ├── search.go            # native default, --legacy for sidecar tool-layer enrichment
-│   ├── store.go             # native default, --legacy for sidecar (compression / contradiction)
+│   ├── health.go            # native default, --sidecar for Python probes
+│   ├── list.go              # native default, --sidecar for Python tool path
+│   ├── search.go            # native default, --sidecar for full retrieval pipeline
+│   ├── store.go             # native default, --sidecar for sidecar (compression / contradiction)
+│   ├── capabilities.go      # native-vs-sidecar matrix (ogham capabilities [--json])
 │   ├── serve.go             # MCP server -- native tools + hybrid sidecar proxy
 │   ├── auth.go / init.go / hooks.go / import_agent_zero.go / import.go / plugin.go
 │   └── helpers.go           # connectSidecar, JSON emitter, result unwrap, fallback notice
