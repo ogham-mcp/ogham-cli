@@ -94,6 +94,55 @@ type switchProfileArgs struct {
 
 type currentProfileArgs struct{}
 
+// --- Batch B typed-store argument structs ---------------------------------
+//
+// These mirror the Python ogham-mcp tools (store_decision, store_fact,
+// store_event, store_preference) exactly so an MCP client already wired
+// against Python swaps to the Go binary without rewriting tool calls.
+// Each wraps native.Store() with a type-specific tag + structured
+// metadata payload.
+
+type storeDecisionArgs struct {
+	Decision        string   `json:"decision"                    jsonschema:"required,description=What was decided."`
+	Rationale       string   `json:"rationale"                   jsonschema:"required,description=Why -- the reasoning behind the decision."`
+	Alternatives    []string `json:"alternatives,omitempty"      jsonschema:"description=What was considered and rejected."`
+	ReasoningTrace  string   `json:"reasoning_trace,omitempty"   jsonschema:"description=Optional longer-form reasoning narrative."`
+	Tags            []string `json:"tags,omitempty"              jsonschema:"description=Additional tags; type:decision is always added."`
+	RelatedMemories []string `json:"related_memories,omitempty"  jsonschema:"description=IDs to link to after store. Not yet native -- pending Batch E graph walk."`
+	Source          string   `json:"source,omitempty"            jsonschema:"description=Where this decision was recorded (the MCP client / tool)."`
+	Profile         string   `json:"profile,omitempty"           jsonschema:"description=Profile override; defaults to the active profile."`
+}
+
+type storeFactArgs struct {
+	Fact           string   `json:"fact"                       jsonschema:"required,description=The factual statement."`
+	Subject        string   `json:"subject,omitempty"          jsonschema:"description=Optional subject/entity the fact is about."`
+	Confidence     float64  `json:"confidence,omitempty"       jsonschema:"description=Confidence in [0.0, 1.0]. Default 1.0."`
+	SourceCitation string   `json:"source_citation,omitempty"  jsonschema:"description=Optional citation (paper, URL, who-said-it)."`
+	Tags           []string `json:"tags,omitempty"             jsonschema:"description=Additional tags; type:fact is always added."`
+	Source         string   `json:"source,omitempty"           jsonschema:"description=Where this fact was recorded."`
+	Profile        string   `json:"profile,omitempty"          jsonschema:"description=Profile override; defaults to the active profile."`
+}
+
+type storeEventArgs struct {
+	Event        string   `json:"event"                 jsonschema:"required,description=What happened."`
+	When         string   `json:"when,omitempty"        jsonschema:"description=Time expression (verbatim; extraction layer parses it)."`
+	Participants []string `json:"participants,omitempty" jsonschema:"description=People or entities involved."`
+	Location     string   `json:"location,omitempty"    jsonschema:"description=Place name."`
+	Tags         []string `json:"tags,omitempty"        jsonschema:"description=Additional tags; type:event is always added."`
+	Source       string   `json:"source,omitempty"      jsonschema:"description=Where this event was recorded."`
+	Profile      string   `json:"profile,omitempty"     jsonschema:"description=Profile override; defaults to the active profile."`
+}
+
+type storePreferenceArgs struct {
+	Preference   string   `json:"preference"             jsonschema:"required,description=What is preferred (e.g. 'dark mode', 'PostgreSQL over MySQL')."`
+	Subject      string   `json:"subject,omitempty"      jsonschema:"description=Subject/entity the preference applies to."`
+	Alternatives []string `json:"alternatives,omitempty" jsonschema:"description=Rejected alternatives."`
+	Strength     string   `json:"strength,omitempty"     jsonschema:"description=One of: strong, normal, weak. Default 'normal'."`
+	Tags         []string `json:"tags,omitempty"         jsonschema:"description=Additional tags; type:preference is always added."`
+	Source       string   `json:"source,omitempty"       jsonschema:"description=Where this preference was recorded."`
+	Profile      string   `json:"profile,omitempty"      jsonschema:"description=Profile override; defaults to the active profile."`
+}
+
 // updateMemoryArgs uses pointer + nil-slice semantics so we can distinguish
 // an omitted field (leave untouched) from an explicit clear ([] / {}).
 // Content is *string: nil = untouched, "" = set to empty string, "..." = replace.
@@ -342,6 +391,97 @@ func BuildNativeReinforceHandler(cfg *native.Config) mcp.ToolHandler {
 	}
 }
 
+// --- Batch B typed-store handlers -----------------------------------------
+
+func BuildNativeStoreDecisionHandler(cfg *native.Config) mcp.ToolHandler {
+	return func(ctx context.Context, req *mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		var args storeDecisionArgs
+		if fail := unmarshalArgs(req, &args); fail != nil {
+			return fail, nil
+		}
+		result, err := native.StoreDecision(ctx, cfg, native.StoreDecisionOptions{
+			Decision:        args.Decision,
+			Rationale:       args.Rationale,
+			Alternatives:    args.Alternatives,
+			ReasoningTrace:  args.ReasoningTrace,
+			Tags:            args.Tags,
+			RelatedMemories: args.RelatedMemories,
+			Source:          args.Source,
+			Profile:         args.Profile,
+		})
+		if err != nil {
+			return errorResult(err.Error()), nil
+		}
+		return jsonResult(result)
+	}
+}
+
+func BuildNativeStoreFactHandler(cfg *native.Config) mcp.ToolHandler {
+	return func(ctx context.Context, req *mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		var args storeFactArgs
+		if fail := unmarshalArgs(req, &args); fail != nil {
+			return fail, nil
+		}
+		result, err := native.StoreFact(ctx, cfg, native.StoreFactOptions{
+			Fact:           args.Fact,
+			Subject:        args.Subject,
+			Confidence:     args.Confidence,
+			SourceCitation: args.SourceCitation,
+			Tags:           args.Tags,
+			Source:         args.Source,
+			Profile:        args.Profile,
+		})
+		if err != nil {
+			return errorResult(err.Error()), nil
+		}
+		return jsonResult(result)
+	}
+}
+
+func BuildNativeStoreEventHandler(cfg *native.Config) mcp.ToolHandler {
+	return func(ctx context.Context, req *mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		var args storeEventArgs
+		if fail := unmarshalArgs(req, &args); fail != nil {
+			return fail, nil
+		}
+		result, err := native.StoreEvent(ctx, cfg, native.StoreEventOptions{
+			Event:        args.Event,
+			When:         args.When,
+			Participants: args.Participants,
+			Location:     args.Location,
+			Tags:         args.Tags,
+			Source:       args.Source,
+			Profile:      args.Profile,
+		})
+		if err != nil {
+			return errorResult(err.Error()), nil
+		}
+		return jsonResult(result)
+	}
+}
+
+func BuildNativeStorePreferenceHandler(cfg *native.Config) mcp.ToolHandler {
+	return func(ctx context.Context, req *mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		var args storePreferenceArgs
+		if fail := unmarshalArgs(req, &args); fail != nil {
+			return fail, nil
+		}
+		result, err := native.StorePreference(ctx, cfg, native.StorePreferenceOptions{
+			Preference:   args.Preference,
+			Subject:      args.Subject,
+			Alternatives: args.Alternatives,
+			Strength:     args.Strength,
+			Tags:         args.Tags,
+			Source:       args.Source,
+			Profile:      args.Profile,
+		})
+		if err != nil {
+			return errorResult(err.Error()), nil
+		}
+		return jsonResult(result)
+	}
+}
+
 func BuildNativeSwitchProfileHandler(cfg *native.Config) mcp.ToolHandler {
 	return func(ctx context.Context, req *mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		var args switchProfileArgs
@@ -561,6 +701,30 @@ func RegisterNativeTools(server *mcp.Server, cfg *native.Config) map[string]stru
 			"Return the currently active profile, resolving OGHAM_PROFILE env > ~/.ogham/active_profile > config.toml default_profile > \"default\".",
 			currentProfileArgs{},
 			BuildNativeCurrentProfileHandler(cfg),
+		},
+		{
+			"store_decision",
+			"Store an architectural decision with rationale. Creates a memory with type:decision tag and structured metadata (alternatives, reasoning_trace, decided_at). related_memories linking is pending Batch E.",
+			storeDecisionArgs{},
+			BuildNativeStoreDecisionHandler(cfg),
+		},
+		{
+			"store_fact",
+			"Store a factual statement with confidence and optional citation. Creates a memory with type:fact tag; metadata carries subject, confidence, source_citation, recorded_at.",
+			storeFactArgs{},
+			BuildNativeStoreFactHandler(cfg),
+		},
+		{
+			"store_event",
+			"Store an event with temporal + participant metadata. Creates a memory with type:event tag so temporal queries match by when, social queries by participants, location queries by location.",
+			storeEventArgs{},
+			BuildNativeStoreEventHandler(cfg),
+		},
+		{
+			"store_preference",
+			"Store a user preference with structured metadata. type:preference tag. strength distinguishes 'always' (strong) from 'usually' (normal) from 'sometimes' (weak).",
+			storePreferenceArgs{},
+			BuildNativeStorePreferenceHandler(cfg),
 		},
 	}
 
