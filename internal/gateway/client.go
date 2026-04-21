@@ -2,6 +2,7 @@ package gateway
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -32,12 +33,14 @@ func New(baseURL, apiKey, userAgent string) *Client {
 
 // doWithRetry executes an HTTP request with exponential backoff.
 // Retries on network errors, 500+, and 503 with X-Neon-Status: Waking-Up.
-// Does NOT retry on 4xx (client errors).
-func (c *Client) doWithRetry(req *http.Request) (*http.Response, error) {
+// Does NOT retry on 4xx (client errors). Honours ctx cancellation for
+// both the per-request Do and the between-attempt sleep -- Ctrl+C on
+// the CLI tears down the in-flight gateway call cleanly.
+func (c *Client) doWithRetry(ctx context.Context, req *http.Request) (*http.Response, error) {
 	maxRetries := 3
 	backoff := 1 * time.Second
 
-	// Save body for retries (if present)
+	// Save body for retries (if present).
 	var bodyBytes []byte
 	if req.Body != nil {
 		var err error
@@ -48,22 +51,28 @@ func (c *Client) doWithRetry(req *http.Request) (*http.Response, error) {
 		_ = req.Body.Close()
 	}
 
+	var lastErr error
+	var lastStatus int
 	for i := 0; i < maxRetries; i++ {
-		// Reset body for each attempt
+		// Each attempt gets a fresh body + a ctx-carrying request.
+		attempt := req.Clone(ctx)
 		if bodyBytes != nil {
-			req.Body = io.NopCloser(bytes.NewReader(bodyBytes))
+			attempt.Body = io.NopCloser(bytes.NewReader(bodyBytes))
 		}
 
-		resp, err := c.http.Do(req)
-
+		resp, err := c.http.Do(attempt)
 		if err != nil {
-			// Network error -- retry
+			// Network error -- retry, unless ctx is already done.
+			if ctx.Err() != nil {
+				return nil, ctx.Err()
+			}
+			lastErr = err
 			slog.Warn("request failed", "attempt", i+1, "error", err)
 		} else if resp.StatusCode < 500 {
-			// Success or client error -- don't retry
+			// Success or client error -- don't retry.
 			return resp, nil
 		} else {
-			// Server error -- check for Neon cold start
+			// Server error -- check for Neon cold start.
 			neonStatus := resp.Header.Get("X-Neon-Status")
 			if neonStatus == "Waking-Up" {
 				slog.Info("neon waking up, will retry",
@@ -76,29 +85,37 @@ func (c *Client) doWithRetry(req *http.Request) (*http.Response, error) {
 					"attempt", i+1,
 				)
 			}
+			lastStatus = resp.StatusCode
 			_ = resp.Body.Close() // must close before retry to avoid fd leak
 		}
 
 		if i < maxRetries-1 {
-			// Exponential backoff: 1s, 2s, 4s
+			// Exponential backoff: 1s, 2s, 4s -- cancellable.
 			wait := backoff * time.Duration(1<<i)
 			slog.Info("retrying", "wait", wait)
-			time.Sleep(wait)
+			select {
+			case <-time.After(wait):
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			}
 		}
 	}
 
-	return nil, fmt.Errorf("failed after %d attempts", maxRetries)
+	if lastErr != nil {
+		return nil, fmt.Errorf("failed after %d attempts: %w", maxRetries, lastErr)
+	}
+	return nil, fmt.Errorf("failed after %d attempts (last status %d)", maxRetries, lastStatus)
 }
 
 // Health checks gateway connectivity.
-func (c *Client) Health() (map[string]any, error) {
-	req, err := http.NewRequest("GET", c.baseURL+"/api/v1/health", nil)
+func (c *Client) Health(ctx context.Context) (map[string]any, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.baseURL+"/api/v1/health", nil)
 	if err != nil {
 		return nil, err
 	}
 	c.setHeaders(req)
 
-	resp, err := c.doWithRetry(req)
+	resp, err := c.doWithRetry(ctx, req)
 	if err != nil {
 		return nil, fmt.Errorf("health check failed: %w", err)
 	}
@@ -112,14 +129,14 @@ func (c *Client) Health() (map[string]any, error) {
 }
 
 // FetchTools retrieves the MCP tool manifest from the gateway.
-func (c *Client) FetchTools() ([]map[string]any, error) {
-	req, err := http.NewRequest("GET", c.baseURL+"/api/v1/mcp/tools", nil)
+func (c *Client) FetchTools(ctx context.Context) ([]map[string]any, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.baseURL+"/api/v1/mcp/tools", nil)
 	if err != nil {
 		return nil, err
 	}
 	c.setHeaders(req)
 
-	resp, err := c.doWithRetry(req)
+	resp, err := c.doWithRetry(ctx, req)
 	if err != nil {
 		return nil, fmt.Errorf("fetch tools failed: %w", err)
 	}
@@ -137,7 +154,7 @@ func (c *Client) FetchTools() ([]map[string]any, error) {
 }
 
 // CallTool executes a tool call via the gateway.
-func (c *Client) CallTool(toolName string, arguments map[string]any) (any, error) {
+func (c *Client) CallTool(ctx context.Context, toolName string, arguments map[string]any) (any, error) {
 	body := map[string]any{
 		"tool":      toolName,
 		"arguments": arguments,
@@ -147,14 +164,14 @@ func (c *Client) CallTool(toolName string, arguments map[string]any) (any, error
 		return nil, err
 	}
 
-	req, err := http.NewRequest("POST", c.baseURL+"/api/v1/mcp/call", bytes.NewReader(jsonData))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.baseURL+"/api/v1/mcp/call", bytes.NewReader(jsonData))
 	if err != nil {
 		return nil, err
 	}
 	req.Header.Set("Content-Type", "application/json")
 	c.setHeaders(req)
 
-	resp, err := c.doWithRetry(req)
+	resp, err := c.doWithRetry(ctx, req)
 	if err != nil {
 		return nil, fmt.Errorf("call tool %s: %w", toolName, err)
 	}
@@ -172,7 +189,7 @@ func (c *Client) CallTool(toolName string, arguments map[string]any) (any, error
 }
 
 // BulkImport sends a batch of memories to the gateway bulk import endpoint.
-func (c *Client) BulkImport(memories []any) (map[string]any, error) {
+func (c *Client) BulkImport(ctx context.Context, memories []any) (map[string]any, error) {
 	body := map[string]any{
 		"memories": memories,
 	}
@@ -181,14 +198,14 @@ func (c *Client) BulkImport(memories []any) (map[string]any, error) {
 		return nil, err
 	}
 
-	req, err := http.NewRequest("POST", c.baseURL+"/api/v1/memories/bulk", bytes.NewReader(jsonData))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.baseURL+"/api/v1/memories/bulk", bytes.NewReader(jsonData))
 	if err != nil {
 		return nil, err
 	}
 	req.Header.Set("Content-Type", "application/json")
 	c.setHeaders(req)
 
-	resp, err := c.doWithRetry(req)
+	resp, err := c.doWithRetry(ctx, req)
 	if err != nil {
 		return nil, fmt.Errorf("bulk import: %w", err)
 	}
@@ -207,14 +224,14 @@ func (c *Client) BulkImport(memories []any) (map[string]any, error) {
 }
 
 // HookSessionStart calls the gateway hooks/session-start endpoint.
-func (c *Client) HookSessionStart(cwd, profile string) (string, error) {
-	return c.hookContextCall("/api/v1/hooks/session-start", map[string]string{
+func (c *Client) HookSessionStart(ctx context.Context, cwd, profile string) (string, error) {
+	return c.hookContextCall(ctx, "/api/v1/hooks/session-start", map[string]string{
 		"cwd": cwd, "profile": profile,
 	})
 }
 
 // HookPostTool calls the gateway hooks/post-tool endpoint.
-func (c *Client) HookPostTool(toolName string, toolInput map[string]any, cwd, sessionID, profile string) error {
+func (c *Client) HookPostTool(ctx context.Context, toolName string, toolInput map[string]any, cwd, sessionID, profile string) error {
 	body := map[string]any{
 		"tool_name":  toolName,
 		"tool_input": toolInput,
@@ -222,43 +239,43 @@ func (c *Client) HookPostTool(toolName string, toolInput map[string]any, cwd, se
 		"session_id": sessionID,
 		"profile":    profile,
 	}
-	_, err := c.hookStatusCall("/api/v1/hooks/post-tool", body)
+	_, err := c.hookStatusCall(ctx, "/api/v1/hooks/post-tool", body)
 	return err
 }
 
 // HookInscribe calls the gateway hooks/inscribe endpoint.
-func (c *Client) HookInscribe(sessionID, cwd, profile string) error {
+func (c *Client) HookInscribe(ctx context.Context, sessionID, cwd, profile string) error {
 	body := map[string]string{
 		"session_id": sessionID,
 		"cwd":        cwd,
 		"profile":    profile,
 	}
-	_, err := c.hookStatusCall("/api/v1/hooks/inscribe", body)
+	_, err := c.hookStatusCall(ctx, "/api/v1/hooks/inscribe", body)
 	return err
 }
 
 // HookRecall calls the gateway hooks/recall endpoint.
-func (c *Client) HookRecall(cwd, profile string) (string, error) {
-	return c.hookContextCall("/api/v1/hooks/recall", map[string]string{
+func (c *Client) HookRecall(ctx context.Context, cwd, profile string) (string, error) {
+	return c.hookContextCall(ctx, "/api/v1/hooks/recall", map[string]string{
 		"cwd": cwd, "profile": profile,
 	})
 }
 
 // hookContextCall makes a POST and returns the "context" field from the response.
-func (c *Client) hookContextCall(path string, body any) (string, error) {
+func (c *Client) hookContextCall(ctx context.Context, path string, body any) (string, error) {
 	jsonData, err := json.Marshal(body)
 	if err != nil {
 		return "", err
 	}
 
-	req, err := http.NewRequest("POST", c.baseURL+path, bytes.NewReader(jsonData))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.baseURL+path, bytes.NewReader(jsonData))
 	if err != nil {
 		return "", err
 	}
 	req.Header.Set("Content-Type", "application/json")
 	c.setHeaders(req)
 
-	resp, err := c.doWithRetry(req)
+	resp, err := c.doWithRetry(ctx, req)
 	if err != nil {
 		return "", fmt.Errorf("hook %s: %w", path, err)
 	}
@@ -273,27 +290,27 @@ func (c *Client) hookContextCall(path string, body any) (string, error) {
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
 		return "", fmt.Errorf("parse hook response: %w", err)
 	}
-	if ctx, ok := result["context"].(string); ok {
-		return ctx, nil
+	if ctxStr, ok := result["context"].(string); ok {
+		return ctxStr, nil
 	}
 	return "", nil
 }
 
 // hookStatusCall makes a POST and checks for success status.
-func (c *Client) hookStatusCall(path string, body any) (string, error) {
+func (c *Client) hookStatusCall(ctx context.Context, path string, body any) (string, error) {
 	jsonData, err := json.Marshal(body)
 	if err != nil {
 		return "", err
 	}
 
-	req, err := http.NewRequest("POST", c.baseURL+path, bytes.NewReader(jsonData))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.baseURL+path, bytes.NewReader(jsonData))
 	if err != nil {
 		return "", err
 	}
 	req.Header.Set("Content-Type", "application/json")
 	c.setHeaders(req)
 
-	resp, err := c.doWithRetry(req)
+	resp, err := c.doWithRetry(ctx, req)
 	if err != nil {
 		return "", fmt.Errorf("hook %s: %w", path, err)
 	}

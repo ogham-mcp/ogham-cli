@@ -1,10 +1,13 @@
 package cmd
 
 import (
+	"context"
 	"fmt"
 	"os"
+	"os/signal"
 	"path/filepath"
 	"strings"
+	"syscall"
 
 	"github.com/ogham-mcp/ogham-cli/internal/agentzeroimport"
 	"github.com/ogham-mcp/ogham-cli/internal/config"
@@ -100,6 +103,12 @@ Examples:
 		ua := fmt.Sprintf("ogham-cli/%s", Version)
 		client := gateway.New(cfg.GatewayURL, cfg.APIKey, ua)
 
+		// Ctrl+C halts the upload loop mid-batch; the in-flight HTTP
+		// call tears down cleanly via the gateway client's ctx-aware
+		// retry path.
+		ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+		defer cancel()
+
 		// Batch and upload
 		batchSize := 100
 		total := len(memories)
@@ -120,7 +129,7 @@ Examples:
 
 			fmt.Fprintf(os.Stderr, "Uploading batch %d-%d of %d ...\n", i+1, end, total)
 
-			result, err := client.BulkImport(payload)
+			result, err := client.BulkImport(ctx, payload)
 			if err != nil {
 				return fmt.Errorf("batch %d-%d failed: %w", i+1, end, err)
 			}

@@ -1,10 +1,13 @@
 package cmd
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
 	"os"
+	"os/signal"
+	"syscall"
 
 	"github.com/ogham-mcp/ogham-cli/internal/config"
 	"github.com/ogham-mcp/ogham-cli/internal/gateway"
@@ -30,6 +33,12 @@ var hooksRunCmd = &cobra.Command{
 		}
 		client := gateway.New(cfg.GatewayURL, cfg.APIKey, "ogham-cli/hooks")
 
+		// Hooks fire from Claude Code's wrapper; honour Ctrl+C and give
+		// the call a bounded window so a slow gateway can't stall the
+		// editor indefinitely.
+		ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+		defer cancel()
+
 		// Read stdin for hook input
 		input := readStdin()
 
@@ -38,12 +47,12 @@ var hooksRunCmd = &cobra.Command{
 		switch event {
 		case "session-start":
 			cwd := getField(input, "cwd", ".")
-			context, err := client.HookSessionStart(cwd, profile)
+			hookCtx, err := client.HookSessionStart(ctx, cwd, profile)
 			if err != nil {
 				return err
 			}
-			if context != "" {
-				fmt.Print(context)
+			if hookCtx != "" {
+				fmt.Print(hookCtx)
 			}
 
 		case "post-tool":
@@ -57,21 +66,21 @@ var hooksRunCmd = &cobra.Command{
 			}
 			cwd := getField(input, "cwd", "")
 			sessionID := getField(input, "session_id", "")
-			return client.HookPostTool(toolName, toolInput, cwd, sessionID, profile)
+			return client.HookPostTool(ctx, toolName, toolInput, cwd, sessionID, profile)
 
 		case "inscribe":
 			sessionID := getField(input, "session_id", "unknown")
 			cwd := getField(input, "cwd", ".")
-			return client.HookInscribe(sessionID, cwd, profile)
+			return client.HookInscribe(ctx, sessionID, cwd, profile)
 
 		case "recall":
 			cwd := getField(input, "cwd", ".")
-			context, err := client.HookRecall(cwd, profile)
+			hookCtx, err := client.HookRecall(ctx, cwd, profile)
 			if err != nil {
 				return err
 			}
-			if context != "" {
-				fmt.Print(context)
+			if hookCtx != "" {
+				fmt.Print(hookCtx)
 			}
 
 		default:
