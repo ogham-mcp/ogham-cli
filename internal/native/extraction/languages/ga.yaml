@@ -437,24 +437,74 @@ negation_markers:
   - "in ionad"
 
 # --- Date anchors (v0.7) ---
-# Populated per-language as follow-up. Empty here so the schema stays
-# stable; Go dates.go falls back to the English base pack when a
-# language omits anchors.
-today_words: []
-tomorrow_words: []
-yesterday_words: []
+# Irish "ó shin" is the canonical suffix-ago idiom ("2 seachtaine ó
+# shin" = "2 weeks ago"). Future-tense quantified prefix "i gceann"
+# is populated with an ASCII fallback. Modifiers use the "seo caite"
+# (last/past) and "seo chugainn" (next/coming) phrases, both SUFFIX --
+# the parser's modifier branch expects prefix ("last Monday"), so we
+# don't wire modifier_* for Irish until we extend it; left empty +
+# TODO.
+
+today_words:
+  - inniu
+
+tomorrow_words:
+  - "amárach"
+  - amarach
+
+yesterday_words:
+  - "inné"
+  - inne
+
+# TODO: Irish modifiers are POSTPOSED ("an tseachtain seo caite" =
+# "the week last"). The current relative regex expects prefix modifier.
+# Defer to v0.8: extend the regex to support postposed modifiers.
 modifier_last: []
 modifier_next: []
 modifier_this: []
-period_week: []
-period_month: []
-period_year: []
-unit_day: []
-unit_week: []
-unit_month: []
-unit_year: []
-ago_markers: []
-in_markers: []
+
+period_week:
+  - seachtain
+  - tseachtain
+
+period_month:
+  - "mí"
+  - mi
+  - "mhí"
+
+period_year:
+  - bliain
+  - bhliain
+
+unit_day:
+  - "lá"
+  - la
+  - laethanta
+
+unit_week:
+  - seachtain
+  - seachtaini
+  - "seachtainí"
+
+unit_month:
+  - "mí"
+  - mi
+  - "míonna"
+  - mionna
+
+unit_year:
+  - bliain
+  - blianta
+
+# "ó shin" is a two-token suffix form. The data-driven parser handles
+# multi-word markers via stripTrailingMarker.
+ago_markers:
+  - "ó shin"
+  - o shin
+
+# "i gceann" is a two-token prefix form.
+in_markers:
+  - "i gceann"
 
 # --- Recurrence (v0.7) ---
 recurrence_patterns: []

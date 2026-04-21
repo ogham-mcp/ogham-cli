@@ -34,7 +34,23 @@ detail lives in the commit/PR that actually picks it up.
   `native/store.go` so stored memories carry
   `metadata.recurrence` + `recurrence:<normalised>` /
   `recurrence:<dayname>` tags. English + German ship populated;
-  other 16 languages have empty blocks ready for content fill-in.
+  other 16 languages have empty `recurrence_patterns` blocks ready
+  for content fill-in (date anchors + quantified-relative markers
+  are now populated for all 18 languages; see the next bullet).
+- ~~Date-anchor blocks in all 18 language YAMLs~~ -- done. Prefix-ago
+  ("il y a 2 semaines", "hace 2 semanas", "vor 2 Wochen", "há 2
+  semanas", "قبل 3 أيام") + suffix-ago ("ago", "fa", "geleden",
+  "temu", "назад", "тому", "önce", "पहले", "전", "ó shin") +
+  prefix-in / suffix-in markers are wired into `parseQuantifiedRelativePack`
+  via a data-driven longest-prefix / longest-suffix match in
+  `internal/native/extraction/dates.go`. Hard-coded English + German
+  branches removed. `buildRelativeRe` now uses Unicode-aware word
+  boundaries (`[^\p{L}]`) so Cyrillic / Devanagari / Arabic markers
+  don't regress on Go RE2's ASCII-only `\b`. Deferred to v0.8:
+  ja/zh quantified forms (no whitespace between digit + unit +
+  marker) and postposed modifier parsing ("an tseachtain seo caite"
+  for Irish, "पिछले सोमवार" for Hindi). Anchors + units stay empty
+  in those cases with TODO notes in the YAMLs.
 - ~~Narrower person-name regex~~ -- done. Three-rule classifier
   (punct gate / multi-lang stopwords union / per-language denylist)
   lifts parity from 93.8% to 97.9% and drops all known tech-term

@@ -370,24 +370,70 @@ negation_markers:
   - "के बजाय"
 
 # --- Date anchors (v0.7) ---
-# Populated per-language as follow-up. Empty here so the schema stays
-# stable; Go dates.go falls back to the English base pack when a
-# language omits anchors.
-today_words: []
+# Hindi quantified relative dates use suffix markers: "पहले" (pahle =
+# ago) and "बाद" (baad = later/in). Construction is "<N> <unit>
+# <marker>", e.g. "2 दिन पहले" = "2 days ago". "बाद" alone is
+# ambiguous (means "after/later") so we also list "के बाद" for
+# disambiguation.
+#
+# NOTE: "कल" (kal) means BOTH "yesterday" and "tomorrow" in Hindi,
+# disambiguated only by verb tense. We leave yesterday_words +
+# tomorrow_words unpopulated to avoid emitting wrong anchors. Only
+# "आज" (aaj) is unambiguous.
+#
+# TODO (v0.8): Hindi modifiers "पिछले" (pichle = last) and "अगले"
+# (agle = next) are postposed in "पिछले सोमवार" -- same grammar
+# constraint as Irish. Defer until the regex supports postposed
+# modifiers.
+
+today_words:
+  - "आज"
+
 tomorrow_words: []
 yesterday_words: []
+
 modifier_last: []
 modifier_next: []
 modifier_this: []
-period_week: []
-period_month: []
-period_year: []
-unit_day: []
-unit_week: []
-unit_month: []
-unit_year: []
-ago_markers: []
-in_markers: []
+
+period_week:
+  - "हफ्ता"
+  - "सप्ताह"
+
+period_month:
+  - "महीना"
+  - "माह"
+
+period_year:
+  - "साल"
+  - "वर्ष"
+
+unit_day:
+  - "दिन"
+
+unit_week:
+  - "हफ्ता"
+  - "हफ्ते"
+  - "सप्ताह"
+
+unit_month:
+  - "महीना"
+  - "महीने"
+  - "माह"
+
+unit_year:
+  - "साल"
+  - "साल़"
+  - "वर्ष"
+
+# "पहले" always suffix ("2 दिन पहले" = "2 days ago").
+ago_markers:
+  - "पहले"
+
+# "बाद" (baad) suffix; "के बाद" two-token form also suffix.
+in_markers:
+  - "के बाद"
+  - "बाद"
 
 # --- Recurrence (v0.7) ---
 recurrence_patterns: []

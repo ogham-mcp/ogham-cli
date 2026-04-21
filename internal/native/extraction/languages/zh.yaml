@@ -395,22 +395,43 @@ negation_markers:
   - "而不是"
 
 # --- Date anchors (v0.7) ---
-# Populated per-language as follow-up. Empty here so the schema stays
-# stable; Go dates.go falls back to the English base pack when a
-# language omits anchors.
-today_words: []
-tomorrow_words: []
-yesterday_words: []
+# Single-word anchors populated. Quantified relatives ("2天前", "3天后")
+# are written WITHOUT whitespace between digit, unit, and marker, which
+# the current relative-phrase regex (`\d+\s+unit\s+marker`) cannot
+# match.
+#
+# TODO (v0.8): add a no-whitespace branch to buildRelativeRe for CJK
+# languages. Until then, unit_*, ago_markers, and in_markers are left
+# empty so they don't produce false negatives in the shared regex.
+
+today_words:
+  - "今天"
+  - "今日"
+
+tomorrow_words:
+  - "明天"
+  - "明日"
+
+yesterday_words:
+  - "昨天"
+  - "昨日"
+
+# TODO (v0.8): Chinese modifiers "上" / "下" / "这" attach directly
+# to period nouns (上周 = last week, 下周 = next week) without a space.
 modifier_last: []
 modifier_next: []
 modifier_this: []
+
 period_week: []
 period_month: []
 period_year: []
+
+# TODO (v0.8): Chinese units attach to digit without whitespace.
 unit_day: []
 unit_week: []
 unit_month: []
 unit_year: []
+
 ago_markers: []
 in_markers: []
 

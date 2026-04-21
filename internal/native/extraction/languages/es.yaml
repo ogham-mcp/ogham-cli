@@ -393,24 +393,90 @@ negation_markers:
   - en vez de
 
 # --- Date anchors (v0.7) ---
-# Populated per-language as follow-up. Empty here so the schema stays
-# stable; Go dates.go falls back to the English base pack when a
-# language omits anchors.
-today_words: []
-tomorrow_words: []
-yesterday_words: []
-modifier_last: []
-modifier_next: []
-modifier_this: []
-period_week: []
-period_month: []
-period_year: []
-unit_day: []
-unit_week: []
-unit_month: []
-unit_year: []
-ago_markers: []
-in_markers: []
+
+today_words:
+  - hoy
+
+tomorrow_words:
+  - "mañana"
+  - manana
+
+yesterday_words:
+  - ayer
+
+modifier_last:
+  - pasado
+  - pasada
+  - pasadas
+  - pasados
+  - "último"
+  - ultimo
+  - "última"
+  - ultima
+  - "últimos"
+  - ultimos
+  - "últimas"
+  - ultimas
+  - anterior
+
+modifier_next:
+  - "próximo"
+  - proximo
+  - "próxima"
+  - proxima
+  - "próximos"
+  - proximos
+  - "próximas"
+  - proximas
+  - siguiente
+
+modifier_this:
+  - este
+  - esta
+  - estos
+  - estas
+
+period_week:
+  - semana
+
+period_month:
+  - mes
+
+period_year:
+  - "año"
+  - ano
+
+unit_day:
+  - "día"
+  - dia
+  - "días"
+  - dias
+
+unit_week:
+  - semana
+  - semanas
+
+unit_month:
+  - mes
+  - meses
+
+unit_year:
+  - "año"
+  - ano
+  - "años"
+  - anos
+
+# "hace" is the canonical Spanish prefix-ago marker ("hace 2 semanas").
+# parsedatetime's base locale doesn't list Spanish modifiers, but hace
+# is the universal form across dialects.
+ago_markers:
+  - hace
+
+# "en" (prefix) for "en 3 días" and "dentro de" for more formal usage.
+# Both are well attested across dialects.
+in_markers:
+  - "dentro de"
+  - en
 
 # --- Recurrence (v0.7) ---
 recurrence_patterns: []

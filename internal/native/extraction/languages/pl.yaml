@@ -511,24 +511,109 @@ negation_markers:
   - w miejsce
 
 # --- Date anchors (v0.7) ---
-# Populated per-language as follow-up. Empty here so the schema stays
-# stable; Go dates.go falls back to the English base pack when a
-# language omits anchors.
-today_words: []
-tomorrow_words: []
-yesterday_words: []
-modifier_last: []
-modifier_next: []
-modifier_this: []
-period_week: []
-period_month: []
-period_year: []
-unit_day: []
-unit_week: []
-unit_month: []
-unit_year: []
-ago_markers: []
-in_markers: []
+# Polish uses suffix "temu" ("2 tygodnie temu" = "2 weeks ago") and
+# prefix "za" ("za 3 dni" = "in 3 days"). Polish nouns decline heavily
+# so the unit_* lists include the most common genitive/plural forms.
+
+today_words:
+  - "dziś"
+  - dzis
+  - dzisiaj
+
+tomorrow_words:
+  - jutro
+
+yesterday_words:
+  - wczoraj
+
+modifier_last:
+  - ostatni
+  - ostatnia
+  - ostatnie
+  - ostatniego
+  - ostatniej
+  - "zeszły"
+  - zeszly
+  - "zeszła"
+  - zeszla
+  - "zeszłe"
+  - zeszle
+  - "zeszłym"
+  - zeszlym
+  - "poprzedni"
+  - poprzednia
+  - poprzednie
+
+modifier_next:
+  - "następny"
+  - nastepny
+  - "następna"
+  - nastepna
+  - "następne"
+  - nastepne
+  - "przyszły"
+  - przyszly
+  - "przyszła"
+  - przyszla
+  - "przyszłe"
+  - przyszle
+
+modifier_this:
+  - ten
+  - ta
+  - to
+  - tym
+  - "tegoroczny"
+
+period_week:
+  - "tydzień"
+  - tydzien
+  - tygodniu
+
+period_month:
+  - "miesiąc"
+  - miesiac
+  - miesiacu
+  - "miesiącu"
+
+period_year:
+  - rok
+  - roku
+
+unit_day:
+  - "dzień"
+  - dzien
+  - dni
+  - dniach
+
+unit_week:
+  - "tydzień"
+  - tydzien
+  - tygodnie
+  - tygodni
+  - tygodniach
+
+unit_month:
+  - "miesiąc"
+  - miesiac
+  - "miesiące"
+  - miesiace
+  - "miesięcy"
+  - miesiecy
+
+unit_year:
+  - rok
+  - lata
+  - lat
+  - latach
+
+# "temu" is the universal suffix-ago marker.
+ago_markers:
+  - temu
+
+# "za" is the prefix-in marker ("za 3 dni").
+in_markers:
+  - za
 
 # --- Recurrence (v0.7) ---
 recurrence_patterns: []

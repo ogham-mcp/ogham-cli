@@ -65,8 +65,17 @@ func DatesAtForLang(content string, ref time.Time, lang string) []string {
 	// Relative phrases only fire if no absolute date was detected.
 	// Python: `if not dates:` guards this branch.
 	if len(seen) == 0 && pack.relativeRe != nil {
-		for _, m := range pack.relativeRe.FindAllString(content, -1) {
-			if d, ok := parseRelativePack(strings.ToLower(m), ref, pack); ok {
+		// Capture group 1 is the relative phrase stripped of any
+		// boundary characters -- the regex uses
+		// `(?:^|[^\p{L}])(payload)(?:[^\p{L}]|$)` so non-ASCII scripts
+		// (Cyrillic, Devanagari, Arabic, etc.) get word-boundary
+		// behaviour without relying on Go RE2's ASCII-only \b.
+		for _, m := range pack.relativeRe.FindAllStringSubmatch(content, -1) {
+			if len(m) < 2 {
+				continue
+			}
+			phrase := strings.TrimSpace(m[1])
+			if d, ok := parseRelativePack(strings.ToLower(phrase), ref, pack); ok {
 				seen[d.Format("2006-01-02")] = struct{}{}
 			}
 		}
@@ -349,7 +358,15 @@ func buildNaturalRe(pack *datePack) *regexp.Regexp {
 }
 
 // buildRelativeRe assembles the case-insensitive relative-phrase regex.
-// Covers: anchor words, modifier+weekday|period, "N units ago", "in N units".
+// Covers: anchor words, modifier+weekday|period, "N units ago", "in N
+// units", plus the mirror suffix-in "<N> <unit> <in-marker>" for
+// languages (Turkish, Korean) that postpose the future marker.
+//
+// Boundaries use Unicode-aware char classes `[^\p{L}]` rather than
+// `\b` because Go RE2's `\b` is ASCII-only and misses Cyrillic /
+// Devanagari / Arabic / CJK transitions. The payload itself is
+// captured as group 1 so the DatesAtForLang caller can peel off the
+// boundary characters.
 func buildRelativeRe(pack *datePack) *regexp.Regexp {
 	anchorsAlt := altFromMap(pack.Anchors)
 	weekdaysAlt := altFromWeekdays(pack.Weekdays)
@@ -374,20 +391,31 @@ func buildRelativeRe(pack *datePack) *regexp.Regexp {
 		parts = append(parts, anchorsAlt)
 	}
 	if unitsAlt != "" && agoAlt != "" {
-		// Postfix: "2 weeks ago" (English).
+		// Suffix: "2 weeks ago" (English), "2 settimane fa" (Italian),
+		// "2 weken geleden" (Dutch), "2 tygodnie temu" (Polish),
+		// "2 недели назад" (Russian), "2 hafta önce" (Turkish),
+		// "2 हफ्ते पहले" (Hindi), "2 주 전" (Korean).
 		parts = append(parts, `\d+\s+(?:`+unitsAlt+`)\s+(?:`+agoAlt+`)`)
-		// Prefix: "vor 2 Wochen" (German). Harmless for English because
-		// English doesn't ship "ago" in sentence-initial position.
+		// Prefix: "vor 2 Wochen" (German), "il y a 2 semaines" (French),
+		// "hace 2 semanas" (Spanish), "há 2 semanas" (Portuguese),
+		// "قبل 2 أيام" (Arabic).
 		parts = append(parts, `(?:`+agoAlt+`)\s+\d+\s+(?:`+unitsAlt+`)`)
 	}
 	if unitsAlt != "" && inAlt != "" {
+		// Prefix: "in 3 weeks" (English), "dans 3 jours" (French),
+		// "fra 3 giorni" (Italian), "za 3 dni" (Polish),
+		// "через 3 дня" (Russian), "بعد 3 أيام" (Arabic).
 		parts = append(parts, `(?:`+inAlt+`)\s+\d+\s+(?:`+unitsAlt+`)`)
+		// Suffix: "3 gün sonra" (Turkish), "3 일 후" (Korean),
+		// "3 दिन बाद" (Hindi).
+		parts = append(parts, `\d+\s+(?:`+unitsAlt+`)\s+(?:`+inAlt+`)`)
 	}
 
 	if len(parts) == 0 {
 		return nil
 	}
-	return regexp.MustCompile(`(?i)\b(` + strings.Join(parts, "|") + `)\b`)
+	// Unicode-aware word boundaries. The payload is captured as group 1.
+	return regexp.MustCompile(`(?i)(?:^|[^\p{L}])(` + strings.Join(parts, "|") + `)(?:[^\p{L}]|$)`)
 }
 
 func altFromMap(m map[string]int) string {
@@ -594,41 +622,69 @@ func parseRelativePack(phrase string, ref time.Time, pack *datePack) (time.Time,
 }
 
 func parseQuantifiedRelativePack(phrase string, ref time.Time, pack *datePack) (time.Time, bool) {
-	fields := strings.Fields(phrase)
-	if len(fields) != 3 {
-		return time.Time{}, false
-	}
-	// Three shapes we care about:
-	//   <N> <unit> <ago-marker>      English "2 weeks ago"
-	//   <in-marker> <N> <unit>       English "in 3 weeks"
-	//   <ago-marker> <N> <unit>      German  "vor 2 Wochen"
+	// Data-driven: the language's ago/in marker lists can contain
+	// multi-word phrases ("il y a", "há", "hace", "2 semanas atrás").
+	// We peel the longest matching marker from the left (prefix shape)
+	// or the right (suffix shape) and expect the remainder to be
+	// exactly `<N> <unit>` after whitespace normalisation.
 	//
-	// German "vor" is syntactically prefix (like English "in") but
-	// semantically past, so we check both positions before falling
-	// through. in-markers take precedence at position 0 to preserve
-	// English "in" behaviour -- avoids a false-positive if a language
-	// ever ships "in" as both marker types.
-	direction := 0
-	var nStr, unitRaw string
+	// Four shapes we handle, each discovered by marker position:
+	//   suffix-ago: "<N> <unit> <ago-marker>"        EN "2 weeks ago", IT "2 settimane fa"
+	//   prefix-ago: "<ago-marker> <N> <unit>"        DE "vor 2 Wochen", FR "il y a 2 semaines", ES "hace 2 semanas"
+	//   prefix-in:  "<in-marker>  <N> <unit>"        EN "in 3 weeks", DE "in 3 Wochen"
+	//   suffix-in:  "<N> <unit> <in-marker>"         reserved for future langs; not populated today.
+	//
+	// In-markers are tried before ago-markers at position 0 to preserve
+	// English "in" as future. If a language ever ships the same literal
+	// in both marker sets, the in-marker wins -- callers should avoid
+	// that collision in YAML.
+	lower := strings.ToLower(strings.TrimSpace(phrase))
 
-	switch {
-	case containsCI(pack.AgoMarkers, fields[2]):
-		nStr, unitRaw = fields[0], fields[1]
-		direction = -1
-	case containsCI(pack.InMarkers, fields[0]):
-		nStr, unitRaw = fields[1], fields[2]
-		direction = +1
-	case containsCI(pack.AgoMarkers, fields[0]):
-		nStr, unitRaw = fields[1], fields[2]
-		direction = -1
-	default:
+	// Try prefix-in first so English "in" stays future-tense even if
+	// another language ever overloads it.
+	if rem, ok := stripLeadingMarker(lower, pack.InMarkers); ok {
+		if t, ok := parseNumberUnitTail(rem, ref, pack, +1); ok {
+			return t, true
+		}
+	}
+	// Prefix-ago: DE vor, FR il y a, ES hace, PT há, PL (post-fix only
+	// via suffix check below), NL ... etc.
+	if rem, ok := stripLeadingMarker(lower, pack.AgoMarkers); ok {
+		if t, ok := parseNumberUnitTail(rem, ref, pack, -1); ok {
+			return t, true
+		}
+	}
+	// Suffix-ago: EN "ago", IT "fa", PT "atrás", PL "temu", NL "geleden"...
+	if rem, ok := stripTrailingMarker(lower, pack.AgoMarkers); ok {
+		if t, ok := parseNumberUnitTail(rem, ref, pack, -1); ok {
+			return t, true
+		}
+	}
+	// Suffix-in: reserved. Some languages put the "from now" marker at
+	// the end ("2 weken vanaf nu") but we don't populate it yet; left
+	// in for symmetry and future extension.
+	if rem, ok := stripTrailingMarker(lower, pack.InMarkers); ok {
+		if t, ok := parseNumberUnitTail(rem, ref, pack, +1); ok {
+			return t, true
+		}
+	}
+
+	return time.Time{}, false
+}
+
+// parseNumberUnitTail parses "<N> <unit>" (exactly two whitespace-
+// separated fields) and returns the resolved date using the supplied
+// direction (+1 for future, -1 for past).
+func parseNumberUnitTail(rem string, ref time.Time, pack *datePack, direction int) (time.Time, bool) {
+	fields := strings.Fields(rem)
+	if len(fields) != 2 {
 		return time.Time{}, false
 	}
-	n, err := strconv.Atoi(nStr)
+	n, err := strconv.Atoi(fields[0])
 	if err != nil {
 		return time.Time{}, false
 	}
-	unit, ok := pack.Units[strings.ToLower(unitRaw)]
+	unit, ok := pack.Units[strings.ToLower(fields[1])]
 	if !ok {
 		return time.Time{}, false
 	}
@@ -647,6 +703,63 @@ func parseQuantifiedRelativePack(phrase string, ref time.Time, pack *datePack) (
 	}
 	return time.Date(ref.Year()+y, ref.Month()+time.Month(mo), ref.Day()+d,
 		0, 0, 0, 0, time.UTC), true
+}
+
+// stripLeadingMarker peels the longest matching marker from the start
+// of lower (already trimmed + lowercased). Returns the remainder after
+// the marker (with leading whitespace trimmed) + true on match.
+// Markers may be multi-word ("il y a"); we require a whitespace
+// boundary after the marker so "in" doesn't steal the front of
+// "information" style prose -- the relativeRe upstream already enforces
+// word boundaries, but this keeps the helper self-contained.
+func stripLeadingMarker(lower string, markers []string) (string, bool) {
+	best := ""
+	for _, m := range markers {
+		m = strings.ToLower(strings.TrimSpace(m))
+		if m == "" {
+			continue
+		}
+		if len(m) <= len(best) {
+			continue
+		}
+		if strings.HasPrefix(lower, m) {
+			after := lower[len(m):]
+			if after == "" || after[0] == ' ' || after[0] == '\t' {
+				best = m
+			}
+		}
+	}
+	if best == "" {
+		return "", false
+	}
+	return strings.TrimLeft(lower[len(best):], " \t"), true
+}
+
+// stripTrailingMarker peels the longest matching marker from the end.
+// Mirror of stripLeadingMarker; the leading character must be a
+// whitespace to ensure we're aligned to a word boundary rather than
+// stealing a suffix out of a longer word.
+func stripTrailingMarker(lower string, markers []string) (string, bool) {
+	best := ""
+	for _, m := range markers {
+		m = strings.ToLower(strings.TrimSpace(m))
+		if m == "" {
+			continue
+		}
+		if len(m) <= len(best) {
+			continue
+		}
+		if strings.HasSuffix(lower, m) {
+			before := lower[:len(lower)-len(m)]
+			if before == "" || before[len(before)-1] == ' ' || before[len(before)-1] == '\t' {
+				best = m
+			}
+		}
+	}
+	if best == "" {
+		return "", false
+	}
+	return strings.TrimRight(lower[:len(lower)-len(best)], " \t"), true
 }
 
 func parseWeekdayOrPeriodRelativePack(phrase string, ref time.Time, pack *datePack) (time.Time, bool) {
@@ -707,14 +820,4 @@ func modifierOffset(modifier string, base int) int {
 	default:
 		return base
 	}
-}
-
-func containsCI(haystack []string, needle string) bool {
-	n := strings.ToLower(needle)
-	for _, h := range haystack {
-		if strings.ToLower(h) == n {
-			return true
-		}
-	}
-	return false
 }

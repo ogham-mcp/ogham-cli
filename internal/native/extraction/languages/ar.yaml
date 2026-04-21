@@ -407,24 +407,90 @@ negation_markers:
   - "بدلاً من"
 
 # --- Date anchors (v0.7) ---
-# Populated per-language as follow-up. Empty here so the schema stays
-# stable; Go dates.go falls back to the English base pack when a
-# language omits anchors.
-today_words: []
-tomorrow_words: []
-yesterday_words: []
-modifier_last: []
-modifier_next: []
-modifier_this: []
-period_week: []
-period_month: []
-period_year: []
-unit_day: []
-unit_week: []
-unit_month: []
-unit_year: []
-ago_markers: []
-in_markers: []
+# Arabic relative-date forms: prefix "قبل" ("قبل 3 أيام" = "3 days ago"),
+# prefix "منذ" (since-form), prefix "بعد" (after/in). Numbers can be
+# written in Western digits (common in tech prose) or Eastern Arabic
+# numerals; we match on Western digits only. The parser's regex uses
+# \d which matches ASCII 0-9.
+#
+# NOTE: idiomatic Arabic often uses dual ("يومين" = two days) instead
+# of digit + noun when the quantity is 2. We accept the digit-prefixed
+# form because it's the dominant style in mixed-script / tech memos.
+
+today_words:
+  - "اليوم"
+
+tomorrow_words:
+  - "غداً"
+  - "غدا"
+
+yesterday_words:
+  - "أمس"
+  - "امس"
+
+modifier_last:
+  - "الماضي"
+  - "الماضية"
+  - "السابق"
+  - "السابقة"
+  - "المنصرم"
+
+modifier_next:
+  - "القادم"
+  - "القادمة"
+  - "المقبل"
+  - "المقبلة"
+  - "التالي"
+  - "التالية"
+
+modifier_this:
+  - "هذا"
+  - "هذه"
+  - "هذه ال"
+
+period_week:
+  - "أسبوع"
+  - "اسبوع"
+
+period_month:
+  - "شهر"
+
+period_year:
+  - "سنة"
+  - "عام"
+
+unit_day:
+  - "يوم"
+  - "أيام"
+  - "ايام"
+
+unit_week:
+  - "أسبوع"
+  - "اسبوع"
+  - "أسابيع"
+  - "اسابيع"
+
+unit_month:
+  - "شهر"
+  - "أشهر"
+  - "اشهر"
+  - "شهور"
+
+unit_year:
+  - "سنة"
+  - "سنوات"
+  - "عام"
+  - "أعوام"
+  - "اعوام"
+
+# All three are prefix markers.
+ago_markers:
+  - "قبل"
+  - "منذ"
+
+in_markers:
+  - "بعد"
+  - "خلال"
 
 # --- Recurrence (v0.7) ---
 recurrence_patterns: []

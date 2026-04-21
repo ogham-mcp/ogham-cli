@@ -401,24 +401,81 @@ negation_markers:
   - "à la place de"
 
 # --- Date anchors (v0.7) ---
-# Populated per-language as follow-up. Empty here so the schema stays
-# stable; Go dates.go falls back to the English base pack when a
-# language omits anchors.
-today_words: []
-tomorrow_words: []
-yesterday_words: []
-modifier_last: []
-modifier_next: []
-modifier_this: []
-period_week: []
-period_month: []
-period_year: []
-unit_day: []
-unit_week: []
-unit_month: []
-unit_year: []
-ago_markers: []
-in_markers: []
+
+today_words:
+  - "aujourd'hui"
+  - aujourdhui
+
+tomorrow_words:
+  - demain
+
+yesterday_words:
+  - hier
+
+modifier_last:
+  - dernier
+  - "dernière"
+  - derniere
+  - derniers
+  - "dernières"
+  - dernieres
+  - "précédent"
+  - precedent
+  - "précédente"
+  - precedente
+
+modifier_next:
+  - prochain
+  - prochaine
+  - prochains
+  - prochaines
+  - suivant
+  - suivante
+
+modifier_this:
+  - ce
+  - cet
+  - cette
+  - ces
+
+period_week:
+  - semaine
+
+period_month:
+  - mois
+
+period_year:
+  - "année"
+  - annee
+  - an
+
+unit_day:
+  - jour
+  - jours
+
+unit_week:
+  - semaine
+  - semaines
+
+unit_month:
+  - mois
+
+unit_year:
+  - an
+  - ans
+  - "année"
+  - annee
+  - "années"
+  - annees
+
+# "il y a" is the canonical prefix-ago marker in French ("il y a 2 semaines"
+# = "2 weeks ago"). parsedatetime maps it the same way.
+ago_markers:
+  - "il y a"
+
+# "dans" is the canonical prefix-in marker ("dans 3 jours" = "in 3 days").
+in_markers:
+  - dans
 
 # --- Recurrence (v0.7) ---
 recurrence_patterns: []

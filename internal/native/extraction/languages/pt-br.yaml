@@ -455,24 +455,93 @@ negation_markers:
   - no lugar de
 
 # --- Date anchors (v0.7) ---
-# Populated per-language as follow-up. Empty here so the schema stays
-# stable; Go dates.go falls back to the English base pack when a
-# language omits anchors.
-today_words: []
-tomorrow_words: []
-yesterday_words: []
-modifier_last: []
-modifier_next: []
-modifier_this: []
-period_week: []
-period_month: []
-period_year: []
-unit_day: []
-unit_week: []
-unit_month: []
-unit_year: []
-ago_markers: []
-in_markers: []
+# Brazilian Portuguese shares date grammar with European Portuguese;
+# the small extra idiom is "tem" as a colloquial alternative to "há"
+# ("tem 2 semanas" = "2 weeks ago"). parsedatetime pt_BR ships these.
+
+today_words:
+  - hoje
+
+tomorrow_words:
+  - "amanhã"
+  - amanha
+
+yesterday_words:
+  - ontem
+
+modifier_last:
+  - passado
+  - passada
+  - passados
+  - passadas
+  - "último"
+  - ultimo
+  - "última"
+  - ultima
+  - "últimos"
+  - ultimos
+  - "últimas"
+  - ultimas
+  - anterior
+
+modifier_next:
+  - "próximo"
+  - proximo
+  - "próxima"
+  - proxima
+  - "próximos"
+  - proximos
+  - "próximas"
+  - proximas
+  - seguinte
+
+modifier_this:
+  - este
+  - esta
+  - estes
+  - estas
+  - esse
+  - essa
+
+period_week:
+  - semana
+
+period_month:
+  - "mês"
+  - mes
+
+period_year:
+  - ano
+
+unit_day:
+  - dia
+  - dias
+
+unit_week:
+  - semana
+  - semanas
+
+unit_month:
+  - "mês"
+  - mes
+  - meses
+
+unit_year:
+  - ano
+  - anos
+
+# Prefix forms "há", "tem", "faz" + suffix "atrás".
+ago_markers:
+  - "há"
+  - ha
+  - "atrás"
+  - atras
+  - faz
+  - tem
+
+in_markers:
+  - "daqui a"
+  - em
 
 # --- Recurrence (v0.7) ---
 recurrence_patterns: []

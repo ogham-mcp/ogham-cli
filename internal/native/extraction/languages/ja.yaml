@@ -386,22 +386,48 @@ negation_markers:
   - "代わりに"
 
 # --- Date anchors (v0.7) ---
-# Populated per-language as follow-up. Empty here so the schema stays
-# stable; Go dates.go falls back to the English base pack when a
-# language omits anchors.
-today_words: []
-tomorrow_words: []
-yesterday_words: []
+# Single-word anchors populated. Quantified prefix-ago ("2日前" = "2
+# days ago") and suffix-in ("2日後" = "in 2 days") need special
+# handling: Japanese writes digit + unit + marker WITHOUT whitespace,
+# e.g. "2日前". The current relative-phrase regex in dates.go expects
+# `\d+\s+(?:unit)\s+(?:marker)`. Populating ago/in/unit here would
+# not match because of the whitespace requirement.
+#
+# TODO (v0.8): add a no-whitespace branch to buildRelativeRe for
+# CJK languages. Until then, ago_markers / in_markers / unit_* are
+# left empty so the relativeRe doesn't regress with spurious matches.
+
+today_words:
+  - "今日"
+  - "本日"
+
+tomorrow_words:
+  - "明日"
+  - "あした"
+  - "あす"
+
+yesterday_words:
+  - "昨日"
+  - "きのう"
+
+# TODO (v0.8): Japanese modifiers "先" / "来" / "今" attach directly
+# to the period noun (先週 = last week, 来週 = next week) without a
+# space. The current modifier regex is space-separated.
 modifier_last: []
 modifier_next: []
 modifier_this: []
+
 period_week: []
 period_month: []
 period_year: []
+
+# TODO (v0.8): Japanese units attach to the digit without a space.
+# See note above the block.
 unit_day: []
 unit_week: []
 unit_month: []
 unit_year: []
+
 ago_markers: []
 in_markers: []
 
