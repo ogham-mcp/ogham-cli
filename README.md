@@ -2,7 +2,7 @@
 
 A single Go binary that gives AI agents persistent, searchable memory -- even on locked-down enterprise laptops where third-party MCP servers are blocked.
 
-> **Pre-release.** v0.4 tagged internally 2026-04-20. v0.5 (in progress) absorbs the store path into native Go so the Python sidecar is optional for every write. Public flip is gated on employer-disclosure + counsel review. Install paths below assume building from source.
+> **Pre-release.** v0.4 tagged internally 2026-04-20; v0.5 native store shipped; v0.6 alpha adds a hybrid MCP proxy so `ogham serve` exposes every Python-only tool alongside native Go tools with no client reconfiguration. Public flip is gated on employer-disclosure + counsel review. Install paths below assume building from source.
 
 ## Who this is for
 
@@ -31,13 +31,23 @@ The Go binary bypasses the lockdown because it is *not* an MCP registration. It 
   │    MCP client (modelcontextprotocol/go-sdk)  │
   │    dotenv auto-loader (project .env etc.)    │
   └───────────────┬──────────────────────────────┘
-                  │  stdio (MCP JSON-RPC)
+                  │  stdio (MCP JSON-RPC) in `ogham serve`
+                  │
+                  │  Router: tool name -> handler
+                  │    native["store_memory"]    -> Go
+                  │    native["hybrid_search"]   -> Go
+                  │    native["list_recent"]     -> Go
+                  │    native["health_check"]    -> Go
+                  │    proxy["delete_memory"]    -> Sidecar
+                  │    proxy["compress_old_..."] -> Sidecar
+                  │    proxy["explore_knowledge"]-> Sidecar
+                  │    ...                         Sidecar
                   ▼
   ┌──────────────────────────────────────────────┐
-  │  ogham serve (Python, spawned as subprocess) │
-  │    FastMCP 3.x, hybrid search, entity        │
-  │    extraction (18 langs), compression,       │
-  │    Prefab dashboard                          │
+  │  ogham-mcp (Python, spawned as subprocess,   │
+  │   eager at startup, reconnect-supervised)    │
+  │    FastMCP 3.x, compression, graph walk,     │
+  │    Prefab dashboard, typed-store wrappers    │
   └───────────────┬──────────────────────────────┘
                   │
                   ▼
@@ -48,13 +58,16 @@ Three runtime paths, one codebase:
 
 | Path | How invoked | Default? | Use case |
 |---|---|---|---|
-| **Native Go** | default for every subcommand in v0.5 | yes | Go talks to Postgres / Supabase / Gemini (+ Ollama / OpenAI / Voyage / Mistral) directly. ~10× faster than sidecar for read paths; store latency drops ~4× (2s → 500ms) compared to sidecar-backed v0.4. |
-| **Sidecar** | `--legacy` (or `--python`) | opt-in | Routes through the Python MCP server. Needed for tool-layer enrichment the sidecar still owns (contradiction detection, supersedes annotation, compression) or when you deliberately want the pre-v0.5 behaviour. |
+| **Native Go** | default for every subcommand in v0.5+ | yes | Go talks to Postgres / Supabase / Gemini (+ Ollama / OpenAI / Voyage / Mistral) directly. ~10× faster than sidecar for read paths; store latency drops ~4× (2s → 500ms) compared to sidecar-backed v0.4. |
+| **Hybrid proxy (`ogham serve`)** | default in v0.6+ | yes | Native tools + Python sidecar tools merged into one MCP manifest. Native handlers win on name collision. If the sidecar fails to spawn, the server logs a warning and keeps serving the native subset. `--no-sidecar` forces native-only. |
+| **Sidecar (subcommands)** | `--legacy` (or `--python`) | opt-in | Routes a single subcommand through the Python MCP server. Useful for tool-layer enrichment the sidecar still owns (compression) or when you want pre-v0.5 behaviour for diff. |
 | **Gateway** | `go build -tags gateway .` | no | HTTPS against managed `api.ogham-mcp.dev`. Hidden in default build. |
 
 The v0.5 native path absorbs: `extraction` (entities, dates, importance), five embedders (Gemini / Ollama / OpenAI / Voyage / Mistral), hybrid search, and the full store pipeline (extraction → parallel embed + search → surprise → auto-link candidates → DB write). A shared SQLite embedding cache at `$HOME/.cache/ogham/embeddings.db` is wire-compatible with the Python sidecar: switching between the two warms the cache instead of paying cold start.
 
-Remaining sidecar-only features: dashboard (stays Python — absorbing it would require a Node frontend we don't want to build), `export` / `import` tools, and the tool-layer enrichment passes above.
+The v0.6 hybrid proxy removes the "tool not found" problem for Python-only features: `ogham serve` exposes every sidecar tool via a generic proxy handler (see `internal/mcp/proxy_handler.go`), so an MCP client wired to the Python server can drop in the Go binary without reconfiguring any tool calls. Reconnect-on-death supervisor recovers automatically if the Python subprocess exits mid-session (one reconnect attempt with a 1s backoff + 15s spawn timeout). Absorption path is incremental: once a tool gets a native Go implementation and lands in `RegisterNativeTools`, the proxy skip-list grows by one automatically -- no router changes needed.
+
+Remaining sidecar-only features: dashboard (stays Python forever -- absorbing it would require rebuilding the frontend in Node), `export` / `import` tools, compression (`compress_old_memories` needs an LLM chat client Go doesn't have yet).
 
 ## Install (pre-release -- build from source)
 
@@ -389,8 +402,10 @@ Everything is in `~/.ogham/config.toml` (Go canonical) and mirrored to `~/.ogham
 | v0.3 | Native path becomes default for read subcommands. huh TUI `ogham init`, native `list / search / health / stats / profile / delete / cleanup / decay / audit / config show`. `ogham dashboard` subprocess-execs Prefab. | Internal dogfood |
 | v0.4 | Release infrastructure -- GoReleaser pipeline, GitHub Actions release workflow, release playbook. Private-repo release; Homebrew tap deferred to post-disclosure. | Internal dogfood (tagged 2026-04-20) |
 | **v0.5** | **Native store absorption.** Extraction (entities / dates / importance), five embedders absorbed (Gemini / Ollama / OpenAI / Voyage / Mistral -- all with shared SQLite cache). Native store orchestrator chains extraction → parallel embed + search → surprise → auto-link candidates → Postgres or Supabase PostgREST write. Python parity harness on a 97-memory corpus locks entity / date / importance agreement. Gateway client ctx-clean end to end. Preview flag promoted to default; `--legacy` keeps the sidecar path. | Internal dogfood |
+| **v0.6-alpha** | **Hybrid MCP proxy + wizard + schema polish.** `ogham serve` eager-spawns the Python sidecar and proxies every tool it exposes that isn't already native -- native handlers (store_memory, hybrid_search, list_recent, health_check) always win on name collision. Reconnect-on-death supervisor with 1s backoff + 15s spawn timeout recovers from Python crashes mid-session. Graceful degradation: `--no-sidecar` or a spawn failure drops to native-only. Auto-generated MCP tool JSON schemas via `github.com/invopop/jsonschema` (no hand-written JSON to drift). `ogham init` skips the API-key field for Ollama. `EMBEDDING_DIM` + provider URL env vars honoured (env wins over TOML). `SearchResult.Metadata` exposed natively (no side-join). Dim-agnostic hybrid search RPC (any halfvec dim works without migration). | Internal dogfood |
 | v0.6 | Multi-language stopwords + extraction (de / fr / es / zh), contradiction detection, recurrence extraction, narrower person-name regex. | Planned |
-| v0.7 | Intent detection (reformulation / ordering / multi-hop / summary / temporal) + `record_access` on retrieved memories. After v0.7 the Python sidecar is strictly optional -- dashboard + compression + experimental tools only. | Planned |
+| v0.7 | Intent detection (reformulation / ordering / multi-hop / summary / temporal) + `record_access` on retrieved memories. CRUD + typed-store batches absorb natively, proxy skip-list grows automatically. | Planned |
+| v0.8+ | Graph-walk tools (`explore_knowledge`, `find_related`, `suggest_connections`) absorbed via recursive CTEs. Compression + re-embed stay Python (need Go LLM chat client we don't have). Dashboard stays Python forever. | Planned |
 
 Dashboard and Prefab UI deliberately stay Python-side -- absorbing them would require rebuilding the frontend in Node, which the time saved does not justify.
 
@@ -399,12 +414,29 @@ Dashboard and Prefab UI deliberately stay Python-side -- absorbing them would re
 ```bash
 go build ./...               # everything compiles
 go vet ./...                 # lint
-go test ./...                # unit tests
+go test ./...                # unit tests (hermetic)
+go test -race ./...          # race detector on concurrent paths
+make live                    # live-tagged smoke tests (real providers + Python sidecar)
 go build -tags gateway .     # build the gateway-passthrough variant
 go test -tags gateway ./...  # test the gateway variant
 ```
 
 Pre-commit hooks (`pre-commit install`) run `go fmt`, `go vet`, `go build`, large-file and private-key checks.
+
+### Testing standard (locked 2026-04-20)
+
+Every new package under `internal/native/` ships the full due-diligence bundle:
+
+1. **Table-driven subtests** -- hand-picked readable regressions (first thing a future contributor reads).
+2. **PICT combinatorial matrix** -- `testdata/<model>.pict` committed with the generated `testdata/<model>.pict.tsv`. `make pict-regen` regenerates locally.
+3. **90% line coverage gate** -- CI fails below threshold for `internal/native/...`.
+4. **Fuzz tests** (`go test -fuzz`) on any regex or parser touching untrusted input.
+5. **Race detector** on concurrent paths (store orchestrator, embedder pool, sidecar lifecycle).
+6. **Benchmarks** on hot paths (extraction runs on every store).
+7. **Python parity harness** for cross-stack features -- diff Python vs Go output on a fixed corpus. See `internal/native/extraction/testdata/parity_corpus_97.json` for the current anchor.
+8. **`//go:build live` smoke tests** for anything that touches a real HTTP endpoint or subprocess -- opt-in, self-skip on missing precondition.
+
+PICT models are designed **before** the implementation -- the test axes drive the function signature. CI has no PICT regen check (different `pict` versions produce different row sets for the same model; canonical-sort wasn't enough); PR review catches drift between `.pict` and `.tsv`.
 
 ### Project layout
 
@@ -412,19 +444,27 @@ Pre-commit hooks (`pre-commit install`) run `go fmt`, `go vet`, `go build`, larg
 ogham-cli/
 ├── cmd/                     # cobra subcommands
 │   ├── root.go
-│   ├── health.go            # sidecar-backed health
+│   ├── health.go            # native default, --legacy for sidecar
 │   ├── list.go              # native default, --legacy for sidecar
 │   ├── search.go            # native default, --legacy for sidecar tool-layer enrichment
-│   ├── store.go             # sidecar only for now (entity extractor port pending)
-│   ├── serve.go             # MCP server mode
-│   ├── auth.go / init.go / hooks.go / import_agent_zero.go
+│   ├── store.go             # native default, --legacy for sidecar (compression / contradiction)
+│   ├── serve.go             # MCP server -- native tools + hybrid sidecar proxy
+│   ├── auth.go / init.go / hooks.go / import_agent_zero.go / import.go / plugin.go
 │   └── helpers.go           # connectSidecar, JSON emitter, result unwrap, fallback notice
 ├── internal/
-│   ├── sidecar/             # MCP client wrapping a Python subprocess
+│   ├── sidecar/             # MCP client wrapping a Python subprocess (reconnect-supervised)
 │   ├── native/              # Go-native tool implementations (absorption surface)
-│   │   ├── config.go        # TOML + env precedence
+│   │   ├── config.go        # TOML + env precedence (env wins, EMBEDDING_DIM honoured)
 │   │   ├── envfile.go       # dotenv auto-loader
-│   │   └── list.go          # first absorbed tool
+│   │   ├── extraction/      # entities / dates / scoring -- English, 95%+ coverage, PICT + fuzz + bench
+│   │   ├── cache/           # shared SQLite embedding cache (wire-compatible with Python)
+│   │   ├── store.go         # orchestrator: extraction -> parallel embed+search -> surprise -> auto-link -> write
+│   │   └── ...              # health, list, search, stats, profile, delete, cleanup, decay, audit
+│   ├── mcp/                 # MCP server-side handlers
+│   │   ├── native_handlers.go  # auto-schema-generated native tool handlers
+│   │   ├── proxy_handler.go    # generic sidecar proxy + RegisterProxiedTools
+│   │   └── proxy_handler_test.go  # 8 unit tests with fakeSidecar
+│   ├── agentzeroimport/     # Agent Zero FAISS pickle importer (Python subprocess)
 │   ├── config/              # sidecar-mode TOML loader (APIKey + GatewayURL)
 │   ├── gateway/             # HTTPS client (only compiled under //go:build gateway)
 │   └── mcp/                 # MCP server-mode tool forwarding
