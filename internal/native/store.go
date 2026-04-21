@@ -30,6 +30,13 @@ type StoreOptions struct {
 	Tags    []string
 	Source  string
 	Profile string // empty -> cfg.Profile (which itself falls back to "default")
+	// Language is the 2-letter ISO code the extraction pipeline uses
+	// for scoring, date parsing, and recurrence detection. Empty string
+	// falls back to "en". Callers should set this from metadata[language]
+	// on re-embed / migration paths, or leave it empty to default to
+	// English. Values not in the embedded YAML registry produce a debug
+	// slog warning and fall back silently to English.
+	Language string
 	// DryRun skips the actual DB write. Still runs extraction + embedding
 	// + surprise so the caller sees what would happen. Useful for the
 	// Day 4 --native-store-preview flag where we want to confirm the
@@ -42,6 +49,11 @@ type StoreOptions struct {
 	// specific structure. Extracted keys lose on collision so the
 	// caller's intent wins. Nil is fine -- leaves extraction output
 	// alone.
+	//
+	// If Metadata contains a "language" string key AND StoreOptions.Language
+	// is empty, the metadata value is adopted as the effective language.
+	// This mirrors Python's service.py behaviour where metadata carries
+	// the language signal end-to-end.
 	Metadata map[string]any
 }
 
@@ -74,8 +86,8 @@ type AutoLink struct {
 // store_memory tool:
 //  1. Serial extraction (entities, dates, importance) -- ~microseconds
 //  2. errgroup parallel:
-//       - embedder.Embed(content)
-//       - searchByText(content[:200])  used to compute surprise
+//     - embedder.Embed(content)
+//     - searchByText(content[:200])  used to compute surprise
 //  3. surprise = 1.0 - max(similarity from step 2); default 0.5 on empty
 //  4. auto-link: top-N above threshold become links in the result; the
 //     actual INSERT into memory_links is deferred to the next commit
@@ -94,12 +106,26 @@ func Store(ctx context.Context, cfg *Config, content string, opts StoreOptions) 
 		return nil, fmt.Errorf("native store: empty content")
 	}
 
+	// Resolve effective language: explicit StoreOptions.Language wins,
+	// else metadata["language"] if present, else "en". Carried through
+	// to scoring + dates + recurrence extraction so per-memory locale
+	// drives the pipeline without a global config switch.
+	lang := opts.Language
+	if lang == "" {
+		if v, ok := opts.Metadata["language"].(string); ok {
+			lang = v
+		}
+	}
+	if lang == "" {
+		lang = "en"
+	}
+
 	// Serial extraction: runs in ~100us for typical paragraph input.
 	// Parallelising buys nothing and adds goroutine overhead we'd rather
 	// spend on the HTTP embed call.
 	entities := extraction.Entities(content)
-	dates := extraction.DatesAt(content, time.Now())
-	importance := extraction.Importance(content, opts.Tags)
+	dates := extraction.DatesAtForLang(content, time.Now(), lang)
+	importance := extraction.ImportanceForLang(content, opts.Tags, lang)
 
 	profile := opts.Profile
 	if profile == "" {
@@ -168,6 +194,9 @@ func Store(ctx context.Context, cfg *Config, content string, opts StoreOptions) 
 	if len(dates) > 0 {
 		metadata["dates"] = dates
 	}
+	// Language lands in metadata so re-embed / migration paths can
+	// recover the original locale without a separate column.
+	metadata["language"] = lang
 	// Caller-supplied metadata wins on collision -- typed-store wrappers
 	// pass {type, confidence, ...} and those keys must survive over any
 	// extraction artefact that happened to share a name.

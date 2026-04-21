@@ -544,6 +544,154 @@ preference_words:
 # with the opposite polarity. Conservative list -- false positives would
 # pollute the audit trail with spurious contradicts edges. Markers are matched
 # case-insensitively as substrings.
+
+# --- Date anchors (v0.7) ---
+
+today_words:
+  - today
+
+tomorrow_words:
+  - tomorrow
+
+yesterday_words:
+  - yesterday
+
+modifier_last:
+  - last
+
+modifier_next:
+  - next
+
+modifier_this:
+  - this
+
+period_week:
+  - week
+
+period_month:
+  - month
+
+period_year:
+  - year
+
+unit_day:
+  - day
+  - days
+
+unit_week:
+  - week
+  - weeks
+
+unit_month:
+  - month
+  - months
+
+unit_year:
+  - year
+  - years
+
+ago_markers:
+  - ago
+
+in_markers:
+  - in
+
+# --- Recurrence (v0.7) ---
+# Explicit recurrence phrases beyond "every <weekday>". Each entry gets
+# compiled to a regex and normalised to a canonical category string.
+# Matches are case-insensitive and word-boundary anchored. Non-exhaustive
+# by design -- the primary recurrence signal is every_words + day_names.
+recurrence_patterns:
+  - pattern: "daily"
+    normalised: "daily"
+  - pattern: "weekly"
+    normalised: "weekly"
+  - pattern: "bi[- ]?weekly"
+    normalised: "biweekly"
+  - pattern: "fortnightly"
+    normalised: "biweekly"
+  - pattern: "monthly"
+    normalised: "monthly"
+  - pattern: "quarterly"
+    normalised: "quarterly"
+  - pattern: "yearly"
+    normalised: "yearly"
+  - pattern: "annually"
+    normalised: "yearly"
+
+# --- Person-name tightening (v0.7) ---
+# Seeded with known tech-term false positives seen on real memories.
+# Items are stripped of trailing "." so "Next.js" stored as "Next.js"
+# still matches via the regex-level punctuation check, not this list.
+person_name_denylist:
+  - Docker
+  - Postgres
+  - PostgreSQL
+  - Redis
+  - Valkey
+  - SQLite
+  - Claude
+  - Anthropic
+  - OpenAI
+  - GitHub
+  - Hetzner
+  - Dokploy
+  - Vercel
+  - Railway
+  - Next
+  - React
+  - Node
+  - Python
+  - Go
+  - Ruby
+  - Rust
+  - Kubernetes
+  - Neon
+  - Supabase
+  - Cloudflare
+  - Gemini
+  - Voyage
+  - Mistral
+  - Ollama
+  - MCP
+  - SDK
+  - CLI
+  - API
+  - UI
+  - URL
+  - JSON
+  - YAML
+  - TOML
+  - Scratch
+  - Compose
+  - PR
+  - Dr
+
+# Bigrams are matched by joining both tokens with a single space and
+# lowercasing; the denylist above hits unigrams, while this list catches
+# the compound false-positives we've seen in the parity corpus.
+person_name_context_words:
+  - by
+  - from
+  - user
+  - person
+  - with
+  - met
+  - said
+  - told
+  - asked
+  - spoke
+  - spoken
+  - wrote
+  - called
+  - says
+  - cc
+  - to
+  - author
+  - contributor
+  - reviewer
+  - mentioned
+
 negation_markers:
   - no longer
   - not anymore
