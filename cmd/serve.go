@@ -8,18 +8,21 @@ import (
 	"os/signal"
 	"runtime"
 	"syscall"
+	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/ogham-mcp/ogham-cli/internal/config"
 	"github.com/ogham-mcp/ogham-cli/internal/gateway"
 	mcpserver "github.com/ogham-mcp/ogham-cli/internal/mcp"
 	"github.com/ogham-mcp/ogham-cli/internal/native"
+	"github.com/ogham-mcp/ogham-cli/internal/sidecar"
 	"github.com/spf13/cobra"
 )
 
 var (
-	debugFlag       bool
-	serveGatewayOpt bool
+	debugFlag         bool
+	serveGatewayOpt   bool
+	serveNoSidecarOpt bool
 )
 
 var serveCmd = &cobra.Command{
@@ -63,31 +66,100 @@ hasn't absorbed yet (compression, graph, full stats) surface as
 	},
 }
 
-// runNativeServe wires the four v0.5 native tools onto the MCP server
-// and runs it on stdio. Reads ~/.ogham/config.toml (written by
-// 'ogham init') for backend + embedder credentials -- no gateway API
-// key needed.
+// runNativeServe wires the v0.5 native tools onto the MCP server, then
+// (unless --no-sidecar is set) spawns the Python ogham-mcp sidecar and
+// proxies every tool the sidecar exposes that isn't already native.
+// Native handlers always win on name collision.
+//
+// Eager spawn at startup (not lazy) because MCP clients cache the
+// tool manifest after the initialize handshake; tools that don't exist
+// at manifest-time never surface to the client.
+//
+// Graceful degradation: if the sidecar fails to spawn (no uv, no Python,
+// wheel fetch timeout), we log a warning and keep serving the native
+// subset. The Go binary must work standalone for users who only need
+// the four native tools.
 func runNativeServe(ctx context.Context, server *mcp.Server) error {
 	cfg, err := native.Load(native.DefaultPath())
 	if err != nil {
 		return fmt.Errorf("load native config: %w", err)
 	}
-	// Minimal sanity: the native tools need at least a backend to do
-	// anything useful. A fresh install with no config should tell the
-	// user rather than start an MCP server that fails every call.
 	if cfg.Database.URL == "" && cfg.Database.SupabaseURL == "" {
 		return fmt.Errorf(
 			"no database configured. Run 'ogham init' to set up Postgres or Supabase, " +
 				"or use --gateway to forward to the managed gateway")
 	}
 
-	names := mcpserver.RegisterNativeTools(server, cfg)
-	slog.Info("registered native MCP tools", "count", len(names), "tools", names)
+	nativeNames := mcpserver.RegisterNativeTools(server, cfg)
+	slog.Info("registered native MCP tools",
+		"count", len(nativeNames),
+		"tools", toolNamesFor(nativeNames))
+
+	var sidecarClient *sidecar.Client
+	if !serveNoSidecarOpt {
+		sidecarClient = tryConnectSidecar(ctx, cfg)
+		if sidecarClient != nil {
+			defer func() { _ = sidecarClient.Close() }()
+			proxied, perr := mcpserver.RegisterProxiedTools(ctx, server, sidecarClient, sidecarClient, nativeNames)
+			if perr != nil {
+				// Manifest fetch failed even though Connect succeeded.
+				// Keep serving native; surface the warning.
+				slog.Warn("proxied tool registration failed; serving native-only",
+					"err", perr)
+			} else {
+				slog.Info("registered proxied MCP tools",
+					"count", len(proxied), "tools", proxied)
+			}
+		}
+	}
 
 	slog.Info("MCP server starting on stdio (native mode)",
 		"provider", cfg.Embedding.Provider,
-		"backend", backendLabel(cfg))
+		"backend", backendLabel(cfg),
+		"native_tools", len(nativeNames),
+		"sidecar_connected", sidecarClient != nil)
 	return server.Run(ctx, &mcp.StdioTransport{})
+}
+
+// tryConnectSidecar attempts to spawn the Python sidecar + run the MCP
+// initialize handshake with a bounded timeout. Returns nil on any
+// failure; callers must tolerate sidecar absence (native-only mode).
+//
+// The 15s timeout accommodates first-run `uv tool run --from ogham-mcp`
+// which may fetch the wheel + deps from PyPI. Subsequent runs with a
+// warm uv cache complete in ~1-2s.
+func tryConnectSidecar(ctx context.Context, cfg *native.Config) *sidecar.Client {
+	spawnCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
+	defer cancel()
+
+	// Forward the native config into the sidecar's env so both stacks
+	// see the same provider / dim / backend. Mirrors what the sidecar
+	// mode of the CLI does via connectSidecar.
+	client := sidecar.New(sidecar.Options{Env: cfg.SidecarEnv()})
+	if err := client.Connect(spawnCtx); err != nil {
+		slog.Warn("sidecar not available; serving native-only tools",
+			"err", err,
+			"hint", "install `uv` + `ogham-mcp`, or set OGHAM_SIDECAR_CMD, or pass --no-sidecar")
+		return nil
+	}
+	return client
+}
+
+// toolNamesFor turns the set of native tool names into a sorted slice
+// for logging. Keeps the "tools" log attribute deterministic across
+// restarts so grepping logs stays sane.
+func toolNamesFor(set map[string]struct{}) []string {
+	out := make([]string, 0, len(set))
+	for k := range set {
+		out = append(out, k)
+	}
+	// Cheap sort -- names are short + small N.
+	for i := 1; i < len(out); i++ {
+		for j := i; j > 0 && out[j-1] > out[j]; j-- {
+			out[j-1], out[j] = out[j], out[j-1]
+		}
+	}
+	return out
 }
 
 // runGatewayServe preserves the pre-v0.5 gateway forwarding mode. Kept
@@ -133,5 +205,7 @@ func init() {
 	serveCmd.Flags().BoolVar(&debugFlag, "debug", false, "Enable debug logging (JSON-RPC traffic)")
 	serveCmd.Flags().BoolVar(&serveGatewayOpt, "gateway", false,
 		"Forward tool calls to the managed gateway instead of serving native tools")
+	serveCmd.Flags().BoolVar(&serveNoSidecarOpt, "no-sidecar", false,
+		"Skip sidecar spawn -- serve only the native Go tools (useful in CI / air-gapped / to debug)")
 	rootCmd.AddCommand(serveCmd)
 }

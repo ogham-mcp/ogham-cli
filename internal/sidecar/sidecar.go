@@ -122,6 +122,24 @@ func (c *Client) CallTool(ctx context.Context, name string, args map[string]any)
 	})
 }
 
+// ListTools asks the sidecar for its tool manifest. The returned []*mcp.Tool
+// preserves Name, Description, and InputSchema so callers can re-register
+// the same tools on a different MCP server (the proxy use case).
+//
+// Used by `ogham serve` to build the hybrid native + proxied tool set:
+// native Go handlers win on name collision, everything else gets
+// forwarded to the sidecar via CallTool.
+func (c *Client) ListTools(ctx context.Context) ([]*mcp.Tool, error) {
+	if c.session == nil {
+		return nil, errors.New("sidecar: not connected (call Connect first)")
+	}
+	result, err := c.session.ListTools(ctx, nil)
+	if err != nil {
+		return nil, fmt.Errorf("sidecar list tools: %w", err)
+	}
+	return result.Tools, nil
+}
+
 // Close tears down the MCP session and waits for the subprocess to exit.
 func (c *Client) Close() error {
 	if c.session == nil {
