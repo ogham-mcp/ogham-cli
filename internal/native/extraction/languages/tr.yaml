@@ -1,0 +1,480 @@
+# Turkish word lists for Ogham MCP extraction and scoring.
+# Notes: Turkish uses dotted i/I and dotless i/I distinction. Store lowercase with
+# both forms. Agglutinative suffixes can attach to day/month names.
+
+day_names:
+  pazar: 0
+  pazartesi: 1
+  "salı": 2
+  sali: 2
+  "çarşamba": 3
+  carsamba: 3
+  "perşembe": 4
+  persembe: 4
+  cuma: 5
+  cumartesi: 6
+
+month_names:
+  ocak: 1
+  "şubat": 2
+  subat: 2
+  mart: 3
+  nisan: 4
+  "mayıs": 5
+  mayis: 5
+  haziran: 6
+  temmuz: 7
+  "ağustos": 8
+  agustos: 8
+  "eylül": 9
+  eylul: 9
+  ekim: 10
+  "kasım": 11
+  kasim: 11
+  "aralık": 12
+  aralik: 12
+
+every_words:
+  - her
+  - "her gün"
+  - "haftalık"
+  - haftalik
+  - "günlük"
+  - gunluk
+  - her hafta
+
+temporal_keywords:
+  - ne zaman
+  - tarih
+  - zaman
+  - saat
+  - "önce"
+  - once
+  - sonra
+  - "dün"
+  - dun
+  - "yarın"
+  - yarin
+  - "evvelsi gün"
+  - "öbür gün"
+  - "sırasında"
+  - sirasinda
+  - beri
+  - kadar
+  - "geçen"
+  - gecen
+  - gelecek
+  - hafta
+  - ay
+  - "yıl"
+  - yil
+  - "gün"
+  - gun
+  - "bugün"
+  - bugun
+
+direction_words:
+  after:
+    - sonra
+    - beri
+    - "ardından"
+    - ardindan
+    - takiben
+    - sonraki
+    - daha sonra
+  before:
+    - "önce"
+    - once
+    - "önceki"
+    - onceki
+    - "daha önce"
+    - evvel
+    - "öncesinde"
+
+decision_words:
+  - karar
+  - "seçti"
+  - "geçti"
+  - "taşıdı"
+  - "değiştirdi"
+  - benimsedi
+  - tercih
+  - belirledi
+  - "yapılandırdı"
+  - "uyguladı"
+
+error_words:
+  - hata
+  - istisna
+  - "başarısız"
+  - "arıza"
+  - "çöktü"
+  - bozuk
+  - "zaman aşımı"
+  - reddedildi
+  - "geçersiz"
+  - durdu
+
+architecture_words:
+  - "tasarım"
+  - "kalıp"
+  - "yeniden düzenleme"
+  - mimari
+  - "yeniden yapılandırma"
+  - "modüler"
+  - "ayrıştırma"
+  - soyutlama
+  - "arayüz"
+  - "geçiş"
+
+query_hints:
+  multi_hop:
+    - "kaç tane"
+    - "arasında"
+    - "hangisi önce"
+    - "kaç gün"
+    - "kaç ay"
+    - "ne kadar süre"
+  ordering:
+    - "sırası"
+    - "kronolojik"
+    - "eskiden yeniye"
+    - "yeniden eskiye"
+    - "hangi sırayla"
+  summary:
+    - "kapsamlı özet"
+    - "her şeyi özetle"
+    - "genel bakış"
+    - "tam özet"
+    - "özet"
+
+# --- Entity enrichment (v1) ---
+
+event_words:
+  - "düğün"
+  - dugun
+  - "cenaze"
+  - konser
+  - konferans
+  - "toplantı"
+  - toplanti
+  - "mülakat"
+  - mulakat
+  - parti
+  - "doğum günü"
+  - dogum gunu
+  - "yıldönümü"
+  - yildonumu
+  - mezuniyet
+  - tören
+  - toren
+  - resepsiyon
+  - "buluşma"
+  - bulusma
+  - gezi
+  - "tatil"
+  - "uçuş"
+  - ucus
+  - "randevu"
+  - muayene
+  - "sınav"
+  - sinav
+  - gösteri
+  - gosteri
+  - sunum
+  - maraton
+  - turnuva
+  - "maç"
+  - mac
+  - barbecue
+  - piknik
+  - hackathon
+  # Dative case -e/-a (düğüne gittim, toplantıya geldim)
+  - "düğüne"
+  - dugune
+  - "konsere"
+  - "konferansa"
+  - "toplantıya"
+  - toplantiya
+  - "partiye"
+  - "törene"
+  - torene
+  - "geziye"
+  - "tatile"
+  - "randevuya"
+  - "sınava"
+  - sinava
+  - "sunuma"
+  - "maça"
+  - maca
+  - "mezuniyete"
+  # Locative case -de/-da (düğünde, toplantıda)
+  - "düğünde"
+  - dugunde
+  - "konserde"
+  - "konferansta"
+  - "toplantıda"
+  - toplantida
+  - "partide"
+  - "törende"
+  - "sınavda"
+  - sinavda
+  - "tatilde"
+  - "gezide"
+  - "maçta"
+  - macta
+  # Ablative case -den/-dan (düğünden, toplantıdan)
+  - "düğünden"
+  - "konserden"
+  - "toplantıdan"
+  - toplantidan
+  - "tatilden"
+  - "sınavdan"
+  - sinavdan
+
+activity_words:
+  - "yemek pişirmek"
+  - "yemek pişirdim"
+  - "yürüyüş"
+  - yuruyus
+  - "koşmak"
+  - kosmak
+  - "koştum"
+  - kostum
+  - "yüzmek"
+  - yuzmek
+  - "yüzdüm"
+  - "yoga"
+  - "meditasyon"
+  - "bisiklet sürmek"
+  - "balık tutmak"
+  - "bahçecilik"
+  - "resim yapmak"
+  - "okumak"
+  - "okudum"
+  - "yazmak"
+  - "yazdım"
+  - "dans etmek"
+  - "dans ettim"
+  - "şarkı söylemek"
+  - "seyahat etmek"
+  - "seyahat ettim"
+  - "kamp yapmak"
+  - "tırmanmak"
+  - "kayak yapmak"
+  - "yavaş koşmak"
+  - "gönüllülük"
+  - "çalışmak"
+  - "calismak"
+  - "programlama yapmak"
+  - "hata ayıklamak"
+  - "antrenman yapmak"
+
+emotion_words:
+  # yüksek uyarılma pozitif
+  - "heyecanlı"
+  - heyecanli
+  - "coşkulu"
+  - coskulu
+  - "neşeli"
+  - neseli
+  # düşük uyarılma pozitif
+  - "mutlu"
+  - "memnun"
+  - "tatmin olmuş"
+  - "minnettar"
+  - "rahatlamış"
+  - rahatlamis
+  - "sakin"
+  - "huzurlu"
+  # yüksek uyarılma negatif
+  - "sinirlenmiş"
+  - sinirli
+  - "öfkeli"
+  - ofkeli
+  - "endişeli"
+  - endiseli
+  - "bunalmış"
+  - bunalmis
+  - "stresli"
+  # düşük uyarılma negatif
+  - "üzgün"
+  - uzgun
+  - "hayal kırıklığına uğramış"
+  - "sıkılmış"
+  - sikilmis
+  - "yorgun"
+  - "bitkin"
+  - "kaygılı"
+  - kaygili
+  - "gergin"
+  - "kafası karışmış"
+  # nötr/karışık
+  - "şaşırmış"
+  - sasirimis
+  - "meraklı"
+  - merakli
+  - "nostaljik"
+
+relationship_words:
+  - anne
+  - annem
+  - baba
+  - babam
+  - "kız kardeş"
+  - "erkek kardeş"
+  - "karı"
+  - kari
+  - "eş"
+  - koca
+  - partner
+  - "kız çocuğu"
+  - "oğul"
+  - "hala"
+  - teyze
+  - amca
+  - "dayı"
+  - "kuzen"
+  - "büyükanne"
+  - buyukanne
+  - "büyükbaba"
+  - buyukbaba
+  - "yeğen"
+  - arkadaş
+  - arkadas
+  - "kız arkadaş"
+  - "erkek arkadaş"
+  - patron
+  - "yönetici"
+  - yonetici
+  - "meslektaş"
+  - meslektas
+  - "öğretmen"
+  - ogretmen
+  - doktor
+  - terapist
+  - avukat
+  - "komşu"
+  - komsu
+  - "ev arkadaşı"
+  - "kiracı"
+  - "müşteri"
+  - musteri
+  - antrenör
+  - antrenor
+  # Dative -e/-a (anneme, babama, arkadaşa)
+  - anneme
+  - babama
+  - "kardeşime"
+  - kardesime
+  - "arkadaşa"
+  - arkadasa
+  - "arkadaşıma"
+  - arkadasima
+  - "eşime"
+  - "doktora"
+  - "öğretmene"
+  - ogretmene
+  - "antrenöre"
+  - antrenore
+  # Locative -de/-da (annede, arkadaşta)
+  - annede
+  - babada
+  # Ablative -den/-dan (anneden, arkadaştan)
+  - anneden
+  - babadan
+  - "kardeşten"
+  - kardesden
+  - "arkadaştan"
+  - arkadastan
+  # Accusative -i/-ı/-u/-ü (annemi gördüm, arkadaşımı aradım)
+  - annemi
+  - babamı
+  - "kardeşimi"
+  - kardesimi
+  - "arkadaşımı"
+  - arkadasimi
+  - "eşimi"
+  - "kızımı"
+
+possessive_triggers:
+  - benim
+  - onun
+  - onların
+  - bizim
+  - "kendi"
+
+quantity_units:
+  - dolar
+  - euro
+  - "sterlin"
+  - kilogram
+  - kilo
+  - kg
+  - kilometre
+  - km
+  - litre
+  - "bardak"
+  - "şişe"
+  - sise
+  - kitap
+  - kitaplar
+  - sayfa
+  - sayfalar
+  - film
+  - filmler
+  - "fotoğraf"
+  - fotograf
+  - yemek
+  - yemekler
+  - ders
+  - dersler
+  - "oturum"
+  - oturumlar
+  - "bölüm"
+  - bolum
+  - bilet
+  - biletler
+  - tur
+  - turlar
+  - set
+  - setler
+
+preference_words:
+  - tercih etmek
+  - tercih ederim
+  - favori
+  - sevmek
+  - seviyorum
+  - sevdim
+  - beğenmek
+  - beğeniyorum
+  - daha iyi
+  - en iyi
+  - nefret etmek
+  - "kaçınmak"
+  - tavsiye etmek
+  - tavsiye ederim
+  - genellikle
+  - her zaman
+  - "hep alırım"
+
+# Negation / supersession markers. Triggers the contradiction producer when
+# present in a stored memory that has high similarity to an existing memory
+# with the opposite polarity. Conservative list.
+negation_markers:
+  - artık değil
+  - artık yok
+  - eskiden
+  - önceden
+  - geçmişte
+  - vaktiyle
+  - yerine
+  - iptal edildi
+  - iptal edildi
+  - geri alındı
+  - geri çekildi
+  - kullanımdan kaldırıldı
+  - modası geçmiş
+  - eski
+  - terkedildi
