@@ -134,6 +134,37 @@ type storeEventArgs struct {
 	Profile      string   `json:"profile,omitempty"     jsonschema:"description=Profile override; defaults to the active profile."`
 }
 
+// --- Batch E graph walk args ---------------------------------------------
+
+type linkUnlinkedArgs struct {
+	BatchSize int     `json:"batch_size,omitempty" jsonschema:"description=Memories to process per call. Default 100."`
+	Threshold float64 `json:"threshold,omitempty"  jsonschema:"description=Minimum similarity to create a link. Default 0.85."`
+	MaxLinks  int     `json:"max_links,omitempty"  jsonschema:"description=Maximum links per memory. Default 5."`
+}
+
+type exploreKnowledgeArgs struct {
+	Query       string   `json:"query"                   jsonschema:"required,description=Natural language query."`
+	Depth       int      `json:"depth,omitempty"         jsonschema:"description=Relationship hops to traverse. 0 = seed only. Default 1."`
+	MinStrength float64  `json:"min_strength,omitempty"  jsonschema:"description=Minimum edge strength to traverse. Default 0.5."`
+	Limit       int      `json:"limit,omitempty"         jsonschema:"description=Seed match count. Default 5."`
+	Tags        []string `json:"tags,omitempty"          jsonschema:"description=Filter seed results to memories with any of these tags."`
+	Source      string   `json:"source,omitempty"        jsonschema:"description=Filter seed results to this source."`
+}
+
+type findRelatedArgs struct {
+	MemoryID          string   `json:"memory_id"                   jsonschema:"required,description=UUID of the starting memory."`
+	RelationshipTypes []string `json:"relationship_types,omitempty" jsonschema:"description=Filter edge types (e.g. supports, contradicts, supersedes)."`
+	Depth             int      `json:"depth,omitempty"             jsonschema:"description=Hops to traverse. Default 1."`
+	MinStrength       float64  `json:"min_strength,omitempty"      jsonschema:"description=Minimum edge strength. Default 0.5."`
+	Limit             int      `json:"limit,omitempty"             jsonschema:"description=Maximum results. Default 20."`
+}
+
+type suggestConnectionsArgs struct {
+	MemoryID          string `json:"memory_id"                     jsonschema:"required,description=UUID of the starting memory."`
+	MinSharedEntities int    `json:"min_shared_entities,omitempty" jsonschema:"description=Minimum entities in common. Default 2."`
+	Limit             int    `json:"limit,omitempty"               jsonschema:"description=Maximum suggestions. Default 10."`
+}
+
 // --- Batch C stats / config args (all take no parameters) ---------------
 
 type getConfigArgs struct{}
@@ -394,6 +425,94 @@ func BuildNativeReinforceHandler(cfg *native.Config) mcp.ToolHandler {
 			"id":         result.ID,
 			"profile":    result.Profile,
 			"confidence": result.Confidence,
+		})
+	}
+}
+
+// --- Batch E graph-walk handlers -----------------------------------------
+
+func BuildNativeLinkUnlinkedHandler(cfg *native.Config) mcp.ToolHandler {
+	return func(ctx context.Context, req *mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		var args linkUnlinkedArgs
+		if fail := unmarshalArgs(req, &args); fail != nil {
+			return fail, nil
+		}
+		result, err := native.LinkUnlinked(ctx, cfg, native.LinkUnlinkedOptions{
+			BatchSize: args.BatchSize,
+			Threshold: args.Threshold,
+			MaxLinks:  args.MaxLinks,
+		})
+		if err != nil {
+			return errorResult(err.Error()), nil
+		}
+		return jsonResult(result)
+	}
+}
+
+func BuildNativeExploreKnowledgeHandler(cfg *native.Config) mcp.ToolHandler {
+	return func(ctx context.Context, req *mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		var args exploreKnowledgeArgs
+		if fail := unmarshalArgs(req, &args); fail != nil {
+			return fail, nil
+		}
+		results, err := native.ExploreKnowledge(ctx, cfg, args.Query, native.ExploreOptions{
+			Depth:       args.Depth,
+			MinStrength: args.MinStrength,
+			Limit:       args.Limit,
+			Tags:        args.Tags,
+			Source:      args.Source,
+		})
+		if err != nil {
+			return errorResult(err.Error()), nil
+		}
+		return jsonResult(map[string]any{
+			"result": results,
+			"count":  len(results),
+		})
+	}
+}
+
+func BuildNativeFindRelatedHandler(cfg *native.Config) mcp.ToolHandler {
+	return func(ctx context.Context, req *mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		var args findRelatedArgs
+		if fail := unmarshalArgs(req, &args); fail != nil {
+			return fail, nil
+		}
+		if args.MemoryID == "" {
+			return errorResult("find_related: memory_id is required"), nil
+		}
+		results, err := native.FindRelated(ctx, cfg, args.MemoryID, native.FindRelatedOptions{
+			Depth:             args.Depth,
+			MinStrength:       args.MinStrength,
+			RelationshipTypes: args.RelationshipTypes,
+			Limit:             args.Limit,
+		})
+		if err != nil {
+			return errorResult(err.Error()), nil
+		}
+		return jsonResult(map[string]any{
+			"result": results,
+			"count":  len(results),
+		})
+	}
+}
+
+func BuildNativeSuggestConnectionsHandler(cfg *native.Config) mcp.ToolHandler {
+	return func(ctx context.Context, req *mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		var args suggestConnectionsArgs
+		if fail := unmarshalArgs(req, &args); fail != nil {
+			return fail, nil
+		}
+		if args.MemoryID == "" {
+			return errorResult("suggest_connections: memory_id is required"), nil
+		}
+		results, err := native.SuggestConnections(ctx, cfg, args.MemoryID, args.MinSharedEntities, args.Limit)
+		if err != nil {
+			return errorResult(err.Error()), nil
+		}
+		return jsonResult(map[string]any{
+			"result": results,
+			"count":  len(results),
 		})
 	}
 }
@@ -802,6 +921,30 @@ func RegisterNativeTools(server *mcp.Server, cfg *native.Config) map[string]stru
 			"Snapshot of the shared embedding cache at $HOME/.cache/ogham/embeddings.db: row count, size bytes, hit/miss counters since process start.",
 			getCacheStatsArgs{},
 			BuildNativeGetCacheStatsHandler(cfg),
+		},
+		{
+			"link_unlinked",
+			"Backfill auto-links for memories that don't have any yet. Call repeatedly after a bulk import until processed returns 0.",
+			linkUnlinkedArgs{},
+			BuildNativeLinkUnlinkedHandler(cfg),
+		},
+		{
+			"explore_knowledge",
+			"Hybrid search for the query, then walk the relationship graph N hops deep. Returns seed matches (depth=0) plus connected memories (depth=1+) with edge type + strength.",
+			exploreKnowledgeArgs{},
+			BuildNativeExploreKnowledgeHandler(cfg),
+		},
+		{
+			"find_related",
+			"Traverse the relationship graph from a known memory. Returns reachable memories with depth + edge strength. Impact-analysis tool.",
+			findRelatedArgs{},
+			BuildNativeFindRelatedHandler(cfg),
+		},
+		{
+			"suggest_connections",
+			"Suggest memories sharing entities with the target but no explicit relationship. Surfaces hidden connections through the entity graph.",
+			suggestConnectionsArgs{},
+			BuildNativeSuggestConnectionsHandler(cfg),
 		},
 	}
 

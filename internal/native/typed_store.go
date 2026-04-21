@@ -26,11 +26,10 @@ import (
 // metadata is rich context accessed at result-display time. Keep the
 // two distinct.
 
-// storeDecisionBatchRelated is set to true once Batch E (graph walk)
-// lands and db_create_relationship is absorbed natively. Until then,
-// a non-empty RelatedMemories list is rejected with a pointer at the
-// Python sidecar's store_decision for the related-linking flow.
-const storeDecisionBatchRelated = false
+// storeDecisionBatchRelated flips to true once CreateRelationship is
+// absorbed natively. With Batch E landed, store_decision creates
+// supports-type edges to each related_memories UUID after the INSERT.
+const storeDecisionBatchRelated = true
 
 // -----------------------------------------------------------------------
 // store_decision
@@ -80,12 +79,36 @@ func StoreDecision(ctx context.Context, cfg *Config, opts StoreDecisionOptions) 
 		metadata["reasoning_trace"] = opts.ReasoningTrace
 	}
 
-	return Store(ctx, cfg, content, StoreOptions{
+	result, err := Store(ctx, cfg, content, StoreOptions{
 		Tags:     appendTypeTag(opts.Tags, "type:decision"),
 		Source:   opts.Source,
 		Profile:  opts.Profile,
 		Metadata: metadata,
 	})
+	if err != nil {
+		return nil, err
+	}
+
+	// Post-store edge creation. Each related_memories UUID becomes a
+	// 'supports' edge from the new decision to the referenced memory.
+	// Best-effort: a single edge failure doesn't roll back the store,
+	// but we do surface the error to the caller (parity with Python
+	// where a raising db_create_relationship propagates up).
+	for _, relID := range opts.RelatedMemories {
+		if relID == "" {
+			continue
+		}
+		if err := CreateRelationship(ctx, cfg, CreateRelationshipOptions{
+			SourceID:     result.ID,
+			TargetID:     relID,
+			Relationship: "supports",
+			Strength:     1.0,
+			CreatedBy:    "user",
+		}); err != nil {
+			return result, fmt.Errorf("store_decision: link %s: %w", relID, err)
+		}
+	}
+	return result, nil
 }
 
 // -----------------------------------------------------------------------
