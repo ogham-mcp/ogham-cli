@@ -183,24 +183,29 @@ func Store(ctx context.Context, cfg *Config, content string, opts StoreOptions) 
 	if err != nil {
 		return nil, fmt.Errorf("native store: %w", err)
 	}
+	write := storeWrite{
+		Content:    content,
+		Embedding:  embedding,
+		Source:     opts.Source,
+		Profile:    profile,
+		Tags:       allTags,
+		Importance: importance,
+		Surprise:   surprise,
+		Metadata:   metadata,
+	}
 	switch backend {
 	case "postgres":
-		id, err := writeMemoryPostgres(ctx, cfg, storeWrite{
-			Content:    content,
-			Embedding:  embedding,
-			Source:     opts.Source,
-			Profile:    profile,
-			Tags:       allTags,
-			Importance: importance,
-			Surprise:   surprise,
-			Metadata:   metadata,
-		})
+		id, err := writeMemoryPostgres(ctx, cfg, write)
 		if err != nil {
 			return nil, fmt.Errorf("native store: write: %w", err)
 		}
 		result.ID = id
 	case "supabase":
-		return nil, fmt.Errorf("native store: supabase backend not yet absorbed -- use the sidecar path or --native-store-preview with the postgres backend")
+		id, err := writeMemorySupabase(ctx, cfg, write)
+		if err != nil {
+			return nil, fmt.Errorf("native store: write: %w", err)
+		}
+		result.ID = id
 	default:
 		return nil, fmt.Errorf("native store: unknown backend %q", backend)
 	}
@@ -220,6 +225,63 @@ type storeWrite struct {
 	Importance float64
 	Surprise   float64
 	Metadata   map[string]any
+}
+
+// writeMemorySupabase INSERTs the new row via PostgREST (/rest/v1/memories)
+// and returns the new row's uuid. Mirrors Python's SupabaseBackend.
+// store_memory at src/ogham/backends/supabase.py:50 -- the embedding
+// is sent as pgvector's text literal ("[0.1,0.2,...]") so pgvector
+// parses it into vector(N) without needing a binary codec.
+//
+// `Prefer: return=representation` asks PostgREST to echo the inserted
+// row (including the server-generated uuid) in the response body so we
+// don't have to make a second round-trip to look it up.
+func writeMemorySupabase(ctx context.Context, cfg *Config, m storeWrite) (string, error) {
+	client, err := newSupabaseClient(cfg)
+	if err != nil {
+		return "", fmt.Errorf("supabase client: %w", err)
+	}
+
+	row := map[string]any{
+		"content":    m.Content,
+		"embedding":  pgvectorLiteral(m.Embedding),
+		"profile":    m.Profile,
+		"tags":       m.Tags,
+		"importance": m.Importance,
+		"surprise":   m.Surprise,
+	}
+	if m.Source != "" {
+		row["source"] = m.Source
+	}
+	if len(m.Metadata) > 0 {
+		row["metadata"] = m.Metadata
+	} else {
+		row["metadata"] = map[string]any{}
+	}
+
+	// PostgREST accepts a single object OR an array. Using an array
+	// matches the shape supabase-py ultimately emits and makes the
+	// response parsing uniform with store_memories_batch if we add it.
+	body := []map[string]any{row}
+	headers := map[string]string{
+		"Prefer": "return=representation",
+	}
+	raw, err := client.postJSON(ctx, "/memories", body, headers)
+	if err != nil {
+		return "", err
+	}
+
+	// PostgREST returns [{row}]; pull the id back out.
+	var rows []struct {
+		ID string `json:"id"`
+	}
+	if err := json.Unmarshal(raw, &rows); err != nil {
+		return "", fmt.Errorf("supabase insert: decode response: %w (body: %s)", err, truncateForError(raw))
+	}
+	if len(rows) == 0 || rows[0].ID == "" {
+		return "", fmt.Errorf("supabase insert: no id returned (body: %s)", truncateForError(raw))
+	}
+	return rows[0].ID, nil
 }
 
 // writeMemoryPostgres INSERTs the new row and returns the generated uuid.
