@@ -8,6 +8,16 @@ detail lives in the commit/PR that actually picks it up.
 - **v0.7.0 final** -- tag once rc1 bakes clean for a few days.
 - **Homebrew tap flip** -- pending employment-policy clearance (#121). Gated.
 
+## Deprecations
+
+- **`--legacy` alias removal** -- scheduled for v0.8. The flag was
+  renamed to `--sidecar` in v0.7.0-rc4 (commit ba78312). The old name
+  still parses + still routes through the Python MCP, but is hidden
+  from `--help` and emits a one-line slog.Warn on use. The rename
+  reflects the architecture lock (2026-04-22): Python MCP = retrieval-
+  quality brain, Go CLI = enterprise-friendly access door.
+  `--python` continues to alias `--sidecar` and is not deprecated.
+
 ## Capabilities still in the Python sidecar
 
 - **`re_embed_all` native port** -- iterate rows, re-embed via existing
