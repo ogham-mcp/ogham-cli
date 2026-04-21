@@ -1,0 +1,393 @@
+# Spanish word lists for Ogham MCP extraction and scoring.
+# Notes: Month/day names are lowercase. "manana" means both "tomorrow" and "morning".
+
+day_names:
+  domingo: 0
+  lunes: 1
+  martes: 2
+  "miércoles": 3
+  miercoles: 3
+  jueves: 4
+  viernes: 5
+  "sábado": 6
+  sabado: 6
+
+month_names:
+  enero: 1
+  febrero: 2
+  marzo: 3
+  abril: 4
+  mayo: 5
+  junio: 6
+  julio: 7
+  agosto: 8
+  septiembre: 9
+  setiembre: 9
+  octubre: 10
+  noviembre: 11
+  diciembre: 12
+  # Abbreviations
+  ene: 1
+  feb: 2
+  mar: 3
+  abr: 4
+  may: 5
+  jun: 6
+  jul: 7
+  ago: 8
+  sep: 9
+  oct: 10
+  nov: 11
+  dic: 12
+
+every_words:
+  - cada
+  - todos los
+  - todas las
+  - semanal
+  - semanalmente
+  - diario
+  - diariamente
+  - a diario
+
+temporal_keywords:
+  - "cuándo"
+  - cuando
+  - fecha
+  - hora
+  - tiempo
+  - hace
+  - "último"
+  - ultima
+  - ultimo
+  - antes
+  - "después"
+  - despues
+  - durante
+  - desde
+  - hasta
+  - ayer
+  - "mañana"
+  - manana
+  - anteayer
+  - "pasado mañana"
+  - semana
+  - mes
+  - "año"
+  - ano
+  - "día"
+  - dia
+  - hoy
+
+direction_words:
+  after:
+    - "después"
+    - despues
+    - desde
+    - luego
+    - siguiente
+    - posterior
+    - "más tarde"
+    - mas tarde
+  before:
+    - antes
+    - anterior
+    - previo
+    - previamente
+    - "más temprano"
+    - mas temprano
+    - con anterioridad
+
+decision_words:
+  - decidido
+  - elegido
+  - migrado
+  - seleccionado
+  - reemplazado
+  - adoptado
+  - optado
+  - cambiado
+  - escogido
+  - configurado
+
+error_words:
+  - error
+  - "excepción"
+  - fallido
+  - fallo
+  - roto
+  - "caída"
+  - tiempo
+  - denegado
+  - "inválido"
+  - bloqueado
+
+architecture_words:
+  - "diseño"
+  - "patrón"
+  - "refactorización"
+  - arquitectura
+  - "reestructuración"
+  - modular
+  - desacoplar
+  - "abstracción"
+  - interfaz
+  - "migración"
+
+query_hints:
+  multi_hop:
+    - "cuántos"
+    - "entre"
+    - "qué vino primero"
+    - "cuánto tiempo entre"
+    - "cuántos días"
+    - "cuántos meses"
+  ordering:
+    - "orden de"
+    - "cronológico"
+    - "del más antiguo al más reciente"
+    - "del más reciente al más antiguo"
+    - "en qué orden"
+  summary:
+    - "resumen completo"
+    - "resumir todo"
+    - "visión general"
+    - "resumen integral"
+    - "panorama"
+
+# --- Entity enrichment (v1) ---
+
+event_words:
+  - boda
+  - funeral
+  - concierto
+  - conferencia
+  - "reunión"
+  - entrevista
+  - fiesta
+  - "cumpleaños"
+  - aniversario
+  - "graduación"
+  - ceremonia
+  - "recepción"
+  - viaje
+  - vacaciones
+  - vuelo
+  - cita
+  - "operación"
+  - examen
+  - "presentación"
+  - "maratón"
+  - carrera
+  - torneo
+  - partido
+  - picnic
+  - barbacoa
+
+activity_words:
+  - cocinar
+  - cocinado
+  - senderismo
+  - correr
+  - corrido
+  - nadar
+  - nadado
+  - yoga
+  - "meditación"
+  - ciclismo
+  - pescar
+  - pescado
+  - "jardinería"
+  - pintar
+  - pintado
+  - leer
+  - "leído"
+  - escribir
+  - escrito
+  - bailar
+  - bailado
+  - cantar
+  - cantado
+  - viajar
+  - viajado
+  - camping
+  - escalada
+  - "esquí"
+  - trotar
+  - caminar
+  - caminado
+  - voluntariado
+  - estudiar
+  - estudiado
+
+emotion_words:
+  - emocionado
+  - emocionada
+  - entusiasmado
+  - entusiasmada
+  - feliz
+  - contento
+  - contenta
+  - satisfecho
+  - satisfecha
+  - agradecido
+  - agradecida
+  - aliviado
+  - aliviada
+  - tranquilo
+  - tranquila
+  - frustrado
+  - frustrada
+  - enfadado
+  - enfadada
+  - furioso
+  - furiosa
+  - ansioso
+  - ansiosa
+  - estresado
+  - estresada
+  - triste
+  - decepcionado
+  - decepcionada
+  - aburrido
+  - aburrida
+  - cansado
+  - cansada
+  - preocupado
+  - preocupada
+  - nervioso
+  - nerviosa
+  - confundido
+  - confundida
+  - sorprendido
+  - sorprendida
+  - curioso
+  - curiosa
+
+relationship_words:
+  - madre
+  - padre
+  - hermana
+  - hermano
+  - esposa
+  - esposo
+  - pareja
+  - hija
+  - hijo
+  - "tía"
+  - "tío"
+  - prima
+  - primo
+  - abuela
+  - abuelo
+  - sobrina
+  - sobrino
+  - amiga
+  - amigo
+  - novia
+  - novio
+  - jefa
+  - jefe
+  - "compañera"
+  - "compañero"
+  - colega
+  - mentora
+  - mentor
+  - profesora
+  - profesor
+  - "médica"
+  - "médico"
+  - doctora
+  - doctor
+  - terapeuta
+  - abogada
+  - abogado
+  - vecina
+  - vecino
+  - "compañera de piso"
+  - "compañero de piso"
+  - clienta
+  - cliente
+  - entrenadora
+  - entrenador
+
+possessive_triggers:
+  - mi
+  - mis
+  - su
+  - sus
+  - nuestro
+  - nuestra
+  - nuestros
+  - nuestras
+
+quantity_units:
+  - "dólares"
+  - euros
+  - libras
+  - kilogramos
+  - kg
+  - "kilómetros"
+  - km
+  - litros
+  - tazas
+  - vasos
+  - botellas
+  - "películas"
+  - libros
+  - "páginas"
+  - fotos
+  - comidas
+  - clases
+  - vueltas
+  - series
+
+preference_words:
+  - preferir
+  - preferido
+  - preferencia
+  - favorito
+  - favorita
+  - gustar
+  - gustado
+  - encantar
+  - encantado
+  - disfrutar
+  - disfrutado
+  - mejor que
+  - mejor
+  - odiar
+  - odiado
+  - evitar
+  - recomendar
+  - recomendado
+  - normalmente
+  - generalmente
+  - siempre pido
+
+# Negation / supersession markers. Triggers the contradiction producer when
+# present in a stored memory that has high similarity to an existing memory
+# with the opposite polarity. Conservative list.
+negation_markers:
+  - ya no
+  - ya no es
+  - antes
+  - anteriormente
+  - antiguamente
+  - solía
+  - solíamos
+  - solían
+  - reemplazado por
+  - reemplazada por
+  - sustituido por
+  - sustituida por
+  - cancelado
+  - cancelada
+  - revertido
+  - revertida
+  - deprecado
+  - obsoleto
+  - descontinuado
+  - descontinuada
+  - en lugar de
+  - en vez de

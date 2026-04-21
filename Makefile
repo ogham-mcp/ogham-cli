@@ -78,6 +78,30 @@ coverage-full:
 	@DOCKER_HOST=$$(test -S ~/.orbstack/run/docker.sock && echo unix://$$HOME/.orbstack/run/docker.sock || echo unix:///var/run/docker.sock) \
 	go test -tags pgcontainer -cover ./internal/native/
 
+# Hermetic coverage artifacts -- committable snapshots for CI dashboards
+# and release notes. Writes:
+#   .coverage/cov.out   -- raw profile, used by go tool cover
+#   .coverage/cov.txt   -- per-function summary (low-coverage functions first)
+#   .coverage/cov.html  -- annotated source view
+coverage-report:
+	@mkdir -p .coverage
+	go test -coverprofile=.coverage/cov.out ./...
+	go tool cover -func=.coverage/cov.out > .coverage/cov.txt
+	go tool cover -html=.coverage/cov.out -o .coverage/cov.html
+	@echo "---" && tail -1 .coverage/cov.txt
+	@echo "report: .coverage/cov.html"
+
+# Full-fat coverage report including pgcontainer-backed tests. Run this
+# before tagging a release -- it's the number that counts against #141.
+coverage-full-report:
+	@mkdir -p .coverage
+	@DOCKER_HOST=$$(test -S ~/.orbstack/run/docker.sock && echo unix://$$HOME/.orbstack/run/docker.sock || echo unix:///var/run/docker.sock) \
+	go test -tags pgcontainer -coverprofile=.coverage/cov-full.out ./internal/native/...
+	go tool cover -func=.coverage/cov-full.out > .coverage/cov-full.txt
+	go tool cover -html=.coverage/cov-full.out -o .coverage/cov-full.html
+	@echo "---" && tail -1 .coverage/cov-full.txt
+	@echo "report: .coverage/cov-full.html"
+
 # Refresh the vendored schema from the R&D repo. Run when the canonical
 # schema_postgres.sql in openbrain-sharedmemory has changed; the pg
 # tests key off the copy in testdata/.

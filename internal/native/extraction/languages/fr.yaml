@@ -1,0 +1,401 @@
+# French word lists for Ogham MCP extraction and scoring.
+# Notes: Month/day names are lowercase in French. All months are masculine.
+
+day_names:
+  dimanche: 0
+  lundi: 1
+  mardi: 2
+  mercredi: 3
+  jeudi: 4
+  vendredi: 5
+  samedi: 6
+
+month_names:
+  janvier: 1
+  "février": 2
+  fevrier: 2
+  mars: 3
+  avril: 4
+  mai: 5
+  juin: 6
+  juillet: 7
+  "août": 8
+  aout: 8
+  septembre: 9
+  octobre: 10
+  novembre: 11
+  "décembre": 12
+  decembre: 12
+  # Abbreviations
+  jan: 1
+  "fév": 2
+  fev: 2
+  avr: 4
+  jui: 7
+  sep: 9
+  oct: 10
+  nov: 11
+  "déc": 12
+  dec: 12
+
+every_words:
+  - chaque
+  - tous les
+  - toutes les
+  - hebdomadaire
+  - quotidien
+  - quotidienne
+
+temporal_keywords:
+  - quand
+  - date
+  - heure
+  - temps
+  - il y a
+  - dernier
+  - "dernière"
+  - derniere
+  - avant
+  - "après"
+  - apres
+  - pendant
+  - depuis
+  - "jusqu'à"
+  - jusqua
+  - hier
+  - demain
+  - avant-hier
+  - "après-demain"
+  - semaine
+  - mois
+  - an
+  - "année"
+  - annee
+  - jour
+  - "aujourd'hui"
+
+direction_words:
+  after:
+    - "après"
+    - apres
+    - depuis
+    - ensuite
+    - suivant
+    - "ultérieur"
+    - plus tard
+  before:
+    - avant
+    - "précédent"
+    - precedent
+    - "antérieur"
+    - anterieur
+    - auparavant
+    - "plus tôt"
+    - plus tot
+
+decision_words:
+  - "décidé"
+  - choisi
+  - "migré"
+  - "sélectionné"
+  - "remplacé"
+  - "adopté"
+  - "opté"
+  - "basculé"
+  - "changé"
+  - retenu
+
+error_words:
+  - erreur
+  - exception
+  - "échoué"
+  - "échec"
+  - bogue
+  - plantage
+  - "cassé"
+  - "délai"
+  - "refusé"
+  - invalide
+
+architecture_words:
+  - conception
+  - "modèle"
+  - refactorisation
+  - architecture
+  - restructuration
+  - modulaire
+  - "découpler"
+  - abstraction
+  - interface
+  - migration
+
+query_hints:
+  multi_hop:
+    - "combien de"
+    - "entre"
+    - "qu'est-ce qui est venu en premier"
+    - "combien de temps entre"
+    - "combien de jours"
+    - "combien de mois"
+  ordering:
+    - "ordre de"
+    - "chronologique"
+    - "du plus ancien au plus récent"
+    - "du plus récent au plus ancien"
+    - "dans quel ordre"
+  summary:
+    - "résumé complet"
+    - "résumer tout"
+    - "vue d'ensemble"
+    - "synthèse"
+    - "aperçu de"
+
+# --- Entity enrichment (v1) ---
+
+event_words:
+  - mariage
+  - "funérailles"
+  - enterrement
+  - concert
+  - "conférence"
+  - "réunion"
+  - entretien
+  - "fête"
+  - anniversaire
+  - "cérémonie"
+  - "réception"
+  - retrouvailles
+  - voyage
+  - vacances
+  - vol
+  - rendez-vous
+  - "opération"
+  - examen
+  - "présentation"
+  - "démonstration"
+  - marathon
+  - course
+  - tournoi
+  - match
+  - pique-nique
+  - barbecue
+
+activity_words:
+  - cuisiner
+  - "cuisiné"
+  - "randonnée"
+  - "randonné"
+  - courir
+  - couru
+  - nager
+  - "nagé"
+  - yoga
+  - "méditation"
+  - cyclisme
+  - "pêcher"
+  - "pêché"
+  - jardinage
+  - peinture
+  - peint
+  - lire
+  - lu
+  - "écrire"
+  - "écrit"
+  - danser
+  - "dansé"
+  - chanter
+  - "chanté"
+  - voyager
+  - "voyagé"
+  - camping
+  - escalade
+  - ski
+  - jogging
+  - marcher
+  - "marché"
+  - "bénévolat"
+  - "étudier"
+  - "étudié"
+
+emotion_words:
+  # positif intense
+  - "enthousiaste"
+  - ravi
+  - "extatique"
+  - euphorique
+  # positif calme
+  - heureux
+  - heureuse
+  - content
+  - contente
+  - satisfait
+  - satisfaite
+  - reconnaissant
+  - reconnaissante
+  - "soulagé"
+  - "soulagée"
+  - calme
+  - paisible
+  # négatif intense
+  - "frustré"
+  - "frustrée"
+  - "en colère"
+  - furieux
+  - furieuse
+  - anxieux
+  - anxieuse
+  - "débordé"
+  - "débordée"
+  - "stressé"
+  - "stressée"
+  # négatif calme
+  - triste
+  - "déçu"
+  - "déçue"
+  - "ennuyé"
+  - "ennuyée"
+  - "fatigué"
+  - "fatiguée"
+  - "épuisé"
+  - "épuisée"
+  - inquiet
+  - "inquiète"
+  - nerveux
+  - nerveuse
+  - confus
+  - confuse
+  # neutre
+  - surpris
+  - surprise
+  - curieux
+  - curieuse
+  - nostalgique
+
+relationship_words:
+  - "mère"
+  - "père"
+  - soeur
+  - "frère"
+  - femme
+  - mari
+  - partenaire
+  - fille
+  - fils
+  - tante
+  - oncle
+  - cousine
+  - cousin
+  - "grand-mère"
+  - "grand-père"
+  - "nièce"
+  - neveu
+  - amie
+  - ami
+  - copine
+  - copain
+  - "fiancée"
+  - "fiancé"
+  - patronne
+  - patron
+  - "collègue"
+  - mentor
+  - professeure
+  - professeur
+  - "médecin"
+  - docteur
+  - "thérapeute"
+  - avocate
+  - avocat
+  - voisine
+  - voisin
+  - colocataire
+  - propriétaire
+  - cliente
+  - client
+  - entraîneuse
+  - "entraîneur"
+
+possessive_triggers:
+  - mon
+  - ma
+  - mes
+  - son
+  - sa
+  - ses
+  - leur
+  - leurs
+  - notre
+  - nos
+
+quantity_units:
+  - dollars
+  - euros
+  - livres
+  - kilogrammes
+  - kg
+  - "kilomètres"
+  - km
+  - litres
+  - tasses
+  - verres
+  - bouteilles
+  - films
+  - livres
+  - pages
+  - photos
+  - repas
+  - cours
+  - tours
+  - "séries"
+
+preference_words:
+  - "préférer"
+  - "préfère"
+  - "préféré"
+  - "préférence"
+  - favori
+  - favorite
+  - aimer
+  - aime
+  - aimé
+  - adorer
+  - adore
+  - adoré
+  - "j'adore"
+  - "plutôt"
+  - mieux que
+  - meilleur
+  - "détester"
+  - "déteste"
+  - "éviter"
+  - recommander
+  - recommande
+  - "recommandé"
+  - habituellement
+  - "d'habitude"
+
+# Negation / supersession markers. Triggers the contradiction producer when
+# present in a stored memory that has high similarity to an existing memory
+# with the opposite polarity. Conservative list.
+negation_markers:
+  - "ne plus"
+  - "plus du tout"
+  - auparavant
+  - autrefois
+  - jadis
+  - antérieurement
+  - "remplacé par"
+  - "remplacée par"
+  - "substitué par"
+  - "substituée par"
+  - "annulé"
+  - "annulée"
+  - "obsolète"
+  - "déprécié"
+  - "dépréciée"
+  - "abandonné"
+  - "abandonnée"
+  - "révoqué"
+  - "révoquée"
+  - "au lieu de"
+  - "à la place de"

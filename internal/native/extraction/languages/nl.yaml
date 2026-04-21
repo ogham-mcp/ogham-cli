@@ -1,0 +1,387 @@
+# Dutch word lists for Ogham MCP extraction and scoring.
+# Notes: Month/day names are lowercase in Dutch. "morgen" means both "tomorrow" and "morning".
+
+day_names:
+  zondag: 0
+  maandag: 1
+  dinsdag: 2
+  woensdag: 3
+  donderdag: 4
+  vrijdag: 5
+  zaterdag: 6
+
+month_names:
+  januari: 1
+  februari: 2
+  maart: 3
+  april: 4
+  mei: 5
+  juni: 6
+  juli: 7
+  augustus: 8
+  september: 9
+  oktober: 10
+  november: 11
+  december: 12
+  # Abbreviations
+  jan: 1
+  feb: 2
+  mrt: 3
+  apr: 4
+  jun: 6
+  jul: 7
+  aug: 8
+  sep: 9
+  okt: 10
+  nov: 11
+  dec: 12
+
+every_words:
+  - elke
+  - iedere
+  - ieder
+  - wekelijks
+  - dagelijks
+  - elk
+
+temporal_keywords:
+  - wanneer
+  - datum
+  - tijd
+  - geleden
+  - vorige
+  - vorig
+  - laatste
+  - voor
+  - na
+  - tijdens
+  - sinds
+  - tot
+  - gisteren
+  - morgen
+  - eergisteren
+  - overmorgen
+  - week
+  - maand
+  - jaar
+  - dag
+  - vandaag
+
+direction_words:
+  after:
+    - na
+    - sinds
+    - sindsdien
+    - daarna
+    - volgend
+    - later
+    - vervolgens
+  before:
+    - voor
+    - voordat
+    - vorig
+    - vorige
+    - eerder
+    - daarvoor
+    - voorheen
+    - voorafgaand
+
+decision_words:
+  - besloten
+  - gekozen
+  - gemigreerd
+  - geselecteerd
+  - vervangen
+  - overgestapt
+  - gewijzigd
+  - geconfigureerd
+  - aangenomen
+  - ingesteld
+
+error_words:
+  - fout
+  - uitzondering
+  - mislukt
+  - storing
+  - crash
+  - kapot
+  - timeout
+  - geweigerd
+  - ongeldig
+  - afgebroken
+
+architecture_words:
+  - ontwerp
+  - patroon
+  - refactoring
+  - architectuur
+  - herstructurering
+  - modulair
+  - ontkoppelen
+  - abstractie
+  - interface
+  - migratie
+
+query_hints:
+  multi_hop:
+    - "hoeveel"
+    - "tussen"
+    - "wat kwam eerst"
+    - "hoe lang tussen"
+    - "hoeveel dagen"
+    - "hoeveel maanden"
+  ordering:
+    - "volgorde van"
+    - "chronologisch"
+    - "van oudste naar nieuwste"
+    - "van nieuwste naar oudste"
+    - "in welke volgorde"
+  summary:
+    - "samenvatting"
+    - "vat samen"
+    - "overzicht van"
+    - "uitgebreide samenvatting"
+    - "alles samenvatten"
+
+# --- Entity enrichment (v1) ---
+
+event_words:
+  - bruiloft
+  - huwelijk
+  - begrafenis
+  - concert
+  - conferentie
+  - vergadering
+  - sollicitatiegesprek
+  - feest
+  - verjaardag
+  - jubileum
+  - afstuderen
+  - ceremonie
+  - receptie
+  - reunie
+  - reis
+  - vakantie
+  - vlucht
+  - afspraak
+  - doktersbezoek
+  - examen
+  - optreden
+  - presentatie
+  - marathon
+  - toernooi
+  - wedstrijd
+  - spel
+  - barbecue
+  - picknick
+  - hackathon
+
+activity_words:
+  - koken
+  - gekookt
+  - wandelen
+  - gewandeld
+  - hardlopen
+  - gerend
+  - zwemmen
+  - gezwommen
+  - yoga
+  - meditatie
+  - fietsen
+  - gefietst
+  - vissen
+  - gevist
+  - tuinieren
+  - schilderen
+  - geschilderd
+  - lezen
+  - gelezen
+  - schrijven
+  - geschreven
+  - dansen
+  - gedanst
+  - zingen
+  - gezongen
+  - reizen
+  - gereisd
+  - kamperen
+  - gekampeerd
+  - klimmen
+  - geklommen
+  - skiën
+  - joggen
+  - vrijwilligerswerk
+  - studeren
+  - gestudeerd
+  - programmeren
+  - geprogrammeerd
+  - debuggen
+  - trainen
+  - getraind
+
+emotion_words:
+  # hoge arousal positief
+  - enthousiast
+  - opgewonden
+  - euforisch
+  # lage arousal positief
+  - blij
+  - gelukkig
+  - tevreden
+  - dankbaar
+  - opgelucht
+  - kalm
+  - rustig
+  # hoge arousal negatief
+  - gefrustreerd
+  - boos
+  - angstig
+  - overweldigd
+  - gestrest
+  # lage arousal negatief
+  - verdrietig
+  - teleurgesteld
+  - verveeld
+  - moe
+  - uitgeput
+  - bezorgd
+  - nerveus
+  - verward
+  - geïrriteerd
+  # neutraal/gemengd
+  - verrast
+  - nieuwsgierig
+  - nostalgisch
+
+relationship_words:
+  - moeder
+  - mama
+  - vader
+  - papa
+  - zus
+  - broer
+  - vrouw
+  - echtgenote
+  - man
+  - echtgenoot
+  - partner
+  - dochter
+  - zoon
+  - tante
+  - oom
+  - nicht
+  - neef
+  - oma
+  - opa
+  - grootmoeder
+  - grootvader
+  - vriendin
+  - vriend
+  - vriendinnetje
+  - vriendje
+  - baas
+  - manager
+  - collega
+  - teamgenoot
+  - lerares
+  - leraar
+  - docente
+  - docent
+  - arts
+  - dokter
+  - therapeut
+  - advocaat
+  - buurvrouw
+  - buurman
+  - huisgenoot
+  - huurder
+  - klant
+  - coach
+  - trainer
+
+possessive_triggers:
+  - mijn
+  - zijn
+  - haar
+  - hun
+  - ons
+  - onze
+
+quantity_units:
+  - dollar
+  - dollars
+  - euro
+  - "euro's"
+  - pond
+  - kilogram
+  - kilo
+  - kg
+  - kilometer
+  - km
+  - liter
+  - liters
+  - kopjes
+  - kopje
+  - flessen
+  - fles
+  - boeken
+  - boek
+  - pagina's
+  - pagina
+  - films
+  - film
+  - foto's
+  - foto
+  - maaltijden
+  - maaltijd
+  - lessen
+  - les
+  - sessies
+  - sessie
+  - afleveringen
+  - aflevering
+  - kaartjes
+  - kaartje
+  - rondes
+  - ronde
+  - sets
+  - herhalingen
+
+preference_words:
+  - voorkeur
+  - favoriet
+  - favoriete
+  - lekker
+  - leuker
+  - houden van
+  - liever
+  - beter dan
+  - beste
+  - haten
+  - vermijden
+  - aanraden
+  - aanbevelen
+  - meestal
+  - gewoonlijk
+  - altijd neem
+
+# Negation / supersession markers. Triggers the contradiction producer when
+# present in a stored memory that has high similarity to an existing memory
+# with the opposite polarity. Conservative list.
+negation_markers:
+  - niet meer
+  - geen meer
+  - vroeger
+  - voorheen
+  - destijds
+  - oorspronkelijk
+  - vervangen door
+  - geannuleerd
+  - afgeschaft
+  - ingetrokken
+  - teruggedraaid
+  - teruggedraait
+  - verouderd
+  - achterhaald
+  - in plaats van
+  - gedeprecieerd

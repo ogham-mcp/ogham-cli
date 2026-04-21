@@ -1,0 +1,572 @@
+# English word lists for Ogham MCP extraction and scoring.
+# Extracted from src/ogham/extraction.py, service.py, and compression.py.
+
+day_names:
+  sunday: 0
+  monday: 1
+  tuesday: 2
+  wednesday: 3
+  thursday: 4
+  friday: 5
+  saturday: 6
+
+every_words:
+  - every
+  - each
+  - weekly
+
+temporal_keywords:
+  - when
+  - date
+  - time
+  - ago
+  - last
+  - before
+  - after
+  - during
+  - since
+  - until
+  - yesterday
+  - tomorrow
+  - week
+  - month
+  - year
+
+direction_words:
+  after:
+    - after
+    - since
+    - following
+    - subsequent
+    - later
+  before:
+    - before
+    - prior
+    - previous
+    - earlier
+    - preceding
+
+decision_words:
+  - decided
+  - chose
+  - choosing
+  - switched
+  - migrated
+  - selected
+  - picked
+  - opted
+  - replaced
+  - adopted
+
+error_words:
+  - error
+  - exception
+  - failed
+  - failure
+  - bug
+  - crash
+  - broken
+  - traceback
+  - timeout
+  - denied
+
+architecture_words:
+  - design
+  - pattern
+  - refactor
+  - architecture
+  - restructure
+  - modular
+  - decouple
+  - abstract
+  - interface
+  - migrate
+
+month_names:
+  january: 1
+  february: 2
+  march: 3
+  april: 4
+  may: 5
+  june: 6
+  july: 7
+  august: 8
+  september: 9
+  october: 10
+  november: 11
+  december: 12
+  jan: 1
+  feb: 2
+  mar: 3
+  apr: 4
+  jun: 6
+  jul: 7
+  aug: 8
+  sep: 9
+  oct: 10
+  nov: 11
+  dec: 12
+
+word_numbers:
+  one: 1
+  two: 2
+  three: 3
+  four: 4
+  five: 5
+  six: 6
+  seven: 7
+  eight: 8
+  nine: 9
+  ten: 10
+  eleven: 11
+  twelve: 12
+  a: 1
+  an: 1
+
+# Words to strip during query reformulation. This is the SOLE source
+# of stopwords for reformulate_query() -- we do NOT use the stop_words
+# package here because it's too aggressive (kills "first", "move" etc).
+# Keep this list tight: only true function words and query-specific filler.
+query_filler:
+  # Pronouns
+  - i
+  - me
+  - my
+  - you
+  - your
+  - we
+  - our
+  - us
+  - he
+  - she
+  - it
+  - its
+  - they
+  - them
+  # Articles + determiners
+  - a
+  - an
+  - the
+  - this
+  - that
+  - these
+  - those
+  - some
+  - any
+  # Prepositions
+  - to
+  - of
+  - in
+  - on
+  - at
+  - by
+  - for
+  - with
+  - from
+  - into
+  - about
+  - up
+  # Auxiliary / linking verbs
+  - is
+  - was
+  - are
+  - were
+  - be
+  - been
+  - being
+  - do
+  - does
+  - did
+  - have
+  - has
+  - had
+  - can
+  - could
+  - will
+  - would
+  - should
+  # Question words
+  - what
+  - when
+  - where
+  - who
+  - why
+  - how
+  - which
+  - whose
+  - whom
+  # Query-specific filler (not in standard NLP lists)
+  - tell
+  - show
+  - give
+  - please
+  - mention
+  - only
+  - exactly
+  - just
+  - also
+  - really
+  - actually
+  - remember
+  - recall
+  - think
+  - know
+  - said
+  - talked
+  - discussed
+  - brought
+  - items
+
+query_hints:
+  multi_hop:
+    - "how many"
+    - "between"
+    - "which came first"
+    - "across sessions"
+  ordering:
+    - "order of"
+    - "earliest to latest"
+    - "chronological"
+    - "walk me through the order"
+  summary:
+    - "comprehensive summary"
+    - "summarize all"
+    - "overview of"
+    - "summarize everything"
+
+compression_decision_words:
+  - decided
+  - chose
+  - choosing
+  - using
+  - switched
+  - migrated
+  - selected
+
+# --- Entity enrichment (v1) ---
+
+event_words:
+  - wedding
+  - funeral
+  - concert
+  - conference
+  - meeting
+  - interview
+  - party
+  - birthday
+  - anniversary
+  - graduation
+  - ceremony
+  - reception
+  - reunion
+  - trip
+  - vacation
+  - holiday
+  - flight
+  - check-in
+  - checkout
+  - appointment
+  - surgery
+  - exam
+  - audition
+  - performance
+  - presentation
+  - demo
+  - launch
+  - deployment
+  - sprint
+  - standup
+  - retrospective
+  - hackathon
+  - barbecue
+  - bbq
+  - picnic
+  - marathon
+  - race
+  - tournament
+  - match
+  - game
+
+activity_words:
+  - cooking
+  - cooked
+  - hiking
+  - hiked
+  - running
+  - ran
+  - swimming
+  - swam
+  - yoga
+  - meditation
+  - cycling
+  - cycled
+  - fishing
+  - fished
+  - gardening
+  - painting
+  - painted
+  - reading
+  - writing
+  - wrote
+  - dancing
+  - danced
+  - singing
+  - sang
+  - traveling
+  - travelled
+  - camping
+  - camped
+  - climbing
+  - climbed
+  - skiing
+  - surfing
+  - jogging
+  - jogged
+  - walking
+  - walked
+  - volunteering
+  - volunteered
+  - studying
+  - studied
+  - practicing
+  - practiced
+  - debugging
+  - debugged
+  - coding
+  - coded
+  - refactoring
+  - refactored
+  - deploying
+  - deployed
+  - testing
+  - tested
+
+emotion_words:
+  # high arousal positive
+  - excited
+  - thrilled
+  - ecstatic
+  - elated
+  - overjoyed
+  # low arousal positive
+  - happy
+  - pleased
+  - satisfied
+  - content
+  - grateful
+  - relieved
+  - calm
+  - peaceful
+  # high arousal negative
+  - frustrated
+  - angry
+  - furious
+  - anxious
+  - panicked
+  - overwhelmed
+  - stressed
+  # low arousal negative
+  - sad
+  - disappointed
+  - bored
+  - tired
+  - exhausted
+  - worried
+  - nervous
+  - confused
+  - annoyed
+  - upset
+  # neutral/mixed
+  - surprised
+  - curious
+  - nostalgic
+  - ambivalent
+
+relationship_words:
+  - mother
+  - father
+  - sister
+  - brother
+  - wife
+  - husband
+  - partner
+  - daughter
+  - son
+  - aunt
+  - uncle
+  - cousin
+  - grandmother
+  - grandfather
+  - grandma
+  - grandpa
+  - niece
+  - nephew
+  - friend
+  - girlfriend
+  - boyfriend
+  - fiancée
+  - fiancé
+  - boss
+  - manager
+  - colleague
+  - coworker
+  - teammate
+  - mentor
+  - teacher
+  - professor
+  - doctor
+  - therapist
+  - lawyer
+  - accountant
+  - neighbour
+  - neighbor
+  - roommate
+  - flatmate
+  - landlord
+  - client
+  - customer
+  - contractor
+  - vet
+  - dentist
+  - babysitter
+  - nanny
+  - coach
+  - trainer
+  - instructor
+
+possessive_triggers:
+  - my
+  - his
+  - her
+  - their
+  - our
+
+quantity_units:
+  - tanks
+  - tank
+  - books
+  - book
+  - dollars
+  - dollar
+  - euros
+  - euro
+  - pounds
+  - pound
+  - kilograms
+  - kg
+  - kilometers
+  - km
+  - miles
+  - mile
+  - liters
+  - liter
+  - litres
+  - litre
+  - cups
+  - cup
+  - glasses
+  - glass
+  - bottles
+  - bottle
+  - pieces
+  - piece
+  - items
+  - item
+  - tickets
+  - ticket
+  - sessions
+  - session
+  - episodes
+  - episode
+  - chapters
+  - chapter
+  - pages
+  - page
+  - movies
+  - movie
+  - films
+  - film
+  - songs
+  - song
+  - albums
+  - album
+  - photos
+  - photo
+  - pictures
+  - picture
+  - meals
+  - meal
+  - classes
+  - class
+  - lessons
+  - lesson
+  - rounds
+  - round
+  - sets
+  - set
+  - reps
+  - rep
+  - laps
+  - lap
+
+preference_words:
+  - prefer
+  - preferred
+  - preference
+  - favorite
+  - favourite
+  - like
+  - liked
+  - love
+  - loved
+  - enjoy
+  - enjoyed
+  - always get
+  - go-to
+  - rather
+  - better than
+  - best
+  - hate
+  - hated
+  - dislike
+  - disliked
+  - avoid
+  - can't stand
+  - recommend
+  - recommended
+  - suggestion
+  - usually
+  - typically
+  - tend to
+
+# Negation / supersession markers. Triggers the contradiction producer when
+# present in a stored memory that has high similarity to an existing memory
+# with the opposite polarity. Conservative list -- false positives would
+# pollute the audit trail with spurious contradicts edges. Markers are matched
+# case-insensitively as substrings.
+negation_markers:
+  - no longer
+  - not anymore
+  - no more
+  - used to
+  - used to be
+  - formerly
+  - previously
+  - deprecated
+  - replaced by
+  - replaced with
+  - switched to
+  - switched from
+  - changed to
+  - changed from
+  - moved to
+  - moved from
+  - superseded by
+  - instead of
+  - not going to
+  - canceled
+  - cancelled
+  - reverted
+  - rolled back
+  - undid
+  - undone

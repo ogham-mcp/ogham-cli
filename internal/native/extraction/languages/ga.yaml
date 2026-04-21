@@ -1,0 +1,437 @@
+# Irish (Gaelic) word lists for Ogham MCP extraction and scoring.
+# Notes: Days use "De" prefix (genitive, meaning "day of") for "on [day]".
+# Fada (a, e, i, o, u with accents) is critical but ASCII fallbacks included.
+
+day_names:
+  # Base forms
+  domhnach: 0
+  luan: 1
+  "máirt": 2
+  mairt: 2
+  "céadaoin": 3
+  ceadaoin: 3
+  "déardaoin": 4
+  deardaoin: 4
+  aoine: 5
+  satharn: 6
+  # "De" prefix forms (on a specific day)
+  "dé domhnaigh": 0
+  de domhnaigh: 0
+  "dé luain": 1
+  de luain: 1
+  "dé máirt": 2
+  de mairt: 2
+  "dé céadaoin": 3
+  de ceadaoin: 3
+  "dé haoine": 5
+  de haoine: 5
+  "dé sathairn": 6
+  de sathairn: 6
+  # "An" prefix forms (generic/habitual)
+  an domhnach: 0
+
+month_names:
+  "eanáir": 1
+  eanair: 1
+  feabhra: 2
+  "márta": 3
+  marta: 3
+  "aibreán": 4
+  aibrean: 4
+  bealtaine: 5
+  meitheamh: 6
+  "iúil": 7
+  iuil: 7
+  "lúnasa": 8
+  lunasa: 8
+  "meán fómhair": 9
+  mean fomhair: 9
+  "deireadh fómhair": 10
+  deireadh fomhair: 10
+  samhain: 11
+  nollaig: 12
+
+every_words:
+  - gach
+  - "gach lá"
+  - "seachtainiúil"
+  - "laethúil"
+  - gach seachtain
+
+temporal_keywords:
+  - cathain
+  - nuair
+  - "dáta"
+  - am
+  - "ó shin"
+  - roimh
+  - "tar éis"
+  - "inné"
+  - inne
+  - "amárach"
+  - amarach
+  - "arú inné"
+  - aru inne
+  - "i ndiaidh amárach"
+  - le linn
+  - "ó"
+  - "go dtí"
+  - seachtain
+  - "mí"
+  - mi
+  - bliain
+  - "lá"
+  - la
+  - inniu
+  - anuraidh
+  - seo caite
+
+direction_words:
+  after:
+    - "tar éis"
+    - tar eis
+    - "ó"
+    - "ó shin"
+    - ina dhiaidh
+    - ar ball
+    - "níos déanaí"
+    - nios deanai
+  before:
+    - roimh
+    - roimhe
+    - "níos luaithe"
+    - nios luaithe
+    - cheana
+    - "roimh ré"
+
+decision_words:
+  - chinn
+  - roghnaigh
+  - "d'aistrigh"
+  - athraigh
+  - ghlac le
+  - "d'iompaigh"
+  - chuir in ionad
+  - socraigh
+  - pioc
+  - "thóg"
+
+error_words:
+  - "earráid"
+  - eisceacht
+  - theip
+  - teip
+  - fabht
+  - cliseadh
+  - briste
+  - am istigh
+  - "diúltaithe"
+  - "neamhbhailí"
+
+architecture_words:
+  - dearadh
+  - "patrún"
+  - "athfhachtóiriú"
+  - ailtireacht
+  - "athstruchtúrú"
+  - "modúlach"
+  - "díchúpláil"
+  - "teibíocht"
+  - "comhéadan"
+  - imirce
+
+query_hints:
+  multi_hop:
+    - "cé mhéad"
+    - "idir"
+    - "cé acu a tháinig ar dtús"
+    - "cé mhéad lá"
+    - "cé mhéad mí"
+  ordering:
+    - "ord"
+    - "croineolaíoch"
+    - "ón is sine go dtí an is nua"
+    - "ón is nua go dtí an is sine"
+    - "cén t-ord"
+  summary:
+    - "achoimre iomlán"
+    - "achoimrigh gach rud"
+    - "forbhreathnú"
+    - "achoimre chuimsitheach"
+    - "léargas"
+
+# --- Entity enrichment (v1) ---
+
+event_words:
+  - "bainis"
+  - "pósadh"
+  - "sochraid"
+  - "ceolchoirm"
+  - "comhdháil"
+  - "cruinniú"
+  - "agallamh"
+  - "cóisir"
+  - "lá breithe"
+  - "comóradh"
+  - "searmanas bronnta"
+  - "céimeanna"
+  - "searmanas"
+  - "fáiltiú"
+  - "athchumasc"
+  - "turas"
+  - "laethanta saoire"
+  - "eitilt"
+  - "coinne"
+  - "coinne dochtúra"
+  - "scrúdú"
+  - "léiriú"
+  - "cur i láthair"
+  - "maratón"
+  - "comórtas"
+  - "cluiche"
+  - "barbecue"
+  - "barbiciú"
+  - "piocnic"
+  - "hackathon"
+  # Lenited forms (after prepositions: ag an bhainis, don phósadh)
+  - "bhainis"
+  - "phósadh"
+  - "tsochraid"
+  - "cheolchoirm"
+  - "chomhdháil"
+  - "chruinniú"
+  - "agallamha"
+  - "chóisir"
+  - "chomóradh"
+  - "shearmanais"
+  - "thuras"
+  - "choinne"
+  - "scrúdaithe"
+  - "chluiche"
+  - "chomórtais"
+  # Genitive forms (lá na bainise, am an chruinnithe)
+  - "bainise"
+  - "pósta"
+  - "sochraide"
+  - "ceolchoirme"
+  - "comhdhála"
+  - "cruinnithe"
+  - "agallaimh"
+  - "cóisire"
+  - "turais"
+  - "coinne"
+  - "scrúdaithe"
+  - "cluiche"
+  - "comórtais"
+
+activity_words:
+  - "ag cócaireacht"
+  - "chócaigh"
+  - "siúlóid"
+  - "ag siúl"
+  - "ag rith"
+  - "rith"
+  - "ag snámh"
+  - "shnámh"
+  - "yoga"
+  - "machnamh"
+  - "rothaíocht"
+  - "ag iascaireacht"
+  - "garraíodóireacht"
+  - "péinteáil"
+  - "ag léamh"
+  - "léigh"
+  - "ag scríobh"
+  - "scríobh"
+  - "ag damhsa"
+  - "rinne damhsa"
+  - "ag canadh"
+  - "chan"
+  - "ag taisteal"
+  - "thaistil"
+  - "campáil"
+  - "dreapadóireacht"
+  - "sciáil"
+  - "ag jogáil"
+  - "obair dheonach"
+  - "ag staidéar"
+  - "rinne staidéar"
+  - "ríomhchlárú"
+  - "ag traenáil"
+  - "traenáil"
+
+emotion_words:
+  # ardúsáid dearfach
+  - "corraithe"
+  - "ar bís"
+  - "díograiseach"
+  - "ríméadach"
+  # ísealúsáid dearfach
+  - "sona"
+  - "sásta"
+  - "buíoch"
+  - "faoisimh"
+  - "ciúin"
+  - "suaimhneach"
+  # ardúsáid diúltach
+  - "frustrachas"
+  - "feargach"
+  - "imníoch"
+  - "faoi bhrú"
+  - "stresaithe"
+  # ísealúsáid diúltach
+  - "brónach"
+  - "díomách"
+  - "leamh"
+  - "tuirseach"
+  - "spíonta"
+  - "buartha"
+  - "neirbhíseach"
+  - "mearbhallach"
+  # neodrach/measctha
+  - "ionadh orm"
+  - "fiosrach"
+  - "cianósach"
+
+relationship_words:
+  - "máthair"
+  - "mamaí"
+  - "mama"
+  - "athair"
+  - "daidí"
+  - "daid"
+  - "deirfiúr"
+  - "deartháir"
+  - "bean chéile"
+  - "fear céile"
+  - "páirtí"
+  - "iníon"
+  - "mac"
+  - "aintín"
+  - "uncail"
+  - "col ceathrair"
+  - "seanmháthair"
+  - "mamó"
+  - "seanathair"
+  - "daideo"
+  - "neacht"
+  - "nia"
+  - "cara"
+  - "cairde"
+  - "petite amie"
+  - "cailín"
+  - "buachaill"
+  - "fostóir"
+  - "bainisteoir"
+  - "comhghleacaí"
+  - "múinteoir"
+  - "ollamh"
+  - "dochtúir"
+  - "teiripeoir"
+  - "dlíodóir"
+  - "comharsana"
+  - "comharsain"
+  - "comhthionónta"
+  - "cliant"
+  - "traenálaí"
+  # Lenited forms after mo/do/a (mo mháthair, mo dheartháir, mo chara)
+  - "mháthair"
+  - "mamaí"
+  - "athara"
+  - "dheirfiúr"
+  - "dheartháir"
+  - "bhean chéile"
+  - "fhear céile"
+  - "iníne"
+  - "mhic"
+  - "sheanmháthair"
+  - "sheanathar"
+  - "chara"
+  - "chailín"
+  - "bhuachalla"
+  - "mhúinteoir"
+  - "dhochtúir"
+  # Genitive forms (teach mo mháthar, ag an gcara)
+  - "máthar"
+  - "athar"
+  - "deirféar"
+  - "dearthár"
+  - "iníne"
+  - "mic"
+  - "uncail"
+  - "seanmháthar"
+  - "seanathar"
+  - "cara"
+  - "cailín"
+  - "bainisteora"
+  - "dochtúra"
+  - "traenálaí"
+
+possessive_triggers:
+  - mo
+  - "m'"
+  - a
+  - "á"
+  - "ár"
+  - "a gcuid"
+  - "a cuid"
+
+quantity_units:
+  - "dollar"
+  - "dollair"
+  - "euro"
+  - "punt"
+  - "puint"
+  - "cileagram"
+  - "kg"
+  - "ciliméadar"
+  - "km"
+  - "lítear"
+  - "cupán"
+  - "buidéal"
+  - "buidéil"
+  - "leabhar"
+  - "leabhair"
+  - "leathanach"
+  - "leathanaigh"
+  - "scannán"
+  - "scannáin"
+  - "grianghraf"
+  - "béile"
+  - "béilí"
+  - "rang"
+  - "ranganna"
+  - "seisiún"
+  - "eipeasóid"
+  - "ticéad"
+  - "ticéid"
+  - "babhta"
+  - "sraith"
+
+preference_words:
+  - "is fearr liom"
+  - "is breá liom"
+  - "is maith liom"
+  - rogha
+  - "is fuath liom"
+  - molaim
+  - molta
+  - de ghnáth
+  - "i gcónaí"
+  - "is ansa liom"
+
+# Negation / supersession markers. Triggers the contradiction producer when
+# present in a stored memory that has high similarity to an existing memory
+# with the opposite polarity. Conservative list.
+# Note: Irish negation often uses the split construction "ní... níos mó".
+# Markers below are best-effort substring matches.
+negation_markers:
+  - "níos mó"
+  - "a thuilleadh"
+  - tráth
+  - "roimhe seo"
+  - "curtha in áit"
+  - cealaithe
+  - "dulta i léig"
+  - as feidhm
+  - "in ionad"

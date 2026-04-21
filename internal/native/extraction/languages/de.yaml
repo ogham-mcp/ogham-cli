@@ -1,0 +1,445 @@
+# German word lists for Ogham MCP extraction and scoring.
+# Notes: Day names have adverbial "-s" forms (montags = "on Mondays") implying recurrence.
+# All nouns capitalized in German but we store lowercase for matching.
+
+day_names:
+  sonntag: 0
+  montag: 1
+  dienstag: 2
+  mittwoch: 3
+  donnerstag: 4
+  freitag: 5
+  samstag: 6
+  # Adverbial recurrence forms
+  sonntags: 0
+  montags: 1
+  dienstags: 2
+  mittwochs: 3
+  donnerstags: 4
+  freitags: 5
+  samstags: 6
+
+month_names:
+  januar: 1
+  februar: 2
+  "märz": 3
+  maerz: 3
+  april: 4
+  mai: 5
+  juni: 6
+  juli: 7
+  august: 8
+  september: 9
+  oktober: 10
+  november: 11
+  dezember: 12
+  # Abbreviations
+  jan: 1
+  feb: 2
+  "mär": 3
+  apr: 4
+  jun: 6
+  jul: 7
+  aug: 8
+  sep: 9
+  okt: 10
+  nov: 11
+  dez: 12
+
+every_words:
+  - jeden
+  - jede
+  - jedes
+  - jeder
+  - "wöchentlich"
+  - wochentlich
+  - "täglich"
+  - taeglich
+
+temporal_keywords:
+  - wann
+  - datum
+  - zeit
+  - uhrzeit
+  - vor
+  - nach
+  - gestern
+  - morgen
+  - "übermorgen"
+  - vorgestern
+  - letzte
+  - letzten
+  - letzter
+  - "nächste"
+  - naechste
+  - vorher
+  - nachher
+  - "während"
+  - waehrend
+  - seit
+  - bis
+  - woche
+  - monat
+  - jahr
+  - tag
+  - heute
+
+direction_words:
+  after:
+    - nach
+    - seit
+    - danach
+    - seitdem
+    - "anschließend"
+    - folgend
+    - "später"
+    - spaeter
+  before:
+    - vor
+    - vorher
+    - vorherig
+    - "früher"
+    - frueher
+    - zuvor
+    - davor
+    - eher
+
+decision_words:
+  - entschieden
+  - "gewählt"
+  - gewechselt
+  - migriert
+  - "ausgewählt"
+  - ersetzt
+  - umgestiegen
+  - beschlossen
+  - festgelegt
+  - "übernommen"
+
+error_words:
+  - fehler
+  - ausnahme
+  - fehlgeschlagen
+  - absturz
+  - defekt
+  - "zeitüberschreitung"
+  - abgelehnt
+  - abgebrochen
+  - "ungültig"
+  - kaputt
+
+architecture_words:
+  - entwurf
+  - muster
+  - refaktorisierung
+  - architektur
+  - umstrukturierung
+  - modular
+  - entkoppeln
+  - abstraktion
+  - schnittstelle
+  - migration
+
+query_hints:
+  multi_hop:
+    - "wie viele"
+    - "zwischen"
+    - "was kam zuerst"
+    - "wie lange zwischen"
+    - "wie viele tage"
+    - "wie viele monate"
+  ordering:
+    - "reihenfolge"
+    - "chronologisch"
+    - "vom ältesten zum neuesten"
+    - "vom neuesten zum ältesten"
+    - "in welcher reihenfolge"
+  summary:
+    - "zusammenfassung"
+    - "fasse zusammen"
+    - "überblick über"
+    - "übersicht"
+    - "umfassende zusammenfassung"
+
+# --- Entity enrichment (v1) ---
+
+event_words:
+  - hochzeit
+  - beerdigung
+  - konzert
+  - konferenz
+  - besprechung
+  - meeting
+  - interview
+  - "vorstellungsgespräch"
+  - party
+  - feier
+  - geburtstag
+  - jahrestag
+  - "jubiläum"
+  - abschlussfeier
+  - zeremonie
+  - empfang
+  - klassentreffen
+  - reise
+  - urlaub
+  - flug
+  - termin
+  - operation
+  - "prüfung"
+  - klausur
+  - vortrag
+  - "präsentation"
+  - demo
+  - sprint
+  - standup
+  - hackathon
+  - grillen
+  - grillparty
+  - picknick
+  - marathon
+  - rennen
+  - turnier
+  - spiel
+
+activity_words:
+  - kochen
+  - gekocht
+  - wandern
+  - gewandert
+  - laufen
+  - gelaufen
+  - schwimmen
+  - geschwommen
+  - yoga
+  - meditation
+  - radfahren
+  - geradelt
+  - angeln
+  - geangelt
+  - garten
+  - "gärtnern"
+  - malen
+  - gemalt
+  - lesen
+  - gelesen
+  - schreiben
+  - geschrieben
+  - tanzen
+  - getanzt
+  - singen
+  - gesungen
+  - reisen
+  - gereist
+  - zelten
+  - gezeltet
+  - klettern
+  - geklettert
+  - skifahren
+  - joggen
+  - gejoggt
+  - spazieren
+  - ehrenamtlich
+  - lernen
+  - gelernt
+  - "üben"
+  - "geübt"
+
+emotion_words:
+  # hocherregend positiv
+  - begeistert
+  - "überglücklich"
+  - euphorisch
+  - aufgeregt
+  # niedrigerregend positiv
+  - "glücklich"
+  - froh
+  - zufrieden
+  - dankbar
+  - erleichtert
+  - ruhig
+  - friedlich
+  - entspannt
+  # hocherregend negativ
+  - frustriert
+  - "wütend"
+  - "ärgerlich"
+  - "ängstlich"
+  - panisch
+  - "überfordert"
+  - gestresst
+  # niedrigerregend negativ
+  - traurig
+  - "enttäuscht"
+  - gelangweilt
+  - "müde"
+  - "erschöpft"
+  - besorgt
+  - "nervös"
+  - verwirrt
+  - genervt
+  - "verärgert"
+  # neutral
+  - "überrascht"
+  - neugierig
+  - nostalgisch
+
+relationship_words:
+  - mutter
+  - vater
+  - schwester
+  - bruder
+  - ehefrau
+  - frau
+  - ehemann
+  - mann
+  - partnerin
+  - partner
+  - tochter
+  - sohn
+  - tante
+  - onkel
+  - cousine
+  - cousin
+  - oma
+  - opa
+  - großmutter
+  - großvater
+  - nichte
+  - neffe
+  - freundin
+  - freund
+  - chefin
+  - chef
+  - kollegin
+  - kollege
+  - teamkollegin
+  - teamkollege
+  - mentorin
+  - mentor
+  - lehrerin
+  - lehrer
+  - professorin
+  - professor
+  - "ärztin"
+  - arzt
+  - therapeutin
+  - therapeut
+  - "anwältin"
+  - anwalt
+  - nachbarin
+  - nachbar
+  - mitbewohnerin
+  - mitbewohner
+  - vermieterin
+  - vermieter
+  - kundin
+  - kunde
+  - trainerin
+  - trainer
+
+possessive_triggers:
+  - mein
+  - meine
+  - meinem
+  - meinen
+  - meiner
+  - sein
+  - seine
+  - seinem
+  - seinen
+  - seiner
+  - ihr
+  - ihre
+  - ihrem
+  - ihren
+  - ihrer
+  - unser
+  - unsere
+  - unserem
+  - unseren
+  - unserer
+
+quantity_units:
+  - dollar
+  - euro
+  - pfund
+  - kilogramm
+  - kg
+  - kilometer
+  - km
+  - meilen
+  - liter
+  - tassen
+  - tasse
+  - "gläser"
+  - glas
+  - flaschen
+  - flasche
+  - "stück"
+  - "stücke"
+  - filme
+  - film
+  - "bücher"
+  - buch
+  - seiten
+  - seite
+  - fotos
+  - foto
+  - bilder
+  - bild
+  - mahlzeiten
+  - mahlzeit
+  - kurse
+  - kurs
+  - runden
+  - runde
+
+preference_words:
+  - bevorzugen
+  - bevorzugt
+  - liebling
+  - lieblings
+  - mögen
+  - mag
+  - lieben
+  - geliebt
+  - genießen
+  - genossen
+  - immer nehmen
+  - lieber
+  - besser als
+  - beste
+  - hassen
+  - gehasst
+  - vermeiden
+  - empfehlen
+  - empfohlen
+  - vorschlag
+  - normalerweise
+  - typischerweise
+  - meistens
+
+# Negation / supersession markers. Triggers the contradiction producer when
+# present in a stored memory that has high similarity to an existing memory
+# with the opposite polarity. Conservative list.
+negation_markers:
+  - nicht mehr
+  - kein mehr
+  - früher
+  - damals
+  - ehemals
+  - ehemalig
+  - ersetzt durch
+  - ausgetauscht gegen
+  - umgestellt auf
+  - aufgehoben
+  - zurückgenommen
+  - verworfen
+  - veraltet
+  - deprecated
+  - rückgängig gemacht
+  - annulliert
+  - storniert
+  - anstatt
+  - statt
