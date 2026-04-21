@@ -35,6 +35,14 @@ type StoreOptions struct {
 	// Day 4 --native-store-preview flag where we want to confirm the
 	// pipeline is green without mutating the store.
 	DryRun bool
+	// Metadata is caller-supplied structured context that gets merged
+	// over the extracted metadata (dates, etc.) before the DB write.
+	// Primary consumer: the typed-store wrappers (store_decision,
+	// store_fact, store_event, store_preference) which inject type-
+	// specific structure. Extracted keys lose on collision so the
+	// caller's intent wins. Nil is fine -- leaves extraction output
+	// alone.
+	Metadata map[string]any
 }
 
 // StoreResult is returned by Store. ID is empty when DryRun=true.
@@ -159,6 +167,12 @@ func Store(ctx context.Context, cfg *Config, content string, opts StoreOptions) 
 	metadata := map[string]any{}
 	if len(dates) > 0 {
 		metadata["dates"] = dates
+	}
+	// Caller-supplied metadata wins on collision -- typed-store wrappers
+	// pass {type, confidence, ...} and those keys must survive over any
+	// extraction artefact that happened to share a name.
+	for k, v := range opts.Metadata {
+		metadata[k] = v
 	}
 
 	result := &StoreResult{
