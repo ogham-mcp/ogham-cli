@@ -61,6 +61,23 @@ type healthCheckArgs struct {
 	LiveEmbedder bool `json:"live_embedder,omitempty" jsonschema:"description=Make a real provider API call (costs a token)."`
 }
 
+type deleteMemoryArgs struct {
+	ID      string `json:"id"                jsonschema:"required,description=UUID of the memory to delete."`
+	Profile string `json:"profile,omitempty" jsonschema:"description=Profile override; defaults to the config profile."`
+}
+
+type cleanupExpiredArgs struct {
+	Profile string `json:"profile,omitempty" jsonschema:"description=Profile to sweep; defaults to the config profile."`
+}
+
+type listProfilesArgs struct{}
+
+type setProfileTTLArgs struct {
+	Profile string `json:"profile"            jsonschema:"required,description=Profile whose TTL to update."`
+	TTLDays int    `json:"ttl_days,omitempty" jsonschema:"description=Days until a memory in this profile expires. Pass -1 to clear the TTL and keep memories forever."`
+	Clear   bool   `json:"clear,omitempty"    jsonschema:"description=If true, clear the TTL (equivalent to ttl_days=-1)."`
+}
+
 // ---------------------------------------------------------------------
 // schemaFor reflects a Go struct's jsonschema tags into the inline JSON
 // Schema shape MCP expects. DoNotReference collapses nested types so
@@ -209,6 +226,79 @@ func BuildNativeHealthHandler(cfg *native.Config) mcp.ToolHandler {
 	}
 }
 
+func BuildNativeDeleteHandler(cfg *native.Config) mcp.ToolHandler {
+	return func(ctx context.Context, req *mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		var args deleteMemoryArgs
+		if fail := unmarshalArgs(req, &args); fail != nil {
+			return fail, nil
+		}
+		if args.ID == "" {
+			return errorResult("delete_memory: id is required"), nil
+		}
+		result, err := native.Delete(ctx, cfg, args.ID, args.Profile)
+		if err != nil {
+			return errorResult(err.Error()), nil
+		}
+		return jsonResult(result)
+	}
+}
+
+func BuildNativeCleanupHandler(cfg *native.Config) mcp.ToolHandler {
+	return func(ctx context.Context, req *mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		var args cleanupExpiredArgs
+		if fail := unmarshalArgs(req, &args); fail != nil {
+			return fail, nil
+		}
+		result, err := native.Cleanup(ctx, cfg, args.Profile)
+		if err != nil {
+			return errorResult(err.Error()), nil
+		}
+		return jsonResult(result)
+	}
+}
+
+func BuildNativeListProfilesHandler(cfg *native.Config) mcp.ToolHandler {
+	return func(ctx context.Context, req *mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		// list_profiles takes no arguments but MCP clients can still send
+		// {} or an empty payload. unmarshalArgs handles both shapes.
+		var args listProfilesArgs
+		if fail := unmarshalArgs(req, &args); fail != nil {
+			return fail, nil
+		}
+		profiles, err := native.ListProfiles(ctx, cfg)
+		if err != nil {
+			return errorResult(err.Error()), nil
+		}
+		return jsonResult(map[string]any{
+			"result": profiles,
+			"count":  len(profiles),
+		})
+	}
+}
+
+func BuildNativeSetProfileTTLHandler(cfg *native.Config) mcp.ToolHandler {
+	return func(ctx context.Context, req *mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		var args setProfileTTLArgs
+		if fail := unmarshalArgs(req, &args); fail != nil {
+			return fail, nil
+		}
+		if args.Profile == "" {
+			return errorResult("set_profile_ttl: profile is required"), nil
+		}
+		ttl := args.TTLDays
+		// clear=true wins: callers that toggle the flag expect it to
+		// override any stale ttl_days value in the same request.
+		if args.Clear {
+			ttl = -1
+		}
+		result, err := native.SetProfileTTL(ctx, cfg, args.Profile, ttl)
+		if err != nil {
+			return errorResult(err.Error()), nil
+		}
+		return jsonResult(result)
+	}
+}
+
 // ---------------------------------------------------------------------
 // RegisterNativeTools installs the v0.5 native tool handlers on the MCP
 // server. Returns the set of tool names registered so the proxy path
@@ -245,6 +335,30 @@ func RegisterNativeTools(server *mcp.Server, cfg *native.Config) map[string]stru
 			"Probe the configured backend + embedder. Set live_embedder=true to burn a real provider token.",
 			healthCheckArgs{},
 			BuildNativeHealthHandler(cfg),
+		},
+		{
+			"delete_memory",
+			"Delete a single memory by id from the active profile. Refuses to delete across profiles -- pass the profile override explicitly if you need to.",
+			deleteMemoryArgs{},
+			BuildNativeDeleteHandler(cfg),
+		},
+		{
+			"cleanup_expired",
+			"Sweep the active profile and hard-delete every memory whose TTL has elapsed. Returns the count seen + the count actually deleted (they differ if something else cleaned up concurrently).",
+			cleanupExpiredArgs{},
+			BuildNativeCleanupHandler(cfg),
+		},
+		{
+			"list_profiles",
+			"List every profile that currently holds at least one non-expired memory, with counts.",
+			listProfilesArgs{},
+			BuildNativeListProfilesHandler(cfg),
+		},
+		{
+			"set_profile_ttl",
+			"Set or clear the TTL (in days) that applies to new memories stored in a profile. Pass clear=true (or ttl_days=-1) to remove the TTL entirely.",
+			setProfileTTLArgs{},
+			BuildNativeSetProfileTTLHandler(cfg),
 		},
 	}
 
