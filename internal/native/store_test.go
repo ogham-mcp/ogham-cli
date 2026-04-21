@@ -2,7 +2,11 @@ package native
 
 import (
 	"context"
+	"encoding/json"
+	"io"
 	"math"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
@@ -281,4 +285,130 @@ func TestStore_DryRun_FullPipeline(t *testing.T) {
 func newFakeOpenAIEmbedServer(t *testing.T, vec []float32) *testServer {
 	t.Helper()
 	return startFakeServer(t, `{"data":[{"embedding":`+floatSliceJSON(vec)+`,"index":0}]}`)
+}
+
+// ---------------------------------------------------------------------
+// writeMemorySupabase -- PostgREST shape + happy-path insert.
+//
+// Validates the request body contains the right columns, confirms the
+// embedding is sent as a pgvector text literal, and checks that the
+// `Prefer: return=representation` header is attached so PostgREST
+// echoes the new row (including id) back to us.
+// ---------------------------------------------------------------------
+
+func TestWriteMemorySupabase_RoundTrip(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/rest/v1/memories", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			t.Errorf("method = %s, want POST", r.Method)
+		}
+		if got := r.Header.Get("Prefer"); got != "return=representation" {
+			t.Errorf("Prefer = %q, want return=representation", got)
+		}
+		if r.Header.Get("apikey") == "" || r.Header.Get("Authorization") == "" {
+			t.Errorf("missing supabase auth headers: %+v", r.Header)
+		}
+
+		body, _ := io.ReadAll(r.Body)
+		var rows []map[string]any
+		if err := json.Unmarshal(body, &rows); err != nil {
+			t.Fatalf("body not JSON array: %v", err)
+		}
+		if len(rows) != 1 {
+			t.Fatalf("rows = %d, want 1", len(rows))
+		}
+		row := rows[0]
+		// Required columns present.
+		for _, col := range []string{"content", "embedding", "profile", "tags", "importance", "surprise", "metadata"} {
+			if _, ok := row[col]; !ok {
+				t.Errorf("missing column %q in body: %+v", col, row)
+			}
+		}
+		// Embedding must be the pgvector text literal, not a JSON array.
+		embed, _ := row["embedding"].(string)
+		if !strings.HasPrefix(embed, "[") || !strings.HasSuffix(embed, "]") {
+			t.Errorf("embedding = %q, want pgvector '[...]' literal", embed)
+		}
+		if row["content"] != "hello store" {
+			t.Errorf("content = %v", row["content"])
+		}
+		if row["profile"] != "work" {
+			t.Errorf("profile = %v", row["profile"])
+		}
+		// Metadata defaults to empty object when nothing was supplied.
+		// (The call below passes a non-empty metadata map.)
+
+		resp := []map[string]any{{
+			"id":      "11111111-2222-3333-4444-555555555555",
+			"content": row["content"],
+			"profile": row["profile"],
+		}}
+		_ = json.NewEncoder(w).Encode(resp)
+	})
+	server := httptest.NewServer(mux)
+	defer server.Close()
+
+	cfg := &Config{
+		Database: Database{
+			SupabaseURL: server.URL,
+			SupabaseKey: "sb_secret_test",
+		},
+	}
+
+	id, err := writeMemorySupabase(context.Background(), cfg, storeWrite{
+		Content:    "hello store",
+		Embedding:  []float32{0.1, 0.2, 0.3, 0.4},
+		Source:     "claude-code",
+		Profile:    "work",
+		Tags:       []string{"type:decision", "project:ogham"},
+		Importance: 0.6,
+		Surprise:   0.8,
+		Metadata:   map[string]any{"dates": []string{"2026-04-21"}},
+	})
+	if err != nil {
+		t.Fatalf("writeMemorySupabase: %v", err)
+	}
+	if id != "11111111-2222-3333-4444-555555555555" {
+		t.Errorf("id = %q, want pinned uuid", id)
+	}
+}
+
+func TestWriteMemorySupabase_NoIdReturned(t *testing.T) {
+	// PostgREST returning [] (e.g. RLS reject) surfaces a clear error
+	// instead of silently succeeding.
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte("[]"))
+	}))
+	defer server.Close()
+
+	cfg := &Config{Database: Database{SupabaseURL: server.URL, SupabaseKey: "sb_secret_x"}}
+	_, err := writeMemorySupabase(context.Background(), cfg, storeWrite{
+		Content:   "x",
+		Embedding: []float32{0.1},
+		Profile:   "work",
+	})
+	if err == nil || !strings.Contains(err.Error(), "no id returned") {
+		t.Errorf("expected 'no id returned' error, got %v", err)
+	}
+}
+
+func TestWriteMemorySupabase_HttpError(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusUnauthorized)
+		_, _ = w.Write([]byte(`{"message":"bad key"}`))
+	}))
+	defer server.Close()
+
+	cfg := &Config{Database: Database{SupabaseURL: server.URL, SupabaseKey: "sb_secret_x"}}
+	_, err := writeMemorySupabase(context.Background(), cfg, storeWrite{
+		Content:   "x",
+		Embedding: []float32{0.1},
+		Profile:   "work",
+	})
+	if err == nil {
+		t.Fatal("expected http error")
+	}
+	if !strings.Contains(err.Error(), "401") {
+		t.Errorf("error should mention 401, got %v", err)
+	}
 }
