@@ -138,7 +138,11 @@ func TestExploreKnowledgeSupabase_RoundTrip(t *testing.T) {
 	cfg.Embedding.Provider = "ollama"
 	cfg.Embedding.Model = "embeddinggemma"
 	cfg.Embedding.Dimension = 512
-	t.Setenv("OLLAMA_URL", ollama.URL)
+	// Set BaseURL directly on cfg -- applyEnv's OLLAMA_URL -> BaseURL
+	// merge only fires inside Load(), not when a test constructs cfg
+	// by hand. Test-running on a laptop with real Ollama at :11434
+	// silently masked this locally; CI caught it.
+	cfg.Embedding.BaseURL = ollama.URL
 
 	results, err := ExploreKnowledge(context.Background(), cfg, "what do I know", ExploreOptions{
 		Depth:       2,
@@ -227,7 +231,7 @@ func TestSearchSupabase_HybridSearchRPC(t *testing.T) {
 	cfg.Embedding.Provider = "ollama"
 	cfg.Embedding.Model = "embeddinggemma"
 	cfg.Embedding.Dimension = 512
-	t.Setenv("OLLAMA_URL", ollama.URL)
+	cfg.Embedding.BaseURL = ollama.URL // direct cfg, not env -- see note in explore test
 
 	results, err := Search(context.Background(), cfg, "test query", SearchOptions{
 		Limit: 5, Profile: "work",
@@ -245,11 +249,18 @@ func TestSearchSupabase_HybridSearchRPC(t *testing.T) {
 // newOllamaStubServer returns an httptest.Server that answers every
 // POST /api/embed with a 512-dim zero vector. Test-scoped cleanup via
 // t.Cleanup so individual tests don't have to defer-Close.
+//
+// Response shape is {"embeddings": [[...]]} -- an ARRAY of vectors.
+// Not to be confused with Gemini's {"embedding": {"values": [...]}}
+// or the singular {"embedding": [...]} shape Ollama used pre-0.1.33.
+// Getting this wrong costs a CI round-trip every time.
 func newOllamaStubServer(t *testing.T) *httptest.Server {
 	t.Helper()
 	s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		vec := make([]float64, 512)
-		_ = json.NewEncoder(w).Encode(map[string]any{"embedding": vec})
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"embeddings": [][]float64{vec},
+		})
 	}))
 	t.Cleanup(s.Close)
 	return s

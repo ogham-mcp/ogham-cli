@@ -415,7 +415,7 @@ func TestPG_ExploreKnowledge_WalksRealGraph(t *testing.T) {
 	// depth=0 is enough to exercise the postgres RPC.
 	ollama := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		vec := make([]float64, 512)
-		_ = json.NewEncoder(w).Encode(map[string]any{"embedding": vec})
+		_ = json.NewEncoder(w).Encode(map[string]any{"embeddings": [][]float64{vec}})
 	}))
 	defer ollama.Close()
 
