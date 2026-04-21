@@ -169,15 +169,15 @@ func NewEmbedder(cfg *Config) (Embedder, error) {
 //
 // Two quality concerns the Python SDK handles opaquely but we handle
 // explicitly here:
-//   1. Endpoint: we use :embedContent (singular). The earlier
-//      :batchEmbedContents call carried a batch-of-one that worked
-//      but isn't the clean single-call path Google's docs recommend.
-//   2. Normalization: Gemini returns pre-normalized vectors only at the
-//      model's native 3072 dim. At 512 / 768 / 1536 the vector magnitude
-//      varies, which turns cosine similarity into a magnitude-weighted
-//      score. We L2-normalize client-side when dim < 3072; the docs at
-//      https://ai.google.dev/gemini-api/docs/embeddings explicitly
-//      recommend this.
+//  1. Endpoint: we use :embedContent (singular). The earlier
+//     :batchEmbedContents call carried a batch-of-one that worked
+//     but isn't the clean single-call path Google's docs recommend.
+//  2. Normalization: Gemini returns pre-normalized vectors only at the
+//     model's native 3072 dim. At 512 / 768 / 1536 the vector magnitude
+//     varies, which turns cosine similarity into a magnitude-weighted
+//     score. We L2-normalize client-side when dim < 3072; the docs at
+//     https://ai.google.dev/gemini-api/docs/embeddings explicitly
+//     recommend this.
 type geminiEmbedder struct {
 	apiKey string
 	model  string

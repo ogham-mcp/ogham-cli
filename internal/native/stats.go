@@ -17,13 +17,13 @@ import (
 // right profile", so this covers the headline numbers without the
 // heavier aggregations.
 type Stats struct {
-	Profile   string      `json:"profile"`
-	Total     int64       `json:"total"`
-	Sources   []Breakdown `json:"sources"`
-	TopTags   []Breakdown `json:"top_tags"`
-	Untagged  int64       `json:"untagged_count"`
-	WithTTL   int64       `json:"with_ttl_count"`
-	Expiring  int64       `json:"expiring_within_7d"`
+	Profile  string      `json:"profile"`
+	Total    int64       `json:"total"`
+	Sources  []Breakdown `json:"sources"`
+	TopTags  []Breakdown `json:"top_tags"`
+	Untagged int64       `json:"untagged_count"`
+	WithTTL  int64       `json:"with_ttl_count"`
+	Expiring int64       `json:"expiring_within_7d"`
 }
 
 type Breakdown struct {

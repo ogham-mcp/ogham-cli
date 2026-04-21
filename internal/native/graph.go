@@ -267,17 +267,17 @@ func createRelationshipSupabase(ctx context.Context, cfg *Config, source, target
 // describe how this row was reached -- depth 0 means direct seed match,
 // depth > 0 means we traversed N edges to get here.
 type GraphMemory struct {
-	ID             string         `json:"id"`
-	Content        string         `json:"content"`
-	Metadata       map[string]any `json:"metadata,omitempty"`
-	Source         string         `json:"source,omitempty"`
-	Tags           []string       `json:"tags,omitempty"`
-	Relevance      float64        `json:"relevance,omitempty"`
-	Confidence     float64        `json:"confidence,omitempty"`
-	Depth          int            `json:"depth"`
-	Relationship   string         `json:"relationship,omitempty"`
-	EdgeStrength   float64        `json:"edge_strength,omitempty"`
-	ConnectedFrom  string         `json:"connected_from,omitempty"`
+	ID            string         `json:"id"`
+	Content       string         `json:"content"`
+	Metadata      map[string]any `json:"metadata,omitempty"`
+	Source        string         `json:"source,omitempty"`
+	Tags          []string       `json:"tags,omitempty"`
+	Relevance     float64        `json:"relevance,omitempty"`
+	Confidence    float64        `json:"confidence,omitempty"`
+	Depth         int            `json:"depth"`
+	Relationship  string         `json:"relationship,omitempty"`
+	EdgeStrength  float64        `json:"edge_strength,omitempty"`
+	ConnectedFrom string         `json:"connected_from,omitempty"`
 }
 
 // ExploreOptions configures the graph-walk seed + traversal.
@@ -376,12 +376,12 @@ func exploreKnowledgeSupabase(ctx context.Context, cfg *Config, query string, em
 		return nil, err
 	}
 	args := map[string]any{
-		"query_text":       query,
-		"query_embedding":  pgvectorLiteral(embedding),
-		"filter_profile":   profile,
-		"match_count":      limit,
-		"traversal_depth":  depth,
-		"min_strength":     minStrength,
+		"query_text":      query,
+		"query_embedding": pgvectorLiteral(embedding),
+		"filter_profile":  profile,
+		"match_count":     limit,
+		"traversal_depth": depth,
+		"min_strength":    minStrength,
 	}
 	if tags != nil {
 		args["filter_tags"] = tags

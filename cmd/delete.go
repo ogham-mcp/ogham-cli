@@ -13,8 +13,8 @@ import (
 )
 
 var (
-	deleteProfile string
-	deleteYes     bool
+	deleteProfile        string
+	deleteYes            bool
 	deleteJSONDeprecated bool
 )
 

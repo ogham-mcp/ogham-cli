@@ -31,11 +31,11 @@ func TestKey_MatchesPythonHash(t *testing.T) {
 	//   python3 -c 'import hashlib; print(hashlib.sha256(b"openai:text-embedding-3-small:512:hello world").hexdigest())'
 	// Same formula as Python's _cache_key -- proves byte-for-byte parity.
 	cases := []struct {
-		name                           string
-		provider, model                string
-		dim                            int
-		text                           string
-		want                           string
+		name            string
+		provider, model string
+		dim             int
+		text            string
+		want            string
 	}{
 		{
 			name:     "openai 512 hello world",

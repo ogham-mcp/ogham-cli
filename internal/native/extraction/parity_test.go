@@ -39,20 +39,20 @@ import (
 // quantity:/preference: prefixes).
 
 type parityRecord struct {
-	Index                 int      `json:"index"`
-	Content               string   `json:"content"`
-	Tags                  []string `json:"tags"`
-	PythonEntitiesFull    []string `json:"python_entities_full"`
-	PythonEntitiesShared  []string `json:"python_entities_shared"`
-	PythonDates           []string `json:"python_dates"`
-	PythonImportance      float64  `json:"python_importance"`
+	Index                int      `json:"index"`
+	Content              string   `json:"content"`
+	Tags                 []string `json:"tags"`
+	PythonEntitiesFull   []string `json:"python_entities_full"`
+	PythonEntitiesShared []string `json:"python_entities_shared"`
+	PythonDates          []string `json:"python_dates"`
+	PythonImportance     float64  `json:"python_importance"`
 }
 
 type parityFixture struct {
-	ReferenceDate         string         `json:"reference_date"`
-	SharedEntityPrefixes  []string       `json:"shared_entity_prefixes"`
-	Count                 int            `json:"count"`
-	Records               []parityRecord `json:"records"`
+	ReferenceDate        string         `json:"reference_date"`
+	SharedEntityPrefixes []string       `json:"shared_entity_prefixes"`
+	Count                int            `json:"count"`
+	Records              []parityRecord `json:"records"`
 }
 
 func loadParityFixture(t *testing.T) *parityFixture {

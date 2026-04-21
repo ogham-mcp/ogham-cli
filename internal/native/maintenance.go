@@ -535,9 +535,9 @@ LIMIT $` + fmt.Sprintf("%d", len(args))
 // MaskedConfig is a safe-to-print view of Config with secret values
 // replaced by "<redacted>".
 type MaskedConfig struct {
-	Profile   string           `json:"profile"`
-	Database  MaskedDatabase   `json:"database"`
-	Embedding MaskedEmbedding  `json:"embedding"`
+	Profile   string            `json:"profile"`
+	Database  MaskedDatabase    `json:"database"`
+	Embedding MaskedEmbedding   `json:"embedding"`
 	Paths     map[string]string `json:"paths"`
 }
 

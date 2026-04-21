@@ -12,9 +12,9 @@ import (
 )
 
 var (
-	auditProfile   string
-	auditOperation string
-	auditLimit     int
+	auditProfile        string
+	auditOperation      string
+	auditLimit          int
 	auditJSONDeprecated bool
 )
 
