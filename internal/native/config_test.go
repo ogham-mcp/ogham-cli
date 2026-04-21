@@ -304,3 +304,65 @@ func TestSidecarEnv_OllamaURL(t *testing.T) {
 		t.Errorf("OLLAMA_URL should not be emitted for non-ollama provider: %+v", got2)
 	}
 }
+
+// EMBEDDING_DIM from env must override the TOML default. Parity with
+// Python's pydantic-settings.
+func TestLoad_EmbeddingDimFromEnv(t *testing.T) {
+	isolateEnv(t)
+	t.Setenv("EMBEDDING_DIM", "768")
+	cfg, err := Load("/nonexistent/config.toml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Embedding.Dimension != 768 {
+		t.Errorf("Dimension = %d, want 768 (from EMBEDDING_DIM env)", cfg.Embedding.Dimension)
+	}
+}
+
+// EMBEDDING_DIM must override a value from config.toml too -- env wins
+// over file for this knob, matching the other embedding env overrides.
+func TestLoad_EmbeddingDimEnvOverridesToml(t *testing.T) {
+	isolateEnv(t)
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.toml")
+	toml := `
+[embedding]
+provider = "openai"
+dimension = 512
+`
+	if err := os.WriteFile(path, []byte(toml), 0600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("EMBEDDING_DIM", "1024")
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Embedding.Dimension != 1024 {
+		t.Errorf("Dimension = %d, want 1024 (env should win over TOML)", cfg.Embedding.Dimension)
+	}
+}
+
+// Garbage EMBEDDING_DIM values fall through to the TOML/default rather
+// than crashing on a bad integer parse.
+func TestLoad_EmbeddingDimBadValueFallsThrough(t *testing.T) {
+	isolateEnv(t)
+	t.Setenv("EMBEDDING_DIM", "not-a-number")
+	cfg, err := Load("/nonexistent/config.toml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Embedding.Dimension != 512 {
+		t.Errorf("Dimension = %d, want 512 (bad env should fall through to default)", cfg.Embedding.Dimension)
+	}
+
+	isolateEnv(t)
+	t.Setenv("EMBEDDING_DIM", "-1")
+	cfg2, err := Load("/nonexistent/config.toml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg2.Embedding.Dimension != 512 {
+		t.Errorf("negative EMBEDDING_DIM: Dimension = %d, want 512 (default)", cfg2.Embedding.Dimension)
+	}
+}

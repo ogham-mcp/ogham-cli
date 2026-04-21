@@ -140,18 +140,29 @@ func runInitWizard(cfg *native.Config) error {
 	}
 
 	form := huh.NewForm(
-		// Step 1: provider + API key
+		// Step 1a: provider select (always shown)
 		huh.NewGroup(
 			huh.NewSelect[string]().
 				Title("Embedding provider").
 				Description("Which provider generates your memory embeddings?").
 				Options(providers...).
 				Value(&cfg.Embedding.Provider),
+		),
+
+		// Step 1b: API key -- skipped entirely for Ollama (local, keyless).
+		// huh's hide function only works at the Group level, not field level,
+		// so this step is its own group gated by the provider choice above.
+		huh.NewGroup(
 			huh.NewInput().
 				Title("API key").
 				Description("Leave blank to keep the current value (stored in config).").
 				EchoMode(huh.EchoModePassword).
 				Value(&cfg.Embedding.APIKey),
+		).WithHideFunc(func() bool { return cfg.Embedding.Provider == "ollama" }),
+
+		// Step 1c: model (always shown -- every provider has a default, but
+		// operators may want to override for Ollama in particular).
+		huh.NewGroup(
 			huh.NewInput().
 				Title("Model (optional)").
 				Description("Leave blank for the provider default (e.g. gemini-embedding-2-preview).").
