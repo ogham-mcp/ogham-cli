@@ -210,11 +210,12 @@ func BuildNativeHealthHandler(cfg *native.Config) mcp.ToolHandler {
 }
 
 // ---------------------------------------------------------------------
-// RegisterNativeTools installs the four v0.5 native tool handlers on the
-// MCP server. Returns the list of tool names registered for logging.
+// RegisterNativeTools installs the v0.5 native tool handlers on the MCP
+// server. Returns the set of tool names registered so the proxy path
+// can skip them (native wins on name collision).
 // ---------------------------------------------------------------------
 
-func RegisterNativeTools(server *mcp.Server, cfg *native.Config) []string {
+func RegisterNativeTools(server *mcp.Server, cfg *native.Config) map[string]struct{} {
 	tools := []struct {
 		name        string
 		description string
@@ -247,14 +248,14 @@ func RegisterNativeTools(server *mcp.Server, cfg *native.Config) []string {
 		},
 	}
 
-	names := make([]string, 0, len(tools))
+	names := make(map[string]struct{}, len(tools))
 	for _, t := range tools {
 		server.AddTool(&mcp.Tool{
 			Name:        t.name,
 			Description: t.description,
 			InputSchema: schemaFor(t.schemaProto),
 		}, t.handler)
-		names = append(names, t.name)
+		names[t.name] = struct{}{}
 	}
 	return names
 }
