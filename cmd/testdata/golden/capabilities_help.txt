@@ -1,0 +1,31 @@
+Print the authoritative matrix of which MCP tools are implemented
+natively in the Go binary versus which still require the Python sidecar
+(--sidecar), plus which search augmentations are only available when
+routing through the sidecar.
+
+Text mode (default) is grouped for human reading: store-side tools,
+search-side tools, profile + config, CLI subcommands that still route
+through the sidecar, sidecar-only tools, and sidecar-gated search
+augmentations. --json emits a structured payload suitable for scripts
+and dashboards.
+
+The Python MCP is the retrieval-quality brain (strided retrieval,
+multi-hop intent patterns, MMR re-ranking, spreading activation,
+query reformulation). The Go CLI is the enterprise-friendly access
+door -- one static binary, zero runtime deps. Use --sidecar when you
+need the full retrieval pipeline; the native path is faster but
+applies a subset of the retrieval machinery.
+
+Usage:
+  ogham capabilities [flags]
+
+Flags:
+  -h, --help   help for capabilities
+      --json   Emit JSON (authoritative payload for scripts / dashboards) instead of the text matrix
+
+Global Flags:
+      --python          Alias for --sidecar
+  -q, --quiet           Suppress stderr informational notices (sidecar fallback message)
+      --sidecar         Route through the Python MCP sidecar for the full retrieval pipeline (intent detection, strided retrieval, query reformulation, graph augmentation). Default is the fast native Go path.
+      --text            Human-readable output (default is JSON for LLM / script consumption)
+  -v, --verbose count   Increase stderr log verbosity (-v = info, -vv = debug)

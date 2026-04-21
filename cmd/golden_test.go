@@ -109,6 +109,7 @@ func TestCmdGolden(t *testing.T) {
 		{name: "hooks_help", args: []string{"hooks", "--help"}},
 		{name: "plugin_help", args: []string{"plugin", "--help"}},
 		{name: "init_help", args: []string{"init", "--help"}},
+		{name: "capabilities_help", args: []string{"capabilities", "--help"}},
 	}
 
 	for _, tc := range cases {
