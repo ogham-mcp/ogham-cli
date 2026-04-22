@@ -1,0 +1,74 @@
+package templates
+
+import (
+	"fmt"
+
+	"github.com/ogham-mcp/ogham-cli/internal/native"
+)
+
+// Search renders the /search view: a query input + a list of hybrid_search
+// result cards. Empty query = just the input (no results block). Errors
+// surface in a banner above the results so the user still sees chrome.
+templ Search(vd ViewData, q string, results []native.SearchResult, err error) {
+	@Layout(vd, "Search") {
+		<form method="get" action="/search" class="mb-6">
+			<div class="flex items-center gap-3">
+				<input
+					type="search"
+					name="q"
+					value={ q }
+					placeholder="Search memories..."
+					class="text-sm bg-background border rounded-md px-3 py-2 w-full outline-none focus:ring-2"
+					style="border-color: var(--border);"
+					autofocus
+				/>
+				<button
+					type="submit"
+					class="text-sm bg-primary text-primary-foreground rounded-md px-4 py-2 font-semibold hover:opacity-90"
+				>Search</button>
+			</div>
+		</form>
+		if err != nil {
+			<div class="mb-6 px-4 py-3 rounded-md border text-sm text-destructive" style="background: color-mix(in oklab, var(--destructive) 12%, transparent); border-color: color-mix(in oklab, var(--destructive) 30%, transparent);">
+				<strong>Search error:</strong> { err.Error() }
+			</div>
+		}
+		if q != "" && err == nil {
+			<div class="mb-3 text-xs text-muted-foreground">
+				{ fmt.Sprintf("%d result(s) for %q", len(results), q) }
+			</div>
+		}
+		<div class="space-y-3">
+			for _, r := range results {
+				@searchResultCard(r)
+			}
+		</div>
+		if q != "" && err == nil && len(results) == 0 {
+			<div data-slot="card" class="bg-card text-card-foreground rounded-xl border py-6 px-6 shadow-sm text-muted-foreground">
+				No matches. Try a broader query or switch profiles.
+			</div>
+		}
+	}
+}
+
+// searchResultCard styles a single hybrid_search row. Shows the
+// similarity + keyword_rank so the user can eyeball whether the top
+// result is semantic-led or keyword-led.
+templ searchResultCard(r native.SearchResult) {
+	<div data-result={ r.ID } data-slot="card" class="bg-card text-card-foreground rounded-xl border py-5 shadow-sm">
+		<div class="px-6 flex items-baseline justify-between mb-2 text-xs text-muted-foreground">
+			<span>{ r.CreatedAt.UTC().Format("2006-01-02T15:04:05") }</span>
+			<span>
+				{ fmt.Sprintf("rel=%.3f  sem=%.3f  kw=%.3f", r.Relevance, r.Similarity, r.KeywordRank) }
+			</span>
+		</div>
+		<div class="px-6 text-sm whitespace-pre-wrap">{ r.Content }</div>
+		if len(r.Tags) > 0 {
+			<div class="px-6 mt-2 flex flex-wrap gap-2">
+				for _, t := range r.Tags {
+					<span class="text-xs px-2 py-0.5 rounded-full bg-muted text-muted-foreground">{ t }</span>
+				}
+			</div>
+		}
+	</div>
+}
