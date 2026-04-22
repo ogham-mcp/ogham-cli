@@ -105,8 +105,9 @@ templ calendarGrid(cols []CalendarWeek) {
 }
 
 // calendarCell renders one day square. Intensity maps count into one
-// of five Tailwind-backed classes (muted, lvl1..lvl4). Missing-day
-// spacers get a transparent class so the grid still aligns.
+// of five inline background styles (faint border colour for empty
+// days, graduated primary-opacity for filled days). Missing-day
+// spacers are empty divs so the grid geometry still aligns.
 templ calendarCell(c CalendarCell, col, row int) {
 	if c.Day.IsZero() {
 		<div style={ fmt.Sprintf("grid-column: %d; grid-row: %d;", col+2, row+2) }></div>
@@ -114,12 +115,35 @@ templ calendarCell(c CalendarCell, col, row int) {
 		<a
 			href={ templ.SafeURL("/timeline?on=" + c.Day.UTC().Format("2006-01-02")) }
 			title={ calendarCellTooltip(c) }
-			class={ "rounded-sm block hover:ring-1 hover:ring-primary", calendarCellClass(c.Count) }
-			style={ fmt.Sprintf("grid-column: %d; grid-row: %d; width: 12px; height: 12px;", col+2, row+2) }
+			class="rounded-sm block hover:ring-1 hover:ring-primary"
+			style={ calendarCellStyle(c, col, row) }
 			data-count={ fmt.Sprintf("%d", c.Count) }
 			data-day={ c.Day.UTC().Format("2006-01-02") }
 		></a>
 	}
+}
+
+// calendarCellStyle inlines the grid placement + background for a cell.
+// Using an inline style (rather than a Tailwind class) works around the
+// fact that our dark ogham theme's `--muted` is too close to `--card`
+// to show up as a visible grid. The 5 buckets map to CSS variables so
+// the Tailwind pipeline still owns the colour palette.
+func calendarCellStyle(c CalendarCell, col, row int) string {
+	var bg string
+	switch {
+	case c.Count == 0:
+		bg = "var(--border)"
+	case c.Count <= 3:
+		bg = "color-mix(in oklab, var(--primary) 30%, transparent)"
+	case c.Count <= 10:
+		bg = "color-mix(in oklab, var(--primary) 60%, transparent)"
+	case c.Count <= 20:
+		bg = "color-mix(in oklab, var(--primary) 80%, transparent)"
+	default:
+		bg = "var(--primary)"
+	}
+	return fmt.Sprintf("grid-column: %d; grid-row: %d; width: 12px; height: 12px; background: %s;",
+		col+2, row+2, bg)
 }
 
 // calendarLegend is the miniature "less ... more" scale shown in the
@@ -127,10 +151,10 @@ templ calendarCell(c CalendarCell, col, row int) {
 templ calendarLegend(maxCount int64) {
 	<div class="flex items-center gap-1 text-[10px] text-muted-foreground">
 		<span>Less</span>
-		<span class={ "rounded-sm", calendarCellClass(0) } style="width:12px;height:12px;"></span>
-		<span class={ "rounded-sm", calendarCellClass(1) } style="width:12px;height:12px;"></span>
-		<span class={ "rounded-sm", calendarCellClass(4) } style="width:12px;height:12px;"></span>
-		<span class={ "rounded-sm", calendarCellClass(11) } style="width:12px;height:12px;"></span>
+		<span class="rounded-sm" style="width:12px;height:12px; background: var(--border);"></span>
+		<span class="rounded-sm" style="width:12px;height:12px; background: color-mix(in oklab, var(--primary) 30%, transparent);"></span>
+		<span class="rounded-sm" style="width:12px;height:12px; background: color-mix(in oklab, var(--primary) 60%, transparent);"></span>
+		<span class="rounded-sm" style="width:12px;height:12px; background: var(--primary);"></span>
 		<span>More</span>
 	</div>
 }
@@ -143,7 +167,10 @@ templ calendarLegend(maxCount int64) {
 func calendarCellClass(count int64) string {
 	switch {
 	case count == 0:
-		return "bg-muted opacity-40"
+		// Enough contrast against the near-black card background to
+		// be visible as a grid cell without drowning out the actual
+		// gold-coloured "has memories" cells.
+		return "bg-muted"
 	case count <= 3:
 		return "bg-primary/30"
 	case count <= 10:

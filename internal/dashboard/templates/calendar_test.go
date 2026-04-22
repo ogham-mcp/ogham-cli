@@ -59,7 +59,7 @@ func TestBuildCalendar_CountsOverlay(t *testing.T) {
 // TestCalendarCellClass covers the intensity bucket boundaries.
 func TestCalendarCellClass(t *testing.T) {
 	cases := map[int64]string{
-		0:   "bg-muted opacity-40",
+		0:   "bg-muted",
 		1:   "bg-primary/30",
 		3:   "bg-primary/30",
 		4:   "bg-primary/60",

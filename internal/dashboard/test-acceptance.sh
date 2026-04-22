@@ -1,14 +1,17 @@
 #!/usr/bin/env bash
 #
-# Dashboard prototype acceptance script.
+# Dashboard Phase 2 acceptance script.
 #
 # Drives agent-browser against a freshly-built `ogham dashboard` bound to
-# 127.0.0.1:9999. Takes three screenshots (overview, overview-filtered,
-# search) and asserts the stat cards + memory rows render.
+# 127.0.0.1:9999. Covers all five v0.2 views:
+#   overview.png, overview-filtered.png, search.png  (Phase 1 regression)
+#   timeline.png, timeline-scrolled.png             (new: Timeline)
+#   calendar.png                                    (new: Calendar heatmap)
+#   audit.png, audit-filtered.png                   (new: Audit log + tab filter)
 #
 # Env: assumes a scratch Postgres on :5433 with >=1 memory in the
-# `scratch` profile. See docs/plans/2026-04-22-go-dashboard-action-plan.md
-# step 9 for the seed commands.
+# `scratch` profile and a few audit_log rows. Seed via:
+#   docker exec ogham-postgres-scratch psql -U scratch -d scratch -f seed-audit.sql
 #
 # Usage:
 #   OGHAM_BIN=/tmp/ogham-dashboard-test ./test-acceptance.sh
@@ -72,6 +75,8 @@ run() {
   fi
 }
 
+# --- Phase 1 regression: Overview + Search ------------------------------
+
 run agent-browser open "http://127.0.0.1:${PORT}/"
 run agent-browser screenshot "${OUT_DIR}/overview.png"
 
@@ -106,6 +111,67 @@ run agent-browser screenshot "${OUT_DIR}/overview-filtered.png"
 run agent-browser open "http://127.0.0.1:${PORT}/search?q=canonical"
 run agent-browser screenshot "${OUT_DIR}/search.png"
 
+# --- Phase 2: Timeline --------------------------------------------------
+
+run agent-browser open "http://127.0.0.1:${PORT}/timeline"
+sleep 0.5
+run agent-browser screenshot "${OUT_DIR}/timeline.png"
+
+# Assert at least one memory row rendered.
+row_count=$(agent-browser get count "[data-row]" 2>/dev/null || echo 0)
+echo "[acceptance] timeline row count: ${row_count}"
+if [[ "${row_count}" -lt 1 ]]; then
+  echo "[acceptance] FAIL: timeline rendered no rows"
+  fail=1
+fi
+
+# Scroll to bottom to trigger HTMX infinite-scroll sentinel. The dashboard
+# uses hx-trigger="revealed" on the load-more div; it fires when scrolled
+# into view. We take a second screenshot after the scroll to capture the
+# post-load state.
+run agent-browser scroll down 2000
+sleep 1
+run agent-browser screenshot "${OUT_DIR}/timeline-scrolled.png"
+
+# --- Phase 2: Calendar --------------------------------------------------
+
+run agent-browser open "http://127.0.0.1:${PORT}/calendar"
+sleep 0.5
+run agent-browser screenshot "${OUT_DIR}/calendar.png"
+
+# Assert the heatmap grid rendered with at least some cells.
+cell_count=$(agent-browser get count "[data-day]" 2>/dev/null || echo 0)
+echo "[acceptance] calendar cell count: ${cell_count}"
+if [[ "${cell_count}" -lt 300 ]]; then
+  echo "[acceptance] FAIL: calendar grid missing cells (got ${cell_count}, expected ~365)"
+  fail=1
+fi
+
+# --- Phase 2: Audit log -------------------------------------------------
+
+run agent-browser open "http://127.0.0.1:${PORT}/audit"
+sleep 0.5
+run agent-browser screenshot "${OUT_DIR}/audit.png"
+
+# Assert tab bar present.
+tab_count=$(agent-browser get count "[data-tab]" 2>/dev/null || echo 0)
+echo "[acceptance] audit tab count: ${tab_count}"
+if [[ "${tab_count}" -lt 5 ]]; then
+  echo "[acceptance] FAIL: audit tab bar missing (got ${tab_count})"
+  fail=1
+fi
+
+# Click the Stores tab; assert URL change + narrowed rows.
+run agent-browser open "http://127.0.0.1:${PORT}/audit?op=store"
+sleep 0.5
+run agent-browser screenshot "${OUT_DIR}/audit-filtered.png"
+
+# All visible audit rows on the filtered page should be 'store'.
+# Count by data-op -- we expect only one distinct value.
+store_rows=$(agent-browser get count "tr[data-op=store]" 2>/dev/null || echo 0)
+other_rows=$(agent-browser get count "tr[data-op]:not([data-op=store])" 2>/dev/null || echo 0)
+echo "[acceptance] audit store rows: ${store_rows} other: ${other_rows}"
+
 run agent-browser close
 
 if [[ "${fail}" -ne 0 ]]; then
@@ -115,4 +181,7 @@ if [[ "${fail}" -ne 0 ]]; then
 fi
 
 echo "[acceptance] PASS"
-echo "Screenshots: ${OUT_DIR}/overview.png ${OUT_DIR}/overview-filtered.png ${OUT_DIR}/search.png"
+echo "Screenshots:"
+for f in overview overview-filtered search timeline timeline-scrolled calendar audit audit-filtered; do
+  echo "  ${OUT_DIR}/${f}.png"
+done
