@@ -1,0 +1,65 @@
+@import "tailwindcss";
+
+/* Tell Tailwind v4 where to scan for classes -- the .templ sources are
+ * the canonical authority (they're what developers edit); the generated
+ * _templ.go files are a superset and help pick up any classes that
+ * appear only in Go-side string literals. */
+@source "../templates/**/*.templ";
+@source "../templates/**/*_templ.go";
+
+/*
+ * Ogham dashboard dark theme.
+ * Source: ogham-dashboard/src/styles/themes/ogham.css (.dark block).
+ * We inline the variables here so Tailwind v4's `@theme` sees them at
+ * compile time and the utilities map correctly to the ogham palette.
+ */
+@theme {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --radius: 0.5rem;
+  --font-sans: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
+    'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  --font-serif: Georgia, Cambria, 'Times New Roman', Times, serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+
+/* Light + dark CSS variables -- copied from ogham-dashboard/ogham.css.
+ * Dark-only for the prototype; toggle ships later. */
+[data-theme='ogham'].dark,
+html.dark[data-theme='ogham'],
+html[data-theme='ogham'] {
+  --background: oklch(0.2 0.025 255);
+  --foreground: oklch(0.9 0.01 85);
+  --card: oklch(0.22 0.022 255);
+  --card-foreground: oklch(0.92 0.008 85);
+  --primary: oklch(0.78 0.14 85);
+  --primary-foreground: oklch(0.15 0.02 255);
+  --muted: oklch(0.22 0.02 255);
+  --muted-foreground: oklch(0.65 0.015 85);
+  --accent: oklch(0.26 0.022 255);
+  --accent-foreground: oklch(0.9 0.01 85);
+  --border: oklch(0.32 0.02 255);
+  --input: oklch(0.36 0.018 255);
+  --ring: oklch(0.78 0.14 85);
+  --destructive: oklch(0.6 0.2 27);
+  --destructive-foreground: oklch(1 0 0);
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans);
+}

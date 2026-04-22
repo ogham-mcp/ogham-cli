@@ -1,0 +1,14 @@
+{
+  "name": "ogham-dashboard-build",
+  "private": true,
+  "version": "0.0.0",
+  "description": "Build-time Tailwind pipeline for the Go dashboard. Not shipped.",
+  "scripts": {
+    "build": "bunx @tailwindcss/cli -i input.css -o ../static/styles.css --minify",
+    "watch": "bunx @tailwindcss/cli -i input.css -o ../static/styles.css --watch"
+  },
+  "devDependencies": {
+    "@tailwindcss/cli": "^4.0.0",
+    "tailwindcss": "^4.0.0"
+  }
+}
