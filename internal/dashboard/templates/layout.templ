@@ -5,9 +5,24 @@ package templates
 // session -- active profile + backend label for the header chrome.
 // Backend is a short credential-free string like "postgres@host/db"
 // or "supabase@project-ref"; see handlers.backendLabel.
+//
+// Active is the active-page key used by the nav bar to highlight the
+// current view. Empty string = nothing highlighted (fine for the
+// legacy prototype Overview -- kept backward-compatible).
 type ViewData struct {
 	Profile string
 	Backend string
+	Active  string
+}
+
+// navLinkClass returns the class string for a nav link, switching to
+// the gold primary colour when the page is active. Matches the Next.js
+// reference's sidebar highlight treatment.
+func navLinkClass(self, active string) string {
+	if self == active {
+		return "text-primary font-semibold"
+	}
+	return "text-muted-foreground hover:text-foreground"
 }
 
 // Layout is the base HTML scaffold: <head> with the compiled Tailwind
@@ -40,8 +55,11 @@ templ Layout(vd ViewData, title string) {
 					}
 				</div>
 				<nav class="flex items-center gap-6 text-sm">
-					<a href="/" class="text-muted-foreground hover:text-foreground">Overview</a>
-					<a href="/search" class="text-muted-foreground hover:text-foreground">Search</a>
+					<a href="/" class={ navLinkClass("overview", vd.Active) }>Overview</a>
+					<a href="/search" class={ navLinkClass("search", vd.Active) }>Search</a>
+					<a href="/timeline" class={ navLinkClass("timeline", vd.Active) }>Timeline</a>
+					<a href="/calendar" class={ navLinkClass("calendar", vd.Active) }>Calendar</a>
+					<a href="/audit" class={ navLinkClass("audit", vd.Active) }>Audit</a>
 				</nav>
 			</div>
 			{ children... }

@@ -1,0 +1,230 @@
+package templates
+
+import (
+	"fmt"
+	"strings"
+	"time"
+
+	"github.com/ogham-mcp/ogham-cli/internal/native"
+)
+
+// TimelineData is the handler-to-template contract for the Timeline
+// view. Memories is the slab of rows the handler fetched (20-50 per
+// page); NextCursor is the oldest created_at in the slab, echoed back
+// to HTMX as `?before=<NextCursor>` for infinite scroll. When empty
+// the Load-more trigger is suppressed -- we've hit the end.
+//
+// OnDateLabel is rendered in the page header when the user drilled in
+// from the Calendar ("Timeline for Monday, 1 April 2026").
+type TimelineData struct {
+	Memories    []native.Memory
+	NextCursor  time.Time
+	OnDateLabel string
+	Err         error
+}
+
+// Timeline renders the full page shell: header, optional drill-in
+// banner, timeline axis + cards, HTMX load-more trigger.
+templ Timeline(vd ViewData, td TimelineData) {
+	@Layout(vd, "Timeline") {
+		<div class="mb-6">
+			<h2 class="text-xl font-semibold mb-1">Timeline</h2>
+			<p class="text-sm text-muted-foreground">Your memories in chronological order, newest first.</p>
+		</div>
+		if td.OnDateLabel != "" {
+			<div class="mb-4 px-4 py-3 rounded-md border text-sm flex items-center justify-between" style="background: color-mix(in oklab, var(--primary) 8%, transparent); border-color: color-mix(in oklab, var(--primary) 35%, transparent);">
+				<span>Showing memories for <strong>{ td.OnDateLabel }</strong></span>
+				<a href="/timeline" class="text-xs text-primary hover:underline">Clear filter</a>
+			</div>
+		}
+		if td.Err != nil {
+			<div class="mb-6 px-4 py-3 rounded-md border text-sm text-destructive" style="background: color-mix(in oklab, var(--destructive) 12%, transparent); border-color: color-mix(in oklab, var(--destructive) 30%, transparent);">
+				<strong>Data error:</strong> { td.Err.Error() }
+			</div>
+		}
+		<div class="relative ml-4" id="timeline-root">
+			<div class="absolute left-0 top-0 bottom-0 w-px bg-border"></div>
+			@TimelineRows(td.Memories, td.NextCursor, td.OnDateLabel)
+		</div>
+		if td.Err == nil && len(td.Memories) == 0 {
+			<div class="ml-6 py-12 text-center text-muted-foreground text-sm">
+				No memories to show on this timeline.
+			</div>
+		}
+	}
+}
+
+// TimelineRows is the repeatable fragment: grouped-by-day cards plus
+// the infinite-scroll sentinel. Used both for the initial render and
+// for the HTMX-appended pages (the handler serves this same fragment
+// without the Layout + axis chrome).
+templ TimelineRows(mems []native.Memory, nextCursor time.Time, onDateLabel string) {
+	{{ groups := groupMemoriesByDay(mems) }}
+	for _, g := range groups {
+		<div class="relative mb-6" data-day={ g.Key }>
+			<div class="relative mb-3 flex items-center gap-3">
+				<div class="absolute -left-[5px] h-2.5 w-2.5 rounded-full bg-primary"></div>
+				<div class="ml-6 text-sm text-muted-foreground">
+					<span class="font-semibold text-foreground">{ g.Label }</span>
+					<span class="ml-2 text-xs">{ fmt.Sprintf("(%d %s)", len(g.Memories), pluralMemories(len(g.Memories))) }</span>
+				</div>
+			</div>
+			<div class="ml-6 space-y-2">
+				for _, m := range g.Memories {
+					@timelineCard(m)
+				}
+			</div>
+		</div>
+	}
+	if !nextCursor.IsZero() && len(mems) > 0 {
+		<div
+			class="ml-6 py-4 text-center text-xs text-muted-foreground"
+			hx-get={ timelineLoadMoreURL(nextCursor, onDateLabel) }
+			hx-trigger="revealed"
+			hx-swap="outerHTML"
+		>
+			<span class="inline-flex items-center gap-2">
+				<span class="h-2 w-2 animate-pulse rounded-full bg-primary"></span>
+				Loading more...
+			</span>
+		</div>
+	}
+}
+
+// timelineCard is a single memory row. Click anywhere on the card to
+// toggle the full-content expansion; the expanded view swaps inline
+// via HTMX. The collapsed preview caps content at 200 chars (spec).
+templ timelineCard(m native.Memory) {
+	<div
+		data-row={ m.ID }
+		data-slot="card"
+		class="relative rounded-md border bg-card p-3 text-sm transition-colors hover:border-primary/50 cursor-pointer"
+		hx-get={ "/timeline/expand?id=" + m.ID }
+		hx-trigger="click"
+		hx-target="this"
+		hx-swap="outerHTML"
+	>
+		<div class="absolute -left-[23px] top-4 h-1.5 w-1.5 rounded-full bg-muted-foreground/60"></div>
+		<p class="line-clamp-3 whitespace-pre-wrap">{ timelinePreview(m.Content) }</p>
+		<div class="mt-2 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+			<span>{ m.CreatedAt.UTC().Format("15:04") }</span>
+			if m.Source != "" {
+				<span class="px-2 py-0.5 rounded-md border text-foreground" style="border-color: var(--border);">{ m.Source }</span>
+			}
+			for _, t := range m.Tags {
+				<span class="px-2 py-0.5 rounded-full bg-muted">{ t }</span>
+			}
+		</div>
+	</div>
+}
+
+// TimelineCardCollapsed is the exported entry point for the collapsed
+// card variant -- used by the /timeline/collapse fragment endpoint.
+// Internally delegates to timelineCard so the styling + markup stays
+// in one place.
+templ TimelineCardCollapsed(m native.Memory) {
+	@timelineCard(m)
+}
+
+// TimelineCardExpanded is the expanded-card variant served by
+// /timeline/expand. Same visual shape but full content + a collapse
+// action bound to the same card element.
+templ TimelineCardExpanded(m native.Memory) {
+	<div
+		data-row={ m.ID }
+		data-slot="card"
+		class="relative rounded-md border bg-card p-3 text-sm transition-colors border-primary/50 cursor-pointer"
+		hx-get={ "/timeline/collapse?id=" + m.ID }
+		hx-trigger="click"
+		hx-target="this"
+		hx-swap="outerHTML"
+	>
+		<div class="absolute -left-[23px] top-4 h-1.5 w-1.5 rounded-full bg-primary"></div>
+		<p class="whitespace-pre-wrap">{ m.Content }</p>
+		<div class="mt-2 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+			<span>{ m.CreatedAt.UTC().Format("2006-01-02 15:04:05") }</span>
+			if m.Source != "" {
+				<span class="px-2 py-0.5 rounded-md border text-foreground" style="border-color: var(--border);">{ m.Source }</span>
+			}
+			for _, t := range m.Tags {
+				<span class="px-2 py-0.5 rounded-full bg-muted">{ t }</span>
+			}
+		</div>
+	</div>
+}
+
+// ---- helpers ----------------------------------------------------------
+
+// TimelineDayGroup packages the memories for one calendar day (UTC)
+// under a human-readable label + a stable key used for data-day.
+type TimelineDayGroup struct {
+	Key      string // YYYY-MM-DD, used for data-day + cell navigation
+	Label    string // e.g. "Tuesday, 22 April 2026"
+	Memories []native.Memory
+}
+
+// groupMemoriesByDay assumes the input is already sorted newest-first
+// (the native.List contract). It walks in order and emits contiguous
+// runs as a single group; the result preserves the newest-first order.
+func groupMemoriesByDay(mems []native.Memory) []TimelineDayGroup {
+	if len(mems) == 0 {
+		return nil
+	}
+	var groups []TimelineDayGroup
+	var current TimelineDayGroup
+	for _, m := range mems {
+		day := m.CreatedAt.UTC().Format("2006-01-02")
+		if day != current.Key {
+			if current.Key != "" {
+				groups = append(groups, current)
+			}
+			current = TimelineDayGroup{
+				Key:      day,
+				Label:    m.CreatedAt.UTC().Format("Monday, 2 January 2006"),
+				Memories: nil,
+			}
+		}
+		current.Memories = append(current.Memories, m)
+	}
+	if current.Key != "" {
+		groups = append(groups, current)
+	}
+	return groups
+}
+
+// timelinePreview caps content at 200 chars per spec. Adds an ellipsis
+// so the user sees there's more to expand. Whitespace at the truncation
+// boundary is trimmed to avoid awkward "... " visible tail.
+func timelinePreview(c string) string {
+	const max = 200
+	if len(c) <= max {
+		return c
+	}
+	return strings.TrimRight(c[:max-1], " \n\t") + "…"
+}
+
+// pluralMemories avoids a stray trailing 's' when the count is 1.
+// Kept here rather than in a generic helpers file because it's only
+// used by the Timeline view.
+func pluralMemories(n int) string {
+	if n == 1 {
+		return "memory"
+	}
+	return "memories"
+}
+
+// timelineLoadMoreURL builds the HTMX hx-get URL for the infinite
+// scroll sentinel. Split out of the template so the string assembly
+// stays out of the generated code and stays test-friendly.
+func timelineLoadMoreURL(next time.Time, onDateLabel string) string {
+	cursor := next.UTC().Format(time.RFC3339Nano)
+	url := "/timeline/rows?before=" + cursor
+	if onDateLabel != "" {
+		// Re-parse the human label back to YYYY-MM-DD for the cursor
+		// -- the handler only accepts the ISO form on ?on=.
+		if t, err := time.Parse("Monday, 2 January 2006", onDateLabel); err == nil {
+			url += "&on=" + t.UTC().Format("2006-01-02")
+		}
+	}
+	return url
+}

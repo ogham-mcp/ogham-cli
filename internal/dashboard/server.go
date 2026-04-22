@@ -44,6 +44,10 @@ func New(cfg *native.Config, host string, port int) (*Server, string, error) {
 	mux.HandleFunc("/", h.overview)
 	mux.HandleFunc("/filter", h.filter)
 	mux.HandleFunc("/search", h.search)
+	mux.HandleFunc("/timeline", h.timeline)
+	mux.HandleFunc("/timeline/rows", h.timelineRows)
+	mux.HandleFunc("/timeline/expand", h.timelineExpand)
+	mux.HandleFunc("/timeline/collapse", h.timelineCollapse)
 	mux.HandleFunc("/healthz", h.healthz)
 
 	srv := &http.Server{

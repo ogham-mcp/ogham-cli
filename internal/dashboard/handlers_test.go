@@ -337,6 +337,80 @@ func TestServerBindsAndServes(t *testing.T) {
 	}
 }
 
+// --- Timeline ------------------------------------------------------------
+
+func TestTimeline_RejectsBackendError(t *testing.T) {
+	// No backend configured -- List fails; timeline should render the
+	// chrome + error banner, not a 500.
+	h := newTestHandlers()
+	rr := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/timeline", nil)
+
+	h.timeline(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status: got %d want %d", rr.Code, http.StatusOK)
+	}
+	body := rr.Body.String()
+	if !strings.Contains(body, "Timeline") {
+		t.Errorf("missing Timeline heading")
+	}
+	if !strings.Contains(body, "Data error") {
+		t.Errorf("expected data-error banner on backend-less cfg")
+	}
+	// Active nav highlight should hit the Timeline link.
+	if !strings.Contains(body, `class="text-primary font-semibold">Timeline</a>`) {
+		t.Errorf("expected active nav on Timeline link")
+	}
+}
+
+func TestTimeline_OnDateParsesAndLabels(t *testing.T) {
+	h := newTestHandlers()
+	rr := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/timeline?on=2026-04-22", nil)
+
+	h.timeline(rr, req)
+
+	body := rr.Body.String()
+	if !strings.Contains(body, "Wednesday, 22 April 2026") {
+		t.Errorf("OnDate label not rendered; body head: %q", body[:min(600, len(body))])
+	}
+}
+
+func TestTimelineRows_ErrorFragmentInlinesMessage(t *testing.T) {
+	// /timeline/rows has no backend either; the fragment endpoint
+	// must return a terse inline error, NOT the full-page banner.
+	h := newTestHandlers()
+	rr := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/timeline/rows?before=2026-04-22T00:00:00Z", nil)
+
+	h.timelineRows(rr, req)
+
+	body := rr.Body.String()
+	if !strings.Contains(body, "Error loading more") {
+		t.Errorf("expected inline error fragment, got: %q", body)
+	}
+	// Must NOT emit the full layout chrome -- fragment swap only.
+	if strings.Contains(body, "<html") {
+		t.Errorf("fragment endpoint emitted full page: %q", body)
+	}
+}
+
+func TestHtmlEscape(t *testing.T) {
+	// Defensive: the inline error banner skips templ, so the escaper
+	// has to handle the common HTML-injection characters itself.
+	cases := map[string]string{
+		"hello":                 "hello",
+		"<script>x</script>":    "&lt;script&gt;x&lt;/script&gt;",
+		`a & b "quoted" < stuff`: `a &amp; b &quot;quoted&quot; &lt; stuff`,
+	}
+	for in, want := range cases {
+		if got := htmlEscape(in); got != want {
+			t.Errorf("htmlEscape(%q): got %q want %q", in, got, want)
+		}
+	}
+}
+
 // TestStaticAssetsEmbedded asserts the embedded styles.css and htmx.min.js
 // are served at /static/ with a reasonable body. Catches a regression
 // where the go:embed pattern picks up the wrong directory.

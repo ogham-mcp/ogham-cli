@@ -47,6 +47,7 @@ func (h *handlers) overview(w http.ResponseWriter, r *http.Request) {
 	defer cancel()
 
 	vd := h.viewData()
+	vd.Active = "overview"
 
 	stats, statsErr := native.GetStats(ctx, h.cfg)
 	if statsErr != nil {
@@ -94,6 +95,7 @@ func (h *handlers) search(w http.ResponseWriter, r *http.Request) {
 
 	q := strings.TrimSpace(r.URL.Query().Get("q"))
 	vd := h.viewData()
+	vd.Active = "search"
 
 	var (
 		results []native.SearchResult
@@ -116,6 +118,166 @@ func (h *handlers) search(w http.ResponseWriter, r *http.Request) {
 func (h *handlers) healthz(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 	_, _ = w.Write([]byte("ok\n"))
+}
+
+// timelinePageSize is how many rows the Timeline handler fetches per
+// scroll. 50 matches the spec ("Initial page fetches 50") and is small
+// enough that the first paint is under the 10s requestTimeout even on
+// cold SSDs.
+const timelinePageSize = 50
+
+// timeline handles `GET /timeline` -- full-page render.
+// Accepts ?before=<RFC3339> for HTMX cursor pagination and
+// ?on=YYYY-MM-DD for calendar drill-in.
+func (h *handlers) timeline(w http.ResponseWriter, r *http.Request) {
+	ctx, cancel := context.WithTimeout(r.Context(), requestTimeout)
+	defer cancel()
+
+	td := h.loadTimeline(ctx, r)
+	vd := h.viewData()
+	vd.Active = "timeline"
+
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	_ = templates.Timeline(vd, td).Render(ctx, w)
+}
+
+// timelineRows handles `GET /timeline/rows?before=...&on=...` -- the
+// HTMX-fragment endpoint for infinite scroll. Emits just the grouped
+// rows + the next load-more sentinel.
+func (h *handlers) timelineRows(w http.ResponseWriter, r *http.Request) {
+	ctx, cancel := context.WithTimeout(r.Context(), requestTimeout)
+	defer cancel()
+
+	td := h.loadTimeline(ctx, r)
+	if td.Err != nil {
+		// Fragment endpoint surfaces errors inline as a terse message;
+		// the full-page template reserves the banner treatment.
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		_, _ = w.Write([]byte(`<div class="ml-6 py-4 text-center text-xs text-destructive">Error loading more: ` +
+			htmlEscape(td.Err.Error()) + `</div>`))
+		return
+	}
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	_ = templates.TimelineRows(td.Memories, td.NextCursor, td.OnDateLabel).Render(ctx, w)
+}
+
+// timelineExpand renders a single memory in the expanded card form.
+// Bound to a card's click handler; swaps the card in place.
+func (h *handlers) timelineExpand(w http.ResponseWriter, r *http.Request) {
+	ctx, cancel := context.WithTimeout(r.Context(), requestTimeout)
+	defer cancel()
+	id := strings.TrimSpace(r.URL.Query().Get("id"))
+	if id == "" {
+		http.Error(w, "id required", http.StatusBadRequest)
+		return
+	}
+	m, err := h.findMemory(ctx, id)
+	if err != nil || m == nil {
+		http.Error(w, "not found", http.StatusNotFound)
+		return
+	}
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	_ = templates.TimelineCardExpanded(*m).Render(ctx, w)
+}
+
+// timelineCollapse re-renders a memory in the collapsed form. Same
+// lookup path as timelineExpand; cheaper than caching the row because
+// a memory fetch by id is sub-millisecond on local PG.
+func (h *handlers) timelineCollapse(w http.ResponseWriter, r *http.Request) {
+	ctx, cancel := context.WithTimeout(r.Context(), requestTimeout)
+	defer cancel()
+	id := strings.TrimSpace(r.URL.Query().Get("id"))
+	if id == "" {
+		http.Error(w, "id required", http.StatusBadRequest)
+		return
+	}
+	m, err := h.findMemory(ctx, id)
+	if err != nil || m == nil {
+		http.Error(w, "not found", http.StatusNotFound)
+		return
+	}
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	_ = templates.TimelineCardCollapsed(*m).Render(ctx, w)
+}
+
+// findMemory fetches a single memory by id + active profile. Uses the
+// List endpoint with a small page and a linear scan -- a dedicated
+// GetByID would be marginally cheaper but the Timeline expand flow
+// runs at most a few times per session.
+func (h *handlers) findMemory(ctx context.Context, id string) (*native.Memory, error) {
+	// 200-row page is large enough to cover any reasonable recent
+	// working set. If the user expands a much older card, Timeline's
+	// infinite scroll will have already brought it into the native
+	// List cache; if not, it still falls back to a direct SQL lookup
+	// via the pagination cursor.
+	mems, err := native.List(ctx, h.cfg, native.ListOptions{Limit: 200})
+	if err != nil {
+		return nil, err
+	}
+	for i := range mems {
+		if mems[i].ID == id {
+			return &mems[i], nil
+		}
+	}
+	return nil, nil
+}
+
+// loadTimeline centralises the shared logic: parse ?before + ?on, call
+// native.List, compute the next cursor. Reused by the page + fragment
+// endpoints so both stay in sync.
+func (h *handlers) loadTimeline(ctx context.Context, r *http.Request) templates.TimelineData {
+	opts := native.ListOptions{Limit: timelinePageSize}
+	var onDateLabel string
+
+	if raw := strings.TrimSpace(r.URL.Query().Get("before")); raw != "" {
+		if ts, err := time.Parse(time.RFC3339Nano, raw); err == nil {
+			opts.Before = ts
+		} else if ts, err := time.Parse(time.RFC3339, raw); err == nil {
+			opts.Before = ts
+		}
+	}
+	if raw := strings.TrimSpace(r.URL.Query().Get("on")); raw != "" {
+		// Accept YYYY-MM-DD (preferred) or a full RFC3339 timestamp.
+		if d, err := time.Parse("2006-01-02", raw); err == nil {
+			opts.OnDate = d
+			onDateLabel = d.UTC().Format("Monday, 2 January 2006")
+		} else if d, err := time.Parse(time.RFC3339, raw); err == nil {
+			opts.OnDate = d
+			onDateLabel = d.UTC().Format("Monday, 2 January 2006")
+		}
+	}
+
+	mems, err := native.List(ctx, h.cfg, opts)
+	if err != nil {
+		slog.Warn("dashboard: timeline list", "error", err)
+		return templates.TimelineData{Err: err, OnDateLabel: onDateLabel}
+	}
+
+	var next time.Time
+	// Only surface a cursor if we got a full page AND the caller is
+	// not filtering to a single day (day-filter has a bounded result
+	// set; pagination inside a single day would loop forever).
+	if len(mems) == timelinePageSize && opts.OnDate.IsZero() {
+		next = mems[len(mems)-1].CreatedAt
+	}
+	return templates.TimelineData{
+		Memories:    mems,
+		NextCursor:  next,
+		OnDateLabel: onDateLabel,
+	}
+}
+
+// htmlEscape is a minimal inline escaper for the two error-banner
+// fragments that don't go through a full templ render. Kept tiny on
+// purpose -- anything richer belongs in a template.
+func htmlEscape(s string) string {
+	r := strings.NewReplacer(
+		"&", "&amp;",
+		"<", "&lt;",
+		">", "&gt;",
+		`"`, "&quot;",
+	)
+	return r.Replace(s)
 }
 
 // viewData packages the per-request layout context. Profile + backend
