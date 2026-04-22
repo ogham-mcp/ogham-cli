@@ -18,7 +18,7 @@ Available Commands:
   cleanup           Remove expired memories from a profile
   completion        Generate the autocompletion script for the specified shell
   config            Inspect the current runtime configuration
-  dashboard         Launch the Prefab dashboard (delegates to Python)
+  dashboard         Launch the Ogham dashboard (native Go, loopback only)
   decay             Apply Hebbian decay to stale memories
   delete            Delete a memory by ID from the active profile
   export            Export memories from a profile (JSON or Markdown)

@@ -2,153 +2,136 @@ package cmd
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"log/slog"
+	"net"
+	"net/http"
 	"os"
 	"os/exec"
 	"os/signal"
+	"runtime"
 	"strings"
 	"syscall"
+	"time"
 
+	"github.com/ogham-mcp/ogham-cli/internal/dashboard"
 	"github.com/ogham-mcp/ogham-cli/internal/native"
 	"github.com/spf13/cobra"
 )
 
 var (
-	dashboardPort     int
-	dashboardBind     string
-	dashboardExtrasEx string
+	dashboardPort   int
+	dashboardHost   string
+	dashboardNoOpen bool
 )
 
-// dashboardCmd delegates entirely to the Python Prefab dashboard. This
-// is deliberate: rewriting the dashboard in Go would require a Node
-// frontend or a Go Prefab port, neither of which we want. The Go CLI
-// stays the one-stop entry point by exec'ing the Python dashboard as
-// a child process and forwarding stdio + signals.
+// allowedDashboardHosts is the short-list of bind addresses the prototype
+// accepts. Loopback-only is the security boundary -- the dashboard ships
+// no auth, so exposing it beyond localhost is explicitly unsupported
+// until v0.9 when TLS + remote-access-auth lands.
+var allowedDashboardHosts = map[string]struct{}{
+	"127.0.0.1": {},
+	"localhost": {},
+	"::1":       {},
+}
+
+// dashboardCmd launches the native Go dashboard server. Reads config via
+// internal/native (same Config path as `ogham serve --native`) and serves
+// Templ-rendered Overview + Search views over plain HTTP on a loopback
+// address. See docs/plans/2026-04-22-go-dashboard-action-plan.md for the
+// design rationale (loopback-only, no auth, shadcn port).
 var dashboardCmd = &cobra.Command{
 	Use:   "dashboard",
-	Short: "Launch the Prefab dashboard (delegates to Python)",
-	Long: `Launches the Ogham Prefab UI dashboard. The dashboard stays in Python
-because it uses FastMCP + Prefab components; rewriting in Go would
-require a Node frontend we deliberately don't ship.
+	Short: "Launch the Ogham dashboard (native Go, loopback only)",
+	Long: `Starts a local HTTP server on 127.0.0.1 that renders the Ogham
+dashboard. No authentication: loopback is the security boundary. Remote
+access ships in v0.9 alongside TLS.
 
-This subcommand invokes the Python sidecar's dashboard subcommand and
-forwards stdio + SIGINT/SIGTERM so Ctrl+C cleanly stops the server.
+Flags:
+  --port      TCP port; 0 = random (default)
+  --host      Bind address; must resolve to loopback (127.0.0.1, localhost, ::1)
+  --no-open   Don't auto-open the browser
 
-Configuration is picked up from the same .env files as the other
-subcommands -- DATABASE_*, SUPABASE_*, EMBEDDING_PROVIDER etc. The
-Python ogham needs the [dashboard] extra; set
-OGHAM_SIDECAR_EXTRAS=postgres,gemini,dashboard in your .env or pass
---extras explicitly.`,
+Data source: internal/native (direct Postgres / Supabase). Same env vars
+as the native CLI path -- DATABASE_URL, EMBEDDING_PROVIDER, OGHAM_PROFILE.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		// Resolve the subprocess command the same way the sidecar client
-		// does (OGHAM_SIDECAR_CMD override, OGHAM_SIDECAR_EXTRAS, or the
-		// default uv tool run line), then swap the last two tokens
-		// ("ogham serve") for ("ogham dashboard" + args).
-		argv := resolveDashboardCommand()
+		host := strings.TrimSpace(dashboardHost)
+		if _, ok := allowedDashboardHosts[host]; !ok {
+			return fmt.Errorf("dashboard: host %q is not loopback; remote access ships in v0.9. Allowed: 127.0.0.1, localhost, ::1", host)
+		}
 
-		// Feed TOML-derived env through so Python sees the same config
-		// sidecar-mode commands already expose.
 		cfg, err := native.Load(native.DefaultPath())
 		if err != nil {
-			return err
+			return fmt.Errorf("dashboard: load config: %w", err)
 		}
 
-		// Add dashboard-specific args. --profile is explicit because
-		// Python's typer CLI hard-codes a "default" default for that
-		// option that would otherwise beat any DEFAULT_PROFILE env var.
-		if dashboardPort > 0 {
-			argv = append(argv, "--port", fmt.Sprintf("%d", dashboardPort))
+		server, boundAddr, err := dashboard.New(cfg, host, dashboardPort)
+		if err != nil {
+			return fmt.Errorf("dashboard: %w", err)
 		}
-		if dashboardBind != "" {
-			argv = append(argv, "--host", dashboardBind)
-		}
-		profile := cfg.Profile
-		if profile == "" {
-			profile = "default"
-		}
-		argv = append(argv, "--profile", profile)
-		argv = append(argv, args...) // forward anything extra the user passed
-		env := append(os.Environ(), native.LoadEnvFiles()...)
-		env = append(env, cfg.SidecarEnv()...)
+
+		url := fmt.Sprintf("http://%s/", boundAddr)
+		fmt.Fprintf(os.Stderr, "[ogham dashboard] serving on %s (profile=%s)\n", url, cfg.Profile)
 
 		ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 		defer cancel()
 
-		child := exec.CommandContext(ctx, argv[0], argv[1:]...) //nolint:gosec // user-controlled by design
-		child.Env = env
-		child.Stdin = os.Stdin
-		child.Stdout = os.Stdout
-		child.Stderr = os.Stderr
+		errCh := make(chan error, 1)
+		go func() {
+			if err := server.Serve(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+				errCh <- err
+				return
+			}
+			errCh <- nil
+		}()
 
-		// Propagate SIGINT to the child process group so Ctrl+C reaches
-		// Python cleanly; CommandContext already kills the process when
-		// ctx is cancelled, but setting Cancel explicitly with SIGINT
-		// (rather than the default SIGKILL) gives Python a chance to shut
-		// down gracefully.
-		child.Cancel = func() error {
-			if child.Process != nil {
-				return child.Process.Signal(syscall.SIGINT)
+		if !dashboardNoOpen {
+			if err := openBrowser(url); err != nil {
+				slog.Warn("dashboard: could not auto-open browser", "error", err)
+			}
+		}
+
+		select {
+		case <-ctx.Done():
+			shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 2*time.Second)
+			defer shutdownCancel()
+			if err := server.Shutdown(shutdownCtx); err != nil {
+				return fmt.Errorf("dashboard: shutdown: %w", err)
 			}
 			return nil
+		case err := <-errCh:
+			return err
 		}
-
-		fmt.Fprintf(os.Stderr, "[ogham dashboard] launching: %s\n", strings.Join(argv, " "))
-		if err := child.Run(); err != nil {
-			// Exit errors from the child -- pass through exit code semantics
-			// by returning a plain error. cobra will print to stderr.
-			return fmt.Errorf("dashboard exited: %w", err)
-		}
-		return nil
 	},
 }
 
-// resolveDashboardCommand builds the argv for `ogham dashboard` as a
-// subprocess. Mirrors the sidecar resolver logic but swaps the serve
-// terminal verb for dashboard.
-func resolveDashboardCommand() []string {
-	if raw := strings.TrimSpace(os.Getenv("OGHAM_DASHBOARD_CMD")); raw != "" {
-		return strings.Fields(raw)
+// openBrowser fires a platform-appropriate URL-opener command. Best-effort:
+// any failure (e.g. no display on a headless box) is logged as a warning
+// but doesn't fail the command -- the user can still paste the URL by hand.
+func openBrowser(url string) error {
+	var cmd *exec.Cmd
+	switch runtime.GOOS {
+	case "darwin":
+		cmd = exec.Command("open", url)
+	case "windows":
+		cmd = exec.Command("rundll32", "url.dll,FileProtocolHandler", url)
+	default: // linux, *bsd
+		cmd = exec.Command("xdg-open", url)
 	}
-	if raw := strings.TrimSpace(os.Getenv("OGHAM_SIDECAR_CMD")); raw != "" {
-		return swapTerminalToDashboard(strings.Fields(raw))
-	}
-
-	// Fall back to a uv tool run line with sensible extras for the
-	// dashboard (postgres + dashboard required; gemini optional unless
-	// the user is on Gemini embeddings).
-	extras := strings.TrimSpace(os.Getenv("OGHAM_SIDECAR_EXTRAS"))
-	if extras == "" {
-		extras = "postgres,dashboard"
-	} else if !strings.Contains(extras, "dashboard") {
-		extras = extras + ",dashboard"
-	}
-	return []string{
-		"uv", "tool", "run", "--python", "3.13",
-		"--from", fmt.Sprintf("ogham-mcp[%s]", extras),
-		"ogham", "dashboard",
-	}
+	return cmd.Start()
 }
 
-// swapTerminalToDashboard takes ["uv", "tool", "run", ..., "ogham", "serve"]
-// and returns it with the final "serve" rewritten to "dashboard". Falls
-// back to appending "dashboard" if no "ogham serve" suffix is found.
-func swapTerminalToDashboard(argv []string) []string {
-	out := make([]string, len(argv))
-	copy(out, argv)
-	// Look for the last "serve" and rewrite it.
-	for i := len(out) - 1; i >= 0; i-- {
-		if out[i] == "serve" {
-			out[i] = "dashboard"
-			return out
-		}
-	}
-	// Didn't find serve -- user's override command is doing something
-	// unusual. Append dashboard and let Python figure it out.
-	return append(out, "dashboard")
+// listenerFor is exported for tests; cmd-layer code uses dashboard.New.
+// Kept here to guarantee we catch misconfiguration (non-loopback host) at
+// the command boundary before allocating package resources.
+func listenerFor(host string, port int) (net.Listener, error) {
+	return net.Listen("tcp", net.JoinHostPort(host, fmt.Sprintf("%d", port)))
 }
 
 func init() {
-	dashboardCmd.Flags().IntVar(&dashboardPort, "port", 0, "Port for the dashboard HTTP server (forwarded to Python)")
-	dashboardCmd.Flags().StringVar(&dashboardBind, "bind", "", "Bind address (forwarded to Python)")
+	dashboardCmd.Flags().IntVar(&dashboardPort, "port", 0, "TCP port (0 = random)")
+	dashboardCmd.Flags().StringVar(&dashboardHost, "host", "127.0.0.1", "Bind address (loopback only)")
+	dashboardCmd.Flags().BoolVar(&dashboardNoOpen, "no-open", false, "Don't auto-open the browser")
 	rootCmd.AddCommand(dashboardCmd)
 }

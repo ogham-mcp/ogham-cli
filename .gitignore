@@ -24,3 +24,9 @@ coverage.html
 .env
 .env.local
 .coverage/
+
+# Dashboard build artefacts: the compiled styles.css ships in the repo
+# (it's a //go:embed artefact), but the Bun install cache + lockfile do
+# not need to be tracked. See internal/dashboard/_build/README.md.
+internal/dashboard/_build/node_modules/
+internal/dashboard/_build/bun.lock
