@@ -950,3 +950,57 @@ BEGIN
     LIMIT max_results;
 END;
 $$;
+
+-- ── Memory lifecycle (migration 026 equivalent) ─────────────────────────
+-- Separated table so UPDATE stage doesn't rewrite memories rows + bloat
+-- the HNSW index. Trigger auto-inits a lifecycle row at 'fresh' on
+-- every INSERT into memories. Kept in this single schema file for the
+-- testcontainer; production DBs apply via the migration sequence.
+
+create table if not exists memory_lifecycle (
+    memory_id uuid primary key references memories(id) on delete cascade,
+    profile text not null,
+    stage text not null default 'fresh',
+    stage_entered_at timestamptz not null default now(),
+    updated_at timestamptz not null default now(),
+    constraint memory_lifecycle_stage_valid check (stage in ('fresh', 'stable', 'editing'))
+);
+
+create index if not exists memory_lifecycle_transitioning_idx
+    on memory_lifecycle (profile, stage_entered_at)
+    where stage in ('fresh', 'editing');
+
+create index if not exists memory_lifecycle_profile_stage_idx
+    on memory_lifecycle (profile, stage);
+
+create or replace function init_memory_lifecycle() returns trigger as $$
+begin
+    insert into memory_lifecycle (memory_id, profile, stage, stage_entered_at, updated_at)
+    values (new.id, new.profile, 'fresh', new.created_at, new.created_at)
+    on conflict (memory_id) do nothing;
+    return new;
+end;
+$$ language plpgsql;
+
+drop trigger if exists memories_init_lifecycle on memories;
+create trigger memories_init_lifecycle
+    after insert on memories
+    for each row
+    execute function init_memory_lifecycle();
+
+create or replace function sync_memory_lifecycle_profile() returns trigger as $$
+begin
+    if new.profile is distinct from old.profile then
+        update memory_lifecycle
+           set profile = new.profile, updated_at = now()
+         where memory_id = new.id;
+    end if;
+    return new;
+end;
+$$ language plpgsql;
+
+drop trigger if exists memories_sync_lifecycle_profile on memories;
+create trigger memories_sync_lifecycle_profile
+    after update of profile on memories
+    for each row
+    execute function sync_memory_lifecycle_profile();
