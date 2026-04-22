@@ -55,6 +55,32 @@ func TestOverview_ErrorBannerRenders(t *testing.T) {
 	if !strings.Contains(body, "Data error") {
 		t.Errorf("expected Data error banner; body head: %q", body[:min(300, len(body))])
 	}
+	// Header pill renders even on an unconfigured backend.
+	if !strings.Contains(body, "[unconfigured]") {
+		t.Errorf("missing [unconfigured] backend pill in header")
+	}
+}
+
+func TestOverview_HeaderShowsPostgresBackend(t *testing.T) {
+	h := &handlers{cfg: &native.Config{
+		Profile: "scratch",
+		Database: native.Database{
+			URL: "postgresql://scratch:scratch_dev_local@localhost:5433/scratch",
+		},
+	}}
+	rr := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+
+	h.overview(rr, req)
+
+	body := rr.Body.String()
+	if !strings.Contains(body, "[postgres@localhost:5433/scratch]") {
+		t.Errorf("expected postgres backend pill in header; body head: %q", body[:min(500, len(body))])
+	}
+	// Credentials must not appear in the rendered HTML.
+	if strings.Contains(body, "scratch_dev_local") {
+		t.Errorf("password leaked into rendered HTML")
+	}
 }
 
 func TestOverview_RejectsNonRootPath(t *testing.T) {
@@ -142,6 +168,8 @@ func TestBuildStatCards_Populated(t *testing.T) {
 			{Name: "type:decision", Count: 10},
 			{Name: "project:ogham", Count: 5},
 		},
+		ConnectedPct: 42.5,
+		DecayCount:   7,
 	}
 	got := buildStatCards(s)
 	if got.Memories != "1,234" {
@@ -149,6 +177,100 @@ func TestBuildStatCards_Populated(t *testing.T) {
 	}
 	if got.Tags != "2" {
 		t.Errorf("Tags: got %q want %q", got.Tags, "2")
+	}
+	// formatPct rounds half-up: 42.5 -> 43%.
+	if got.Connected != "43%" {
+		t.Errorf("Connected: got %q want %q", got.Connected, "43%")
+	}
+	if got.Decay != "7" {
+		t.Errorf("Decay: got %q want %q", got.Decay, "7")
+	}
+	// Populated stats should NOT carry a note -- the "not yet exposed"
+	// caveat is gone now that all 4 cards resolve to real values.
+	if got.Note != "" {
+		t.Errorf("populated stats should not carry a note; got %q", got.Note)
+	}
+}
+
+func TestFormatPct(t *testing.T) {
+	cases := map[float64]string{
+		0:    "0%",
+		0.1:  "0%", // rounds down below 0.5
+		0.5:  "1%", // half-up
+		42.3: "42%",
+		42.5: "43%",
+		99.9: "100%", // clamped at upper bound (>=100 returns "100%")
+		100:  "100%",
+		150:  "100%",
+		-5:   "0%",
+	}
+	for in, want := range cases {
+		if got := formatPct(in); got != want {
+			t.Errorf("formatPct(%v): got %q want %q", in, got, want)
+		}
+	}
+}
+
+func TestBackendLabel(t *testing.T) {
+	cases := []struct {
+		name string
+		cfg  *native.Config
+		want string
+	}{
+		{
+			name: "postgres full DSN",
+			cfg: &native.Config{
+				Database: native.Database{
+					URL: "postgresql://scratch:secret@localhost:5433/scratch",
+				},
+			},
+			want: "postgres@localhost:5433/scratch",
+		},
+		{
+			name: "postgres precedence when both set (explicit backend wins)",
+			cfg: &native.Config{
+				Database: native.Database{
+					Backend:     "postgres",
+					URL:         "postgresql://user:pw@db.internal:5432/ogham",
+					SupabaseURL: "https://abc.supabase.co",
+					SupabaseKey: "sb_key",
+				},
+			},
+			want: "postgres@db.internal:5432/ogham",
+		},
+		{
+			name: "supabase project-ref",
+			cfg: &native.Config{
+				Database: native.Database{
+					SupabaseURL: "https://gljsgbhfaqjsoexwlvzf.supabase.co",
+					SupabaseKey: "sb_secret_abc",
+				},
+			},
+			want: "supabase@gljsgbhfaqjsoexwlvzf",
+		},
+		{
+			name: "unconfigured",
+			cfg:  &native.Config{},
+			want: "unconfigured",
+		},
+		{
+			name: "nil cfg",
+			cfg:  nil,
+			want: "unconfigured",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := backendLabel(tc.cfg)
+			if got != tc.want {
+				t.Errorf("got %q want %q", got, tc.want)
+			}
+			// Credential hygiene: the password must never appear even
+			// when we mutate the DSN formatting.
+			if strings.Contains(got, "secret") || strings.Contains(got, "sb_key") {
+				t.Errorf("backend label leaked credentials: %q", got)
+			}
+		})
 	}
 }
 

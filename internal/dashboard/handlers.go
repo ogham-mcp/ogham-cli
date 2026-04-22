@@ -2,8 +2,10 @@ package dashboard
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -116,21 +118,97 @@ func (h *handlers) healthz(w http.ResponseWriter, r *http.Request) {
 	_, _ = w.Write([]byte("ok\n"))
 }
 
-// viewData packages the per-request layout context. Profile is the only
-// moving piece today; future iterations will add nav-state highlighting.
+// viewData packages the per-request layout context. Profile + backend
+// indicator feed the header chrome; the backend pill tells the operator
+// at a glance which database the dashboard is actually reading from
+// (important when both SUPABASE_URL and DATABASE_URL are set and
+// ResolveBackend's precedence silently picks one).
 func (h *handlers) viewData() ViewData {
 	profile := h.cfg.Profile
 	if profile == "" {
 		profile = "default"
 	}
-	return ViewData{Profile: profile}
+	return ViewData{Profile: profile, Backend: backendLabel(h.cfg)}
 }
 
-// buildStatCards maps native.Stats into the 4 locked card numbers. The
-// prototype exposes only Memories + Tags from the stats payload today --
-// Connected% and Decay count require predicates native.Stats doesn't
-// currently compute. They ship as "--" with an "API gap" footnote so
-// we don't invent numbers; a v0.2 task will backfill.
+// backendLabel returns a short, credential-free string identifying the
+// active backend. Examples:
+//
+//	postgres@localhost:5433/scratch
+//	supabase@gljsgbhfaqjsoexwlvzf
+//
+// Password + API key are never included. A misconfigured Config falls
+// back to "unconfigured" so the header still renders instead of
+// showing an error-stained pill.
+func backendLabel(cfg *native.Config) string {
+	if cfg == nil {
+		return "unconfigured"
+	}
+	backend, err := cfg.ResolveBackend()
+	if err != nil {
+		return "unconfigured"
+	}
+	switch backend {
+	case "postgres":
+		return "postgres@" + postgresHostDB(cfg.Database.URL)
+	case "supabase":
+		return "supabase@" + supabaseProjectRef(cfg.Database.SupabaseURL)
+	default:
+		return backend
+	}
+}
+
+// postgresHostDB parses a postgres://user:pass@host:port/db style DSN
+// and returns "host:port/db" -- never the credentials. Unparseable
+// input returns "unknown" so the header pill still renders.
+func postgresHostDB(dsn string) string {
+	if dsn == "" {
+		return "unknown"
+	}
+	u, err := url.Parse(dsn)
+	if err != nil || u.Host == "" {
+		return "unknown"
+	}
+	host := u.Host
+	// Strip a trailing slash on the path to get the bare db name.
+	db := strings.TrimPrefix(u.Path, "/")
+	if db == "" {
+		return host
+	}
+	return fmt.Sprintf("%s/%s", host, db)
+}
+
+// supabaseProjectRef extracts just the subdomain from a URL like
+// https://gljsgbhfaqjsoexwlvzf.supabase.co. A bare host without a
+// dotted domain falls back to returning the host verbatim.
+func supabaseProjectRef(raw string) string {
+	if raw == "" {
+		return "unknown"
+	}
+	u, err := url.Parse(raw)
+	if err != nil || u.Host == "" {
+		// Fallback: strip scheme manually if url.Parse couldn't.
+		host := strings.TrimPrefix(raw, "https://")
+		host = strings.TrimPrefix(host, "http://")
+		host = strings.TrimSuffix(host, "/")
+		if host == "" {
+			return "unknown"
+		}
+		return host
+	}
+	host := u.Host
+	// "abc.supabase.co" -> "abc" (just the project-ref).
+	if i := strings.IndexByte(host, '.'); i > 0 {
+		return host[:i]
+	}
+	return host
+}
+
+// buildStatCards maps native.Stats into the 4 locked card numbers. All
+// four cards now resolve to real values -- Connected% and Decay are
+// populated directly from the native.Stats fields added alongside this
+// dashboard change. The Note below the grid is reserved for a single-
+// sentence error caveat (nil stats only).
 func buildStatCards(s *native.Stats) StatCards {
 	if s == nil {
 		return StatCards{
@@ -143,11 +221,28 @@ func buildStatCards(s *native.Stats) StatCards {
 	}
 	return StatCards{
 		Memories:  formatInt(s.Total),
-		Connected: "--",
+		Connected: formatPct(s.ConnectedPct),
 		Tags:      formatInt(int64(len(s.TopTags))),
-		Decay:     "--",
-		Note:      "Connected% and Decay are not yet exposed by native.Stats; tracked for v0.2.",
+		Decay:     formatInt(s.DecayCount),
 	}
+}
+
+// formatPct renders a 0-100 float as the integer percentage + "%".
+// Dashboard cards prefer integer bucketing for readability; 3.7% and
+// 4.2% are both "4%" under this rule. Edge cases:
+//   - negative values (shouldn't happen) clamp to 0.
+//   - values >100 (also shouldn't happen) clamp to 100 to avoid a
+//     card like "134%" blowing past the column width.
+func formatPct(v float64) string {
+	if v <= 0 {
+		return "0%"
+	}
+	if v >= 100 {
+		return "100%"
+	}
+	// Round-half-up via +0.5 rather than math.Round to keep this
+	// allocation-free and avoid importing math just for one call.
+	return itoa(int64(v+0.5)) + "%"
 }
 
 // clientFilter is the dumb in-memory filter the Overview page uses for

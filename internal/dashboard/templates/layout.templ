@@ -2,9 +2,12 @@ package templates
 
 // ViewData is the layout-wide context every page templ receives.
 // Intentionally minimal for the prototype -- no auth, no user, no
-// session -- just the active profile name for the header chrome.
+// session -- active profile + backend label for the header chrome.
+// Backend is a short credential-free string like "postgres@host/db"
+// or "supabase@project-ref"; see handlers.backendLabel.
 type ViewData struct {
 	Profile string
+	Backend string
 }
 
 // Layout is the base HTML scaffold: <head> with the compiled Tailwind
@@ -22,9 +25,20 @@ templ Layout(vd ViewData, title string) {
 		</head>
 		<body class="min-h-screen p-10 bg-background text-foreground" data-theme="ogham">
 			<div class="flex items-baseline justify-between mb-8">
-				<h1 class="text-2xl font-semibold text-foreground" style="font-family: var(--font-serif);">
-					Ogham { "—" } { vd.Profile }
-				</h1>
+				<div class="flex items-baseline gap-3">
+					<h1 class="text-2xl font-semibold text-foreground" style="font-family: var(--font-serif);">
+						Ogham { "—" } { vd.Profile }
+					</h1>
+					if vd.Backend != "" {
+						<span
+							class="text-xs text-muted-foreground px-2 py-0.5 rounded-md border"
+							style="border-color: var(--border);"
+							title="Active backend resolved from DATABASE_URL / SUPABASE_URL"
+						>
+							{ "[" + vd.Backend + "]" }
+						</span>
+					}
+				</div>
 				<nav class="flex items-center gap-6 text-sm">
 					<a href="/" class="text-muted-foreground hover:text-foreground">Overview</a>
 					<a href="/search" class="text-muted-foreground hover:text-foreground">Search</a>
