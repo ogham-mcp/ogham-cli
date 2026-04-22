@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"net/url"
 	"sort"
-	"strings"
+	"strconv"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -269,23 +269,23 @@ func statsSupabase(ctx context.Context, cfg *Config, profile string) (*Stats, er
 
 // connectedCountSupabase returns the number of ids in active that appear
 // as either source_id or target_id in memory_relationships. PostgREST has
-// no JOIN primitive, so we filter edges to the active set in two passes
-// and union the result client-side.
+// no JOIN primitive, and stuffing the whole active-id set into an
+// `in.(…)` query-string filter blows past Supabase's ~16 KB URL cap once
+// the corpus exceeds a few hundred memories. Instead we page through the
+// unfiltered relationship table and intersect against the active set
+// client-side. For corpuses with >50k relationships this would need a
+// stored function on the server side; the prototype caps at 50k edges
+// which comfortably covers the current managed-tier working ceiling.
 func connectedCountSupabase(ctx context.Context, client *supabaseClient, active map[string]struct{}) (int64, error) {
-	// Build the PostgREST `in.(id1,id2,...)` filter once and reuse it
-	// for both passes.
-	ids := make([]string, 0, len(active))
-	for id := range active {
-		ids = append(ids, id)
-	}
-	inFilter := "in.(" + strings.Join(ids, ",") + ")"
+	const pageSize = 1000
+	const maxPages = 50 // 50 000 edges ceiling for the prototype
 
 	touched := make(map[string]struct{}, len(active))
-	for _, col := range []string{"source_id", "target_id"} {
+	for page := 0; page < maxPages; page++ {
 		q := url.Values{}
-		q.Set("select", col)
-		q.Set(col, inFilter)
-		q.Set("limit", "1000")
+		q.Set("select", "source_id,target_id")
+		q.Set("limit", strconv.Itoa(pageSize))
+		q.Set("offset", strconv.Itoa(page*pageSize))
 		endpoint := client.baseURL + "/memory_relationships?" + q.Encode()
 		raw, err := client.getJSON(ctx, endpoint)
 		if err != nil {
@@ -296,9 +296,20 @@ func connectedCountSupabase(ctx context.Context, client *supabaseClient, active 
 			return 0, fmt.Errorf("native stats: parse relationships: %w (body: %s)", err, truncateForError(raw))
 		}
 		for _, r := range rows {
-			if id, ok := r[col]; ok {
-				touched[id] = struct{}{}
+			if id, ok := r["source_id"]; ok {
+				if _, inActive := active[id]; inActive {
+					touched[id] = struct{}{}
+				}
 			}
+			if id, ok := r["target_id"]; ok {
+				if _, inActive := active[id]; inActive {
+					touched[id] = struct{}{}
+				}
+			}
+		}
+		if len(rows) < pageSize {
+			// no more pages
+			break
 		}
 	}
 	return int64(len(touched)), nil

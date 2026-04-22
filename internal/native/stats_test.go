@@ -94,15 +94,17 @@ func TestStatsSupabase_ConnectedAndDecay(t *testing.T) {
 			}
 			_ = json.NewEncoder(w).Encode(rows)
 		case strings.HasPrefix(r.URL.Path, "/rest/v1/memory_relationships"):
-			// Respond with a single edge a -> b no matter which column
-			// the handler asks for. connectedCountSupabase only reads
-			// the requested column out of the row so the other field
-			// is harmless noise.
+			// connectedCountSupabase now pages through relationships in a
+			// single select rather than splitting by column. Offset 0 has
+			// our one edge; any subsequent page is empty so pagination
+			// terminates on len(rows) < pageSize.
 			q := r.URL.Query()
-			if q.Get("select") == "source_id" {
-				_ = json.NewEncoder(w).Encode([]map[string]string{{"source_id": "a"}})
+			if q.Get("offset") == "0" || q.Get("offset") == "" {
+				_ = json.NewEncoder(w).Encode([]map[string]string{
+					{"source_id": "a", "target_id": "b"},
+				})
 			} else {
-				_ = json.NewEncoder(w).Encode([]map[string]string{{"target_id": "b"}})
+				_ = json.NewEncoder(w).Encode([]map[string]string{})
 			}
 		default:
 			t.Errorf("unexpected path: %s", r.URL.Path)
