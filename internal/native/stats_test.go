@@ -76,3 +76,88 @@ func TestStatsSupabase_ClientSideAggregation(t *testing.T) {
 		t.Errorf("top tag wrong: %+v", stats.TopTags)
 	}
 }
+
+// TestStatsSupabase_ConnectedAndDecay exercises the two new headline
+// numbers through the PostgREST transport. Four memories with ids a-d:
+// a+b are wired via a single relationship (so ConnectedPct = 50%);
+// c has confidence 0.1 (below DecayThreshold); the fourth row omits
+// confidence entirely (nil -- should not count toward decay).
+func TestStatsSupabase_ConnectedAndDecay(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case strings.HasPrefix(r.URL.Path, "/rest/v1/memories"):
+			rows := []map[string]any{
+				{"id": "a", "source": "claude-code", "tags": []string{"x"}, "confidence": 0.5},
+				{"id": "b", "source": "claude-code", "tags": []string{"x"}, "confidence": 0.5},
+				{"id": "c", "source": "cli", "tags": []string{"y"}, "confidence": 0.1},
+				{"id": "d", "source": "cli", "tags": []string{"y"}}, // nil confidence
+			}
+			_ = json.NewEncoder(w).Encode(rows)
+		case strings.HasPrefix(r.URL.Path, "/rest/v1/memory_relationships"):
+			// Respond with a single edge a -> b no matter which column
+			// the handler asks for. connectedCountSupabase only reads
+			// the requested column out of the row so the other field
+			// is harmless noise.
+			q := r.URL.Query()
+			if q.Get("select") == "source_id" {
+				_ = json.NewEncoder(w).Encode([]map[string]string{{"source_id": "a"}})
+			} else {
+				_ = json.NewEncoder(w).Encode([]map[string]string{{"target_id": "b"}})
+			}
+		default:
+			t.Errorf("unexpected path: %s", r.URL.Path)
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer server.Close()
+
+	cfg := &Config{
+		Database: Database{SupabaseURL: server.URL, SupabaseKey: "sb_test"},
+		Profile:  "work",
+	}
+	stats, err := GetStats(context.Background(), cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if stats.Total != 4 {
+		t.Errorf("total = %d, want 4", stats.Total)
+	}
+	// a + b are the touched ids => 2 of 4 connected => 50%.
+	if stats.ConnectedPct != 50.0 {
+		t.Errorf("connected pct = %v, want 50", stats.ConnectedPct)
+	}
+	// Only c (0.1) is below DecayThreshold (0.25). d's nil confidence
+	// must NOT be counted as decayed -- absence is not decay.
+	if stats.DecayCount != 1 {
+		t.Errorf("decay count = %d, want 1", stats.DecayCount)
+	}
+}
+
+func TestStatsSupabase_ConnectedPctZeroOnEmptyProfile(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Empty profile: zero memories, no relationships endpoint hit.
+		if strings.HasPrefix(r.URL.Path, "/rest/v1/memory_relationships") {
+			t.Errorf("relationships must not be fetched when profile is empty")
+		}
+		_ = json.NewEncoder(w).Encode([]map[string]any{})
+	}))
+	defer server.Close()
+
+	cfg := &Config{
+		Database: Database{SupabaseURL: server.URL, SupabaseKey: "sb_test"},
+		Profile:  "empty",
+	}
+	stats, err := GetStats(context.Background(), cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if stats.Total != 0 {
+		t.Errorf("total = %d, want 0", stats.Total)
+	}
+	if stats.ConnectedPct != 0 {
+		t.Errorf("connected pct = %v, want 0 for empty profile", stats.ConnectedPct)
+	}
+	if stats.DecayCount != 0 {
+		t.Errorf("decay count = %d, want 0 for empty profile", stats.DecayCount)
+	}
+}

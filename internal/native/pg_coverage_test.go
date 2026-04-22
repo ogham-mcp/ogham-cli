@@ -192,6 +192,88 @@ func TestPG_GetStats_AggregatesCorrectly(t *testing.T) {
 	if len(stats.TopTags) == 0 || stats.TopTags[0].Name != "type:decision" {
 		t.Errorf("top tag = %+v, want type:decision first", stats.TopTags)
 	}
+	// Fresh memories start at confidence 0.5 (schema default) and have
+	// no relationships, so both new headline numbers should be zero.
+	if stats.ConnectedPct != 0 {
+		t.Errorf("ConnectedPct = %v, want 0 with no edges", stats.ConnectedPct)
+	}
+	if stats.DecayCount != 0 {
+		t.Errorf("DecayCount = %d, want 0 with fresh rows", stats.DecayCount)
+	}
+}
+
+// TestPG_GetStats_ConnectedPct wires two of four memories together via
+// memory_relationships and asserts the percentage is 50 (half of the
+// profile's active set has at least one edge).
+func TestPG_GetStats_ConnectedPct(t *testing.T) {
+	cfg := testCfg(t, "work")
+	resetMemories(t, cfg)
+	a := insertMemory(t, cfg, "work", "alpha", nil)
+	b := insertMemory(t, cfg, "work", "beta", nil)
+	insertMemory(t, cfg, "work", "gamma", nil)
+	insertMemory(t, cfg, "work", "delta", nil)
+	// Other-profile edge -- must NOT inflate the work-profile numbers.
+	otherA := insertMemory(t, cfg, "personal", "p-alpha", nil)
+	otherB := insertMemory(t, cfg, "personal", "p-beta", nil)
+
+	ctx := context.Background()
+	conn, err := pgx.Connect(ctx, cfg.Database.URL)
+	if err != nil {
+		t.Fatalf("connect: %v", err)
+	}
+	defer func() { _ = conn.Close(ctx) }()
+	if _, err := conn.Exec(ctx,
+		`INSERT INTO memory_relationships (source_id, target_id, relationship, strength)
+		 VALUES ($1, $2, 'similar', 0.9)`, a, b); err != nil {
+		t.Fatalf("seed edge (work): %v", err)
+	}
+	if _, err := conn.Exec(ctx,
+		`INSERT INTO memory_relationships (source_id, target_id, relationship, strength)
+		 VALUES ($1, $2, 'similar', 0.9)`, otherA, otherB); err != nil {
+		t.Fatalf("seed edge (personal): %v", err)
+	}
+
+	stats, err := GetStats(context.Background(), cfg)
+	if err != nil {
+		t.Fatalf("GetStats: %v", err)
+	}
+	if stats.Total != 4 {
+		t.Fatalf("Total = %d, want 4", stats.Total)
+	}
+	// a and b are touched => 2 of 4 active memories => 50%.
+	if stats.ConnectedPct < 49.99 || stats.ConnectedPct > 50.01 {
+		t.Errorf("ConnectedPct = %v, want ~50 (2/4)", stats.ConnectedPct)
+	}
+}
+
+// TestPG_GetStats_DecayCount drops one memory's confidence below the
+// floor and asserts DecayCount reports it without false positives.
+func TestPG_GetStats_DecayCount(t *testing.T) {
+	cfg := testCfg(t, "work")
+	resetMemories(t, cfg)
+	decayed := insertMemory(t, cfg, "work", "decayed", nil)
+	insertMemory(t, cfg, "work", "healthy-one", nil)
+	insertMemory(t, cfg, "work", "healthy-two", nil)
+
+	ctx := context.Background()
+	conn, err := pgx.Connect(ctx, cfg.Database.URL)
+	if err != nil {
+		t.Fatalf("connect: %v", err)
+	}
+	defer func() { _ = conn.Close(ctx) }()
+	// 0.1 is well under the 0.25 DecayThreshold.
+	if _, err := conn.Exec(ctx,
+		`UPDATE memories SET confidence = 0.1 WHERE id = $1`, decayed); err != nil {
+		t.Fatalf("set low confidence: %v", err)
+	}
+
+	stats, err := GetStats(context.Background(), cfg)
+	if err != nil {
+		t.Fatalf("GetStats: %v", err)
+	}
+	if stats.DecayCount != 1 {
+		t.Errorf("DecayCount = %d, want 1 (one row below threshold)", stats.DecayCount)
+	}
 }
 
 // --- UpdateConfidence ----------------------------------------------------
