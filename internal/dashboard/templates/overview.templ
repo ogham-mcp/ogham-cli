@@ -1,6 +1,10 @@
 package templates
 
-import "github.com/ogham-mcp/ogham-cli/internal/native"
+import (
+	"fmt"
+
+	"github.com/ogham-mcp/ogham-cli/internal/native"
+)
 
 // StatCards captures the 4 headline numbers rendered at the top of the
 // Overview page. Strings rather than ints so we can surface "--" for
@@ -19,7 +23,7 @@ type StatCards struct {
 // Overview renders the landing page: 4 stat cards + the recent memories
 // table with HTMX-backed live filter. If err is non-nil we show an error
 // banner above the data so the user still sees the chrome + retry knobs.
-templ Overview(vd ViewData, cards StatCards, mems []native.Memory, err error) {
+templ Overview(vd ViewData, cards StatCards, lifecycle map[string]int64, mems []native.Memory, err error) {
 	@Layout(vd, "Overview") {
 		if err != nil {
 			<div class="mb-6 px-4 py-3 rounded-md border text-sm text-destructive" style="background: color-mix(in oklab, var(--destructive) 12%, transparent); border-color: color-mix(in oklab, var(--destructive) 30%, transparent);">
@@ -35,6 +39,7 @@ templ Overview(vd ViewData, cards StatCards, mems []native.Memory, err error) {
 		if cards.Note != "" {
 			<p class="text-xs text-muted-foreground mb-6">{ cards.Note }</p>
 		}
+		@LifecycleCard(lifecycle)
 		<div data-slot="card" class="bg-card text-card-foreground flex flex-col gap-4 rounded-xl border py-6 shadow-sm">
 			<div class="px-6 flex items-center justify-between">
 				<div class="font-semibold">Recent Memories</div>
@@ -101,6 +106,32 @@ func formatContent(m native.Memory) string {
 		return c[:max-1] + "…"
 	}
 	return c
+}
+
+// LifecycleCard renders the FRESH / STABLE / EDITING counts on Overview.
+// Counts come from native.PipelineCounts; a nil-safe lookup means the
+// card renders 0s on a pre-026 DB or if the lookup failed (handler falls
+// back to an empty map before calling us).
+templ LifecycleCard(counts map[string]int64) {
+	<div data-slot="card" class="bg-card text-card-foreground rounded-xl border py-6 shadow-sm mb-6">
+		<div class="px-6 mb-4">
+			<div class="text-sm text-muted-foreground uppercase tracking-wide">Lifecycle</div>
+		</div>
+		<div class="px-6 grid grid-cols-3 gap-4">
+			<div class="text-center">
+				<div class="text-2xl font-semibold" style="font-family: var(--font-serif);">{ fmt.Sprint(counts["fresh"]) }</div>
+				<div class="text-xs text-muted-foreground">FRESH</div>
+			</div>
+			<div class="text-center">
+				<div class="text-2xl font-semibold" style="font-family: var(--font-serif);">{ fmt.Sprint(counts["stable"]) }</div>
+				<div class="text-xs text-muted-foreground">STABLE</div>
+			</div>
+			<div class="text-center">
+				<div class="text-2xl font-semibold" style="font-family: var(--font-serif);">{ fmt.Sprint(counts["editing"]) }</div>
+				<div class="text-xs text-muted-foreground">EDITING</div>
+			</div>
+		</div>
+	</div>
 }
 
 // MemoryRows is reusable between the Overview table body and the /filter

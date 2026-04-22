@@ -58,10 +58,21 @@ func (h *handlers) overview(w http.ResponseWriter, r *http.Request) {
 		slog.Warn("dashboard: list", "error", listErr)
 	}
 
+	// Lifecycle counts are best-effort: a Supabase backend today returns
+	// a stub error (follow-up work), and a pre-026 Postgres DB works fine
+	// via the fallback in PipelineCounts itself. Either way we render an
+	// empty-counts card rather than a 500 so the rest of the page still
+	// loads.
+	lifecycle, lcErr := native.PipelineCounts(ctx, h.cfg, h.cfg.Profile)
+	if lcErr != nil {
+		slog.Warn("dashboard: pipeline counts", "error", lcErr)
+		lifecycle = map[string]int64{"fresh": 0, "stable": 0, "editing": 0}
+	}
+
 	cards := buildStatCards(stats)
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	_ = templates.Overview(vd, cards, mems, firstErr(statsErr, listErr)).Render(ctx, w)
+	_ = templates.Overview(vd, cards, lifecycle, mems, firstErr(statsErr, listErr)).Render(ctx, w)
 }
 
 // filter handles `GET /filter?q=...` for the HTMX live filter. Returns
