@@ -1,0 +1,119 @@
+package templates
+
+import "github.com/ogham-mcp/ogham-cli/internal/native"
+
+// StatCards captures the 4 headline numbers rendered at the top of the
+// Overview page. Strings rather than ints so we can surface "--" for
+// the stats the Go native package doesn't expose yet without inventing
+// a placeholder number (see handlers.buildStatCards).
+type StatCards struct {
+	Memories  string
+	Connected string
+	Tags      string
+	Decay     string
+	// Note is a single sentence shown under the card grid explaining any
+	// missing value. Empty string means no caveat.
+	Note string
+}
+
+// Overview renders the landing page: 4 stat cards + the recent memories
+// table with HTMX-backed live filter. If err is non-nil we show an error
+// banner above the data so the user still sees the chrome + retry knobs.
+templ Overview(vd ViewData, cards StatCards, mems []native.Memory, err error) {
+	@Layout(vd, "Overview") {
+		if err != nil {
+			<div class="mb-6 px-4 py-3 rounded-md border text-sm text-destructive" style="background: color-mix(in oklab, var(--destructive) 12%, transparent); border-color: color-mix(in oklab, var(--destructive) 30%, transparent);">
+				<strong>Data error:</strong> { err.Error() }
+			</div>
+		}
+		<div class="grid grid-cols-4 gap-4 mb-6">
+			@statCard("Memories", cards.Memories, "")
+			@statCard("Connected", cards.Connected, "")
+			@statCard("Tags", cards.Tags, "")
+			@statCard("Decay", cards.Decay, "")
+		</div>
+		if cards.Note != "" {
+			<p class="text-xs text-muted-foreground mb-6">{ cards.Note }</p>
+		}
+		<div data-slot="card" class="bg-card text-card-foreground flex flex-col gap-4 rounded-xl border py-6 shadow-sm">
+			<div class="px-6 flex items-center justify-between">
+				<div class="font-semibold">Recent Memories</div>
+				<input
+					type="search"
+					name="q"
+					placeholder="Filter..."
+					class="text-sm bg-background border rounded-md px-3 py-1.5 w-64 outline-none focus:ring-2"
+					style="border-color: var(--border);"
+					hx-get="/filter"
+					hx-trigger="input changed delay:250ms, search, keyup[key=='Enter']"
+					hx-target="#memories-tbody"
+					hx-swap="innerHTML"
+				/>
+			</div>
+			<div class="px-6 overflow-x-auto">
+				<table class="w-full text-sm">
+					<thead>
+						<tr class="text-xs text-muted-foreground uppercase tracking-wide">
+							<th class="text-left font-normal py-2 w-48">Time ↕</th>
+							<th class="text-left font-normal py-2">Content</th>
+						</tr>
+					</thead>
+					<tbody id="memories-tbody" class="divide-y" style="border-color: var(--border);">
+						@MemoryRows(mems)
+					</tbody>
+				</table>
+			</div>
+		</div>
+	}
+}
+
+// statCard is the shadcn Card primitive tuned to the stats grid. Class
+// strings copied verbatim from ogham-dashboard/src/components/ui/card.tsx
+// so visual output matches the Next.js reference without a compile step.
+templ statCard(title, value, hint string) {
+	<div data-slot="card" class="bg-card text-card-foreground flex flex-col gap-6 rounded-xl border py-6 shadow-sm">
+		<div data-slot="card-header" class="grid auto-rows-min grid-rows-[auto_auto] items-start gap-1.5 px-6">
+			<div data-slot="card-title" class="leading-none font-semibold text-sm text-muted-foreground uppercase tracking-wide">{ title }</div>
+		</div>
+		<div data-slot="card-content" class="px-6">
+			<div class="flex items-baseline gap-3">
+				<div class="text-4xl font-semibold" style="font-family: var(--font-serif);">{ value }</div>
+				if hint != "" {
+					<span class="text-xs text-muted-foreground">{ hint }</span>
+				}
+			</div>
+		</div>
+	</div>
+}
+
+// formatTime returns the ISO-8601 timestamp trimmed to second precision
+// in the rows table. Mirrors the spike's "▸ 2026-04-22T07:05:37" style.
+func formatTime(m native.Memory) string {
+	return "▸ " + m.CreatedAt.UTC().Format("2006-01-02T15:04:05")
+}
+
+// formatContent truncates content to a one-line preview. Longer than
+// ~140 chars is rare; we cap at 180 to match the Next.js table column.
+func formatContent(m native.Memory) string {
+	const max = 180
+	c := m.Content
+	if len(c) > max {
+		return c[:max-1] + "…"
+	}
+	return c
+}
+
+// MemoryRows is reusable between the Overview table body and the /filter
+// HTMX partial. Emits <tr data-row> elements; the outer <tbody> is
+// supplied by the caller so we can swap its innerHTML.
+templ MemoryRows(mems []native.Memory) {
+	if len(mems) == 0 {
+		<tr data-row="empty"><td colspan="2" class="py-6 text-muted-foreground text-center">No memories to show.</td></tr>
+	}
+	for _, m := range mems {
+		<tr data-row={ m.ID }>
+			<td class="py-2.5 text-muted-foreground whitespace-nowrap pr-4">{ formatTime(m) }</td>
+			<td class="py-2.5">{ formatContent(m) }</td>
+		</tr>
+	}
+}

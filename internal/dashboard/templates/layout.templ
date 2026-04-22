@@ -1,0 +1,36 @@
+package templates
+
+// ViewData is the layout-wide context every page templ receives.
+// Intentionally minimal for the prototype -- no auth, no user, no
+// session -- just the active profile name for the header chrome.
+type ViewData struct {
+	Profile string
+}
+
+// Layout is the base HTML scaffold: <head> with the compiled Tailwind
+// bundle + vendored HTMX, <body> with the dark ogham theme applied.
+// Pages slot their markup via the {children...} block.
+templ Layout(vd ViewData, title string) {
+	<!DOCTYPE html>
+	<html lang="en" data-theme="ogham" class="dark">
+		<head>
+			<meta charset="UTF-8"/>
+			<meta name="viewport" content="width=device-width, initial-scale=1"/>
+			<title>{ title } -- Ogham</title>
+			<link rel="stylesheet" href="/static/styles.css"/>
+			<script src="/static/htmx.min.js" defer></script>
+		</head>
+		<body class="min-h-screen p-10 bg-background text-foreground" data-theme="ogham">
+			<div class="flex items-baseline justify-between mb-8">
+				<h1 class="text-2xl font-semibold text-foreground" style="font-family: var(--font-serif);">
+					Ogham { "—" } { vd.Profile }
+				</h1>
+				<nav class="flex items-center gap-6 text-sm">
+					<a href="/" class="text-muted-foreground hover:text-foreground">Overview</a>
+					<a href="/search" class="text-muted-foreground hover:text-foreground">Search</a>
+				</nav>
+			</div>
+			{ children... }
+		</body>
+	</html>
+}
