@@ -337,6 +337,34 @@ func TestServerBindsAndServes(t *testing.T) {
 	}
 }
 
+// --- Calendar ------------------------------------------------------------
+
+func TestCalendar_RendersGridEvenWithoutData(t *testing.T) {
+	// Even on an unconfigured backend, the handler must emit the
+	// 53-column grid plus an error banner -- no blank page.
+	h := newTestHandlers()
+	rr := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/calendar", nil)
+
+	h.calendar(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status: got %d want %d", rr.Code, http.StatusOK)
+	}
+	body := rr.Body.String()
+	if !strings.Contains(body, "Calendar") {
+		t.Errorf("missing Calendar heading")
+	}
+	// Expect grid markers -- cells have data-day= on valid squares.
+	if !strings.Contains(body, "data-day=") {
+		t.Errorf("no data-day markers in grid")
+	}
+	// Active nav highlight.
+	if !strings.Contains(body, `class="text-primary font-semibold">Calendar</a>`) {
+		t.Errorf("expected active nav on Calendar link")
+	}
+}
+
 // --- Timeline ------------------------------------------------------------
 
 func TestTimeline_RejectsBackendError(t *testing.T) {

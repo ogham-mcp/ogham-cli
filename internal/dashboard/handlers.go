@@ -200,6 +200,26 @@ func (h *handlers) timelineCollapse(w http.ResponseWriter, r *http.Request) {
 	_ = templates.TimelineCardCollapsed(*m).Render(ctx, w)
 }
 
+// calendar handles `GET /calendar`. Fetches 365 days of per-day
+// counts, builds the heatmap grid, renders.
+func (h *handlers) calendar(w http.ResponseWriter, r *http.Request) {
+	ctx, cancel := context.WithTimeout(r.Context(), requestTimeout)
+	defer cancel()
+
+	vd := h.viewData()
+	vd.Active = "calendar"
+
+	counts, err := native.StoreCountsByDay(ctx, h.cfg, 365)
+	cd := templates.BuildCalendar(counts, time.Now())
+	if err != nil {
+		slog.Warn("dashboard: calendar daycounts", "error", err)
+		cd.Err = err
+	}
+
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	_ = templates.Calendar(vd, cd).Render(ctx, w)
+}
+
 // findMemory fetches a single memory by id + active profile. Uses the
 // List endpoint with a small page and a linear scan -- a dedicated
 // GetByID would be marginally cheaper but the Timeline expand flow
