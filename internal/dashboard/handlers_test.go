@@ -337,6 +337,50 @@ func TestServerBindsAndServes(t *testing.T) {
 	}
 }
 
+// --- Audit ---------------------------------------------------------------
+
+func TestAudit_RendersTabsAndBanner(t *testing.T) {
+	h := newTestHandlers()
+	rr := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/audit", nil)
+
+	h.audit(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status: got %d want %d", rr.Code, http.StatusOK)
+	}
+	body := rr.Body.String()
+	// Must render the filter tab bar.
+	for _, label := range []string{"All", "Stores", "Updates", "Deletes", "Decays"} {
+		if !strings.Contains(body, ">"+label+"<") {
+			t.Errorf("missing tab label %q", label)
+		}
+	}
+	if !strings.Contains(body, "Data error") {
+		t.Errorf("expected error banner with no backend")
+	}
+	// Active nav highlight.
+	if !strings.Contains(body, `class="text-primary font-semibold">Audit</a>`) {
+		t.Errorf("expected active nav on Audit link")
+	}
+}
+
+func TestAudit_UnknownOpFallsBackToAll(t *testing.T) {
+	h := newTestHandlers()
+	rr := httptest.NewRecorder()
+	// Garbage op param should collapse to "" (All) rather than
+	// leaking into the tab highlight logic.
+	req := httptest.NewRequest(http.MethodGet, "/audit?op=pwn", nil)
+
+	h.audit(rr, req)
+	body := rr.Body.String()
+	// All tab must be rendered active, not "pwn".
+	// We check that "pwn" doesn't appear in any tab-state markup.
+	if strings.Contains(body, `data-tab="pwn"`) {
+		t.Errorf("unknown op leaked into tab bar: body head %q", body[:min(500, len(body))])
+	}
+}
+
 // --- Calendar ------------------------------------------------------------
 
 func TestCalendar_RendersGridEvenWithoutData(t *testing.T) {

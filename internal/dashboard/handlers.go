@@ -200,6 +200,79 @@ func (h *handlers) timelineCollapse(w http.ResponseWriter, r *http.Request) {
 	_ = templates.TimelineCardCollapsed(*m).Render(ctx, w)
 }
 
+// auditPageSize is the per-request row count for /audit and its
+// infinite-scroll fragment. Bigger than Timeline (50) because audit
+// rows are terse (one timestamp + pill + id + collapsed payload) and
+// render faster.
+const auditPageSize = 75
+
+// audit handles `GET /audit`.
+func (h *handlers) audit(w http.ResponseWriter, r *http.Request) {
+	ctx, cancel := context.WithTimeout(r.Context(), requestTimeout)
+	defer cancel()
+
+	vd := h.viewData()
+	vd.Active = "audit"
+
+	ad := h.loadAudit(ctx, r)
+
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	_ = templates.Audit(vd, ad).Render(ctx, w)
+}
+
+// auditRows handles `GET /audit/rows?before=...&op=...` -- the HTMX
+// infinite-scroll fragment endpoint. Emits just the <tr> rows + the
+// next load-more sentinel, no page chrome.
+func (h *handlers) auditRows(w http.ResponseWriter, r *http.Request) {
+	ctx, cancel := context.WithTimeout(r.Context(), requestTimeout)
+	defer cancel()
+
+	ad := h.loadAudit(ctx, r)
+	if ad.Err != nil {
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		_, _ = w.Write([]byte(`<tr><td colspan="4" class="py-3 px-4 text-center text-xs text-destructive">Error loading more: ` +
+			htmlEscape(ad.Err.Error()) + `</td></tr>`))
+		return
+	}
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	_ = templates.AuditRows(ad.Entries, ad.NextCursor, ad.Active).Render(ctx, w)
+}
+
+// loadAudit centralises the common parse + fetch + cursor logic.
+func (h *handlers) loadAudit(ctx context.Context, r *http.Request) templates.AuditData {
+	op := strings.TrimSpace(r.URL.Query().Get("op"))
+	// Guard against arbitrary query values -- only the known four
+	// operation types are valid tab filters. Unknown ops collapse to
+	// "" (All). Keeps the render logic simple.
+	switch op {
+	case "", "store", "update", "delete", "decay":
+	default:
+		op = ""
+	}
+	ad := templates.AuditData{Active: op}
+
+	var before time.Time
+	if raw := strings.TrimSpace(r.URL.Query().Get("before")); raw != "" {
+		if t, err := time.Parse(time.RFC3339Nano, raw); err == nil {
+			before = t
+		} else if t, err := time.Parse(time.RFC3339, raw); err == nil {
+			before = t
+		}
+	}
+
+	events, err := native.AuditEntries(ctx, h.cfg, h.cfg.Profile, op, before, auditPageSize)
+	if err != nil {
+		slog.Warn("dashboard: audit", "error", err)
+		ad.Err = err
+		return ad
+	}
+	ad.Entries = events
+	if len(events) == auditPageSize {
+		ad.NextCursor = events[len(events)-1].EventTime
+	}
+	return ad
+}
+
 // calendar handles `GET /calendar`. Fetches 365 days of per-day
 // counts, builds the heatmap grid, renders.
 func (h *handlers) calendar(w http.ResponseWriter, r *http.Request) {

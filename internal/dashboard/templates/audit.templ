@@ -1,0 +1,210 @@
+package templates
+
+import (
+	"encoding/json"
+	"fmt"
+	"time"
+
+	"github.com/ogham-mcp/ogham-cli/internal/native"
+)
+
+// AuditData is the handler-to-template contract for the Audit view.
+//
+// Active is the currently-selected operation filter tab. "" means
+// "All"; other values are the literal operation strings (store,
+// update, delete, decay, ...).
+type AuditData struct {
+	Entries    []native.AuditEvent
+	NextCursor time.Time
+	Active     string
+	Err        error
+}
+
+// auditOpTabs is the locked set of filter tabs shown at the top of the
+// audit table. Order matters -- "All" first so the default view is
+// one click away, then the four operation buckets that make up the
+// bulk of audit traffic.
+var auditOpTabs = []struct {
+	Label string
+	Op    string // empty => no filter (show all)
+}{
+	{"All", ""},
+	{"Stores", "store"},
+	{"Updates", "update"},
+	{"Deletes", "delete"},
+	{"Decays", "decay"},
+}
+
+// Audit renders the full page.
+templ Audit(vd ViewData, ad AuditData) {
+	@Layout(vd, "Audit") {
+		<div class="mb-6">
+			<h2 class="text-xl font-semibold mb-1">Audit log</h2>
+			<p class="text-sm text-muted-foreground">
+				Append-only event trail for this profile: memory writes, updates, deletions, decay jobs.
+			</p>
+		</div>
+		@auditTabs(ad.Active)
+		if ad.Err != nil {
+			<div class="mb-6 px-4 py-3 rounded-md border text-sm text-destructive" style="background: color-mix(in oklab, var(--destructive) 12%, transparent); border-color: color-mix(in oklab, var(--destructive) 30%, transparent);">
+				<strong>Data error:</strong> { ad.Err.Error() }
+			</div>
+		}
+		<div data-slot="card" class="bg-card text-card-foreground rounded-xl border shadow-sm overflow-hidden">
+			<table class="w-full text-sm">
+				<thead>
+					<tr class="text-xs text-muted-foreground uppercase tracking-wide border-b" style="border-color: var(--border);">
+						<th class="text-left font-normal py-2 px-4 w-48">Time</th>
+						<th class="text-left font-normal py-2 px-4 w-32">Operation</th>
+						<th class="text-left font-normal py-2 px-4 w-48">Memory ID</th>
+						<th class="text-left font-normal py-2 px-4">Payload</th>
+					</tr>
+				</thead>
+				<tbody id="audit-tbody" class="divide-y" style="border-color: var(--border);">
+					@AuditRows(ad.Entries, ad.NextCursor, ad.Active)
+				</tbody>
+			</table>
+		</div>
+		if ad.Err == nil && len(ad.Entries) == 0 {
+			<div class="mt-6 py-12 text-center text-muted-foreground text-sm">
+				No audit events to show for this filter.
+			</div>
+		}
+	}
+}
+
+// auditTabs is the operation-filter tab bar. Each tab is an anchor
+// with HTMX attrs so clicking swaps just the tbody (and re-renders
+// the surrounding tab-bar would reset cursor state -- easier to treat
+// tab-switching as a full page nav).
+templ auditTabs(active string) {
+	<div class="mb-4 flex items-center gap-1 border-b" style="border-color: var(--border);">
+		for _, t := range auditOpTabs {
+			<a
+				href={ templ.SafeURL(auditTabURL(t.Op)) }
+				class={ auditTabClass(t.Op, active) }
+				data-tab={ t.Op }
+			>{ t.Label }</a>
+		}
+	</div>
+}
+
+// AuditRows renders the repeatable row fragment + load-more sentinel.
+// Used both for the initial page render and the HTMX infinite-scroll
+// fragment endpoint.
+templ AuditRows(entries []native.AuditEvent, nextCursor time.Time, active string) {
+	for _, e := range entries {
+		@auditRow(e)
+	}
+	if !nextCursor.IsZero() && len(entries) > 0 {
+		<tr
+			hx-get={ auditLoadMoreURL(nextCursor, active) }
+			hx-trigger="revealed"
+			hx-target="this"
+			hx-swap="outerHTML"
+		>
+			<td colspan="4" class="py-3 px-4 text-center text-xs text-muted-foreground">
+				<span class="inline-flex items-center gap-2">
+					<span class="h-2 w-2 animate-pulse rounded-full bg-primary"></span>
+					Loading more...
+				</span>
+			</td>
+		</tr>
+	}
+}
+
+templ auditRow(e native.AuditEvent) {
+	<tr class="hover:bg-muted/40" data-op={ e.Operation }>
+		<td class="py-2 px-4 text-muted-foreground whitespace-nowrap font-mono text-xs">
+			{ e.EventTime.UTC().Format("2006-01-02 15:04:05") }
+		</td>
+		<td class="py-2 px-4">
+			<span class={ auditOpPillClass(e.Operation), "inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium" }>
+				{ e.Operation }
+			</span>
+		</td>
+		<td class="py-2 px-4 font-mono text-xs text-muted-foreground">
+			if e.MemoryID != nil && *e.MemoryID != "" {
+				<span title={ *e.MemoryID }>{ truncateID(*e.MemoryID) }</span>
+			} else {
+				<span class="opacity-50">--</span>
+			}
+		</td>
+		<td class="py-2 px-4">
+			<details>
+				<summary class="text-xs text-muted-foreground cursor-pointer hover:text-foreground">show</summary>
+				<pre class="mt-2 text-xs whitespace-pre-wrap break-all bg-background rounded p-2 border" style="border-color: var(--border);">{ auditDetailsJSON(e.Details) }</pre>
+			</details>
+		</td>
+	</tr>
+}
+
+// ---- helpers --------------------------------------------------------
+
+// auditOpPillClass returns the shadcn Badge-style class for an
+// operation pill. Colours:
+//
+//	store   -> green  (positive / additive)
+//	update  -> primary gold (neutral-positive, modifies)
+//	delete  -> destructive red
+//	decay   -> muted (background cleanup job)
+//	default -> outline (unknown future operations)
+func auditOpPillClass(op string) string {
+	switch op {
+	case "store":
+		return "bg-green-500/20 text-green-300 border border-green-500/40"
+	case "update":
+		return "bg-primary/20 text-primary border border-primary/40"
+	case "delete":
+		return "bg-destructive/20 text-destructive border border-destructive/40"
+	case "decay":
+		return "bg-muted text-muted-foreground border"
+	default:
+		return "bg-muted/50 text-foreground border"
+	}
+}
+
+func auditTabClass(self, active string) string {
+	if self == active {
+		return "px-4 py-2 text-sm font-semibold text-primary border-b-2 border-primary -mb-px"
+	}
+	return "px-4 py-2 text-sm text-muted-foreground hover:text-foreground border-b-2 border-transparent -mb-px"
+}
+
+func auditTabURL(op string) string {
+	if op == "" {
+		return "/audit"
+	}
+	return "/audit?op=" + op
+}
+
+func auditLoadMoreURL(next time.Time, active string) string {
+	cursor := next.UTC().Format(time.RFC3339Nano)
+	url := "/audit/rows?before=" + cursor
+	if active != "" {
+		url += "&op=" + active
+	}
+	return url
+}
+
+// truncateID shortens a UUID to "abcd1234..." for the table view.
+// Full UUID is available on hover via title=.
+func truncateID(id string) string {
+	if len(id) <= 10 {
+		return id
+	}
+	return id[:8] + "..."
+}
+
+// auditDetailsJSON pretty-prints the metadata jsonb field. Falls back
+// to a stringification for whatever Go type the JSON arrived as.
+func auditDetailsJSON(d any) string {
+	if d == nil {
+		return "{}"
+	}
+	b, err := json.MarshalIndent(d, "", "  ")
+	if err != nil {
+		return fmt.Sprintf("%v", d)
+	}
+	return string(b)
+}
