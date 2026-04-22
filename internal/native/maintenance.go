@@ -425,6 +425,121 @@ func updateConfidenceSupabase(ctx context.Context, cfg *Config, id string, signa
 // -----------------------------------------------------------------------
 // Audit
 
+// AuditEntries is the paginated variant used by the dashboard's Audit
+// view. Adds a `before` cursor so HTMX infinite scroll can request the
+// next page by passing the oldest-visible event_time back. All other
+// semantics match Audit: profile scope, optional operation filter,
+// event_time DESC ordering.
+//
+// Passing a zero time for before is equivalent to Audit(limit).
+func AuditEntries(ctx context.Context, cfg *Config, profile, operation string, before time.Time, limit int) ([]AuditEvent, error) {
+	if cfg == nil {
+		return nil, fmt.Errorf("native audit: nil config")
+	}
+	if profile == "" {
+		profile = cfg.Profile
+	}
+	if profile == "" {
+		profile = "default"
+	}
+	if limit <= 0 {
+		limit = 50
+	}
+	backend, err := cfg.ResolveBackend()
+	if err != nil {
+		return nil, err
+	}
+	switch backend {
+	case "postgres":
+		return auditEntriesPostgres(ctx, cfg, profile, operation, before, limit)
+	case "supabase":
+		return auditEntriesSupabase(ctx, cfg, profile, operation, before, limit)
+	}
+	return nil, fmt.Errorf("native audit: unknown backend")
+}
+
+func auditEntriesPostgres(ctx context.Context, cfg *Config, profile, operation string, before time.Time, limit int) ([]AuditEvent, error) {
+	conn, err := pgx.Connect(ctx, cfg.Database.URL)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = conn.Close(ctx) }()
+
+	where := []string{"profile = $1"}
+	args := []any{profile}
+	if operation != "" {
+		args = append(args, operation)
+		where = append(where, fmt.Sprintf("operation = $%d", len(args)))
+	}
+	if !before.IsZero() {
+		args = append(args, before.UTC())
+		where = append(where, fmt.Sprintf("event_time < $%d", len(args)))
+	}
+	args = append(args, limit)
+	sql := `SELECT event_time, profile, operation, resource_id::text AS memory_id, metadata AS details
+FROM audit_log
+WHERE ` + strings.Join(where, " AND ") + `
+ORDER BY event_time DESC
+LIMIT $` + fmt.Sprintf("%d", len(args))
+
+	rows, err := conn.Query(ctx, sql, args...)
+	if err != nil {
+		return nil, fmt.Errorf("native audit: query: %w", err)
+	}
+	defer rows.Close()
+
+	var out []AuditEvent
+	for rows.Next() {
+		var e AuditEvent
+		var memID *string
+		var raw []byte
+		if err := rows.Scan(&e.EventTime, &e.Profile, &e.Operation, &memID, &raw); err != nil {
+			return nil, fmt.Errorf("native audit: scan: %w", err)
+		}
+		e.MemoryID = memID
+		if len(raw) > 0 {
+			var d any
+			if err := json.Unmarshal(raw, &d); err == nil {
+				e.Details = d
+			}
+		}
+		out = append(out, e)
+	}
+	return out, rows.Err()
+}
+
+func auditEntriesSupabase(ctx context.Context, cfg *Config, profile, operation string, before time.Time, limit int) ([]AuditEvent, error) {
+	client, err := newSupabaseClient(cfg)
+	if err != nil {
+		return nil, err
+	}
+	q := url.Values{}
+	q.Set("select", "event_time,profile,operation,memory_id:resource_id,details:metadata")
+	q.Set("profile", "eq."+profile)
+	if operation != "" {
+		q.Set("operation", "eq."+operation)
+	}
+	if !before.IsZero() {
+		q.Set("event_time", "lt."+before.UTC().Format(time.RFC3339Nano))
+	}
+	q.Set("order", "event_time.desc")
+	q.Set("limit", fmt.Sprintf("%d", limit))
+
+	endpoint := client.baseURL + "/audit_log?" + q.Encode()
+	raw, err := client.getJSON(ctx, endpoint)
+	if err != nil {
+		if strings.Contains(err.Error(), "PGRST205") || strings.Contains(err.Error(), "audit_log") {
+			return nil, fmt.Errorf("native audit: audit_log table not present in this Supabase schema")
+		}
+		return nil, err
+	}
+	var out []AuditEvent
+	if err := json.Unmarshal(raw, &out); err != nil {
+		return nil, fmt.Errorf("native audit: parse: %w", err)
+	}
+	return out, nil
+}
+
 // Audit returns the most recent audit events for a profile.
 func Audit(ctx context.Context, cfg *Config, profile, operation string, limit int) ([]AuditEvent, error) {
 	if cfg == nil {

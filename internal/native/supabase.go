@@ -241,6 +241,18 @@ func listSupabase(ctx context.Context, cfg *Config, opts ListOptions) ([]Memory,
 		// backend's tags && filter_tags predicate.
 		q.Set("tags", "ov.{"+strings.Join(opts.Tags, ",")+"}")
 	}
+	if !opts.Before.IsZero() {
+		// PostgREST lt. filter takes an ISO-8601 timestamp. UTC here so
+		// the server's local tz doesn't silently shift the cutoff.
+		q.Set("created_at", "lt."+opts.Before.UTC().Format(time.RFC3339Nano))
+	}
+	if !opts.OnDate.IsZero() {
+		day := opts.OnDate.UTC().Truncate(24 * time.Hour)
+		// PostgREST allows multiple filters on the same column via
+		// repeated keys -- Values.Add preserves both. gte+lt bucket.
+		q.Add("created_at", "gte."+day.Format(time.RFC3339Nano))
+		q.Add("created_at", "lt."+day.Add(24*time.Hour).Format(time.RFC3339Nano))
+	}
 
 	raw, err := client.selectTable(ctx, q)
 	if err != nil {

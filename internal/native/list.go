@@ -21,11 +21,25 @@ type Memory struct {
 }
 
 // ListOptions captures the optional filters for List. Mirrors Python's
-// list_recent_memories signature.
+// list_recent_memories signature with two dashboard-friendly additions:
+//
+//   - Before: if non-zero, restricts the result set to memories strictly
+//     older than the given timestamp. Used by the Timeline view's HTMX
+//     infinite scroll -- the client passes the oldest-visible created_at
+//     back as `?before=...` and the server returns the next page.
+//   - OnDate: if non-zero, restricts to memories whose created_at falls
+//     on the same UTC calendar day as the given time. Used by the
+//     Calendar heatmap drill-in (`/timeline?on=YYYY-MM-DD`).
+//
+// Before and OnDate are mutually exclusive in practice -- OnDate narrows
+// to a single day, Before paginates. If both are set we apply both; the
+// Timeline handler never sends both together.
 type ListOptions struct {
 	Limit  int
 	Source string
 	Tags   []string
+	Before time.Time
+	OnDate time.Time
 }
 
 // List returns the most recent memories for the given profile. Routes to
@@ -79,6 +93,20 @@ func listPostgres(ctx context.Context, cfg *Config, opts ListOptions) ([]Memory,
 	if len(opts.Tags) > 0 {
 		args = append(args, opts.Tags)
 		where = append(where, fmt.Sprintf("tags && $%d", len(args)))
+	}
+	if !opts.Before.IsZero() {
+		args = append(args, opts.Before)
+		where = append(where, fmt.Sprintf("created_at < $%d", len(args)))
+	}
+	if !opts.OnDate.IsZero() {
+		// UTC day bucket: [floor_day, ceil_day). Independent of where
+		// the server's local time zone lands. Timeline's ?on= query
+		// always passes a UTC-normalised time.
+		day := opts.OnDate.UTC().Truncate(24 * time.Hour)
+		args = append(args, day)
+		where = append(where, fmt.Sprintf("created_at >= $%d", len(args)))
+		args = append(args, day.Add(24*time.Hour))
+		where = append(where, fmt.Sprintf("created_at < $%d", len(args)))
 	}
 	args = append(args, limit)
 	limitPlaceholder := fmt.Sprintf("$%d", len(args))

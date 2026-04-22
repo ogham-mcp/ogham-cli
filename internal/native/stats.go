@@ -7,6 +7,7 @@ import (
 	"net/url"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 )
@@ -318,4 +319,133 @@ func topN(m map[string]int64, n int) []Breakdown {
 		out = out[:n]
 	}
 	return out
+}
+
+// DayCount is a single cell in the Calendar heatmap: "on this UTC day,
+// the active profile stored N memories." Day is always UTC-normalised
+// to midnight so the dashboard renderer doesn't have to worry about
+// server-local-tz drift.
+type DayCount struct {
+	Day   time.Time `json:"day"`
+	Count int64     `json:"count"`
+}
+
+// StoreCountsByDay returns per-day memory counts for the active profile
+// covering the trailing `days` calendar days (inclusive of today). Zero
+// or missing days are NOT filled in -- the Calendar renderer walks a
+// complete 365-day grid and overlays the returned counts via a map
+// lookup, defaulting missing days to zero.
+//
+// days <= 0 is treated as 365 (the Calendar heatmap default).
+func StoreCountsByDay(ctx context.Context, cfg *Config, days int) ([]DayCount, error) {
+	if cfg == nil {
+		return nil, fmt.Errorf("native daycounts: nil config")
+	}
+	if days <= 0 {
+		days = 365
+	}
+	backend, err := cfg.ResolveBackend()
+	if err != nil {
+		return nil, fmt.Errorf("native daycounts: %w", err)
+	}
+	profile := cfg.Profile
+	if profile == "" {
+		profile = "default"
+	}
+	switch backend {
+	case "postgres":
+		return storeCountsByDayPostgres(ctx, cfg, profile, days)
+	case "supabase":
+		return storeCountsByDaySupabase(ctx, cfg, profile, days)
+	default:
+		return nil, fmt.Errorf("native daycounts: unknown backend %q", backend)
+	}
+}
+
+func storeCountsByDayPostgres(ctx context.Context, cfg *Config, profile string, days int) ([]DayCount, error) {
+	conn, err := pgx.Connect(ctx, cfg.Database.URL)
+	if err != nil {
+		return nil, fmt.Errorf("native daycounts: connect: %w", err)
+	}
+	defer func() { _ = conn.Close(ctx) }()
+
+	// date_trunc('day', ...) at UTC so the bucket boundary is stable
+	// regardless of the server's TimeZone setting. Casting the interval
+	// through make_interval keeps the parameter typed.
+	sql := `
+SELECT date_trunc('day', created_at AT TIME ZONE 'UTC') AS day, count(*) AS cnt
+FROM memories
+WHERE profile = $1
+  AND (expires_at IS NULL OR expires_at > now())
+  AND created_at >= (now() AT TIME ZONE 'UTC') - make_interval(days => $2)
+GROUP BY 1
+ORDER BY 1`
+	rows, err := conn.Query(ctx, sql, profile, days)
+	if err != nil {
+		return nil, fmt.Errorf("native daycounts: query: %w", err)
+	}
+	defer rows.Close()
+	var out []DayCount
+	for rows.Next() {
+		var d DayCount
+		if err := rows.Scan(&d.Day, &d.Count); err != nil {
+			return nil, fmt.Errorf("native daycounts: scan: %w", err)
+		}
+		// Strip any timezone on the Go side -- date_trunc returns
+		// timestamp without time zone but pgx scans to the session
+		// location. UTC the Day so callers can compare by equality.
+		d.Day = d.Day.UTC().Truncate(24 * time.Hour)
+		out = append(out, d)
+	}
+	return out, rows.Err()
+}
+
+func storeCountsByDaySupabase(ctx context.Context, cfg *Config, profile string, days int) ([]DayCount, error) {
+	// PostgREST can't GROUP BY. We pull only the created_at column for
+	// the last `days` days and aggregate client-side. At 1 memory every
+	// 2 minutes that's 262k rows/year; 1000-row default PostgREST cap
+	// would truncate, so we page in 10k-row chunks (Prefer: count=exact
+	// + Range header) until the result set is exhausted.
+	client, err := newSupabaseClient(cfg)
+	if err != nil {
+		return nil, err
+	}
+	cutoff := time.Now().UTC().Add(-time.Duration(days) * 24 * time.Hour).Truncate(24 * time.Hour)
+
+	q := url.Values{}
+	q.Set("select", "created_at")
+	q.Set("profile", "eq."+profile)
+	q.Add("created_at", "gte."+cutoff.Format(time.RFC3339))
+	q.Set("or", "(expires_at.is.null,expires_at.gt.now())")
+	q.Set("order", "created_at.asc")
+	// Large cap -- calendar covers a year, so expect anything up to a
+	// few thousand rows for a real profile. 50000 is the PostgREST
+	// per-request ceiling on most self-host configurations.
+	q.Set("limit", "50000")
+
+	raw, err := client.selectTable(ctx, q)
+	if err != nil {
+		return nil, err
+	}
+	var rows []struct {
+		CreatedAt time.Time `json:"created_at"`
+	}
+	if err := json.Unmarshal(raw, &rows); err != nil {
+		return nil, fmt.Errorf("native daycounts: parse: %w", err)
+	}
+
+	// Bucket into UTC days. map keyed by unix-seconds-at-midnight to
+	// keep equality reliable (time.Time equality is finicky across
+	// monotonic clocks).
+	buckets := map[int64]int64{}
+	for _, r := range rows {
+		day := r.CreatedAt.UTC().Truncate(24 * time.Hour)
+		buckets[day.Unix()]++
+	}
+	out := make([]DayCount, 0, len(buckets))
+	for ts, c := range buckets {
+		out = append(out, DayCount{Day: time.Unix(ts, 0).UTC(), Count: c})
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Day.Before(out[j].Day) })
+	return out, nil
 }

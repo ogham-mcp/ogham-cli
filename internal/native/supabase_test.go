@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestResolveBackend_Explicit(t *testing.T) {
@@ -228,5 +229,100 @@ func TestSupabaseClient_ErrorSurfacing(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "401") {
 		t.Errorf("error missing status: %v", err)
+	}
+}
+
+// TestListSupabase_BeforeCursor asserts that ListOptions.Before lands in
+// the PostgREST query as a `created_at=lt.<iso>` filter.
+func TestListSupabase_BeforeCursor(t *testing.T) {
+	var captured string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		captured = r.URL.RawQuery
+		_, _ = w.Write([]byte(`[]`))
+	}))
+	defer server.Close()
+
+	cfg := &Config{
+		Database: Database{SupabaseURL: server.URL, SupabaseKey: "sb_test"},
+		Profile:  "work",
+	}
+	cutoff := time.Date(2026, 4, 20, 12, 0, 0, 0, time.UTC)
+	_, err := listSupabase(context.Background(), cfg, ListOptions{Limit: 10, Before: cutoff})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The PostgREST predicate is URL-encoded; checking for the core
+	// substring is enough -- order of keys in url.Values.Encode is
+	// unspecified but contents are stable.
+	if !strings.Contains(captured, "created_at=lt.") {
+		t.Errorf("Before missing from query: %s", captured)
+	}
+}
+
+// TestStoreCountsByDaySupabase_ClientAggregation posts 4 rows spread
+// across 2 days and asserts the aggregator groups them correctly.
+func TestStoreCountsByDaySupabase_ClientAggregation(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		dayA := time.Date(2026, 4, 1, 10, 0, 0, 0, time.UTC)
+		rows := []map[string]any{
+			{"created_at": dayA.Format(time.RFC3339)},
+			{"created_at": dayA.Add(time.Hour).Format(time.RFC3339)},
+			{"created_at": dayA.Add(30 * time.Hour).Format(time.RFC3339)}, // next UTC day
+			{"created_at": dayA.Add(31 * time.Hour).Format(time.RFC3339)},
+		}
+		_ = json.NewEncoder(w).Encode(rows)
+	}))
+	defer server.Close()
+
+	cfg := &Config{
+		Database: Database{SupabaseURL: server.URL, SupabaseKey: "sb_test"},
+		Profile:  "work",
+	}
+	got, err := StoreCountsByDay(context.Background(), cfg, 365)
+	if err != nil {
+		t.Fatalf("StoreCountsByDay: %v", err)
+	}
+	if len(got) != 2 {
+		t.Fatalf("want 2 buckets, got %d (%+v)", len(got), got)
+	}
+	var total int64
+	for _, d := range got {
+		total += d.Count
+	}
+	if total != 4 {
+		t.Errorf("total: want 4 got %d", total)
+	}
+}
+
+// TestAuditEntriesSupabase_FilterAndCursor asserts that the operation
+// + before filters are passed through to PostgREST correctly.
+func TestAuditEntriesSupabase_FilterAndCursor(t *testing.T) {
+	var captured string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		captured = r.URL.RawQuery
+		rows := []map[string]any{
+			{"event_time": "2026-04-01T12:00:00Z", "profile": "work", "operation": "delete"},
+		}
+		_ = json.NewEncoder(w).Encode(rows)
+	}))
+	defer server.Close()
+
+	cfg := &Config{
+		Database: Database{SupabaseURL: server.URL, SupabaseKey: "sb_test"},
+		Profile:  "work",
+	}
+	cutoff := time.Date(2026, 4, 10, 0, 0, 0, 0, time.UTC)
+	got, err := AuditEntries(context.Background(), cfg, "work", "delete", cutoff, 20)
+	if err != nil {
+		t.Fatalf("AuditEntries: %v", err)
+	}
+	if len(got) != 1 {
+		t.Fatalf("want 1 row, got %d", len(got))
+	}
+	if !strings.Contains(captured, "operation=eq.delete") {
+		t.Errorf("operation filter missing: %s", captured)
+	}
+	if !strings.Contains(captured, "event_time=lt.") {
+		t.Errorf("before cursor missing: %s", captured)
 	}
 }
