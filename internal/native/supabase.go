@@ -115,6 +115,44 @@ func (c *supabaseClient) getJSON(ctx context.Context, endpoint string) ([]byte, 
 	return respBody, nil
 }
 
+// getJSONRange is a paginated GET. Sets Range: {start}-{end} so PostgREST
+// returns that byte-slice of the result set; accepts 200 (full) or 206
+// (partial). Callers use this to page past the managed-Supabase 1000-row
+// per-request cap that prevents a single wide GET from covering the full
+// active set on larger profiles.
+func (c *supabaseClient) getJSONRange(ctx context.Context, endpoint string, start, end int) ([]byte, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Accept", "application/json")
+	req.Header.Set("Range-Unit", "items")
+	req.Header.Set("Range", fmt.Sprintf("%d-%d", start, end))
+	c.setAuth(req)
+
+	resp, err := c.http.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("supabase GET %s: http: %w", endpoint, err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	respBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("supabase GET %s: read: %w", endpoint, err)
+	}
+	// 200 OK when the requested range covers the full set; 206 Partial
+	// Content when the server truncates; 416 Range Not Satisfiable when
+	// the start offset is past the end of the set (empty tail page).
+	switch resp.StatusCode {
+	case http.StatusOK, http.StatusPartialContent:
+		return respBody, nil
+	case http.StatusRequestedRangeNotSatisfiable:
+		return []byte("[]"), nil
+	default:
+		return nil, fmt.Errorf("supabase GET %s: http %d: %s", endpoint, resp.StatusCode, truncateForError(respBody))
+	}
+}
+
 // postJSON is a generic authenticated POST. Takes an optional extraHeaders
 // map so callers can pass Prefer headers (return=representation,
 // resolution=merge-duplicates) for upsert semantics.

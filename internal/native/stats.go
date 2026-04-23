@@ -192,72 +192,150 @@ func topBreakdown(ctx context.Context, conn *pgx.Conn, sql, profile string) ([]B
 	return out, rows.Err()
 }
 
-// statsSupabase aggregates via PostgREST. No RPC for this, so we pull a
-// capped sample of rows and aggregate client-side. 1000 is the default
-// PostgREST limit and covers the "top 10 sources/tags" question with
-// enough signal for typical profiles. For very large profiles (>10k
-// memories) prefer the direct Postgres backend for accurate counts.
+// statsSupabase aggregates via PostgREST. The headline scalars (Total,
+// Untagged, WithTTL, Expiring, DecayCount) come from HEAD + Prefer:
+// count=exact round-trips -- reading len(response_array) would silently
+// cap at managed Supabase's 1000-row per-request ceiling, which is what
+// produced the "1,000 memories" dashboard bug that motivated this file.
+// The top-N source / tag aggregates + the active-id set for ConnectedPct
+// still need row data; we page through in 1000-row chunks via Range.
 func statsSupabase(ctx context.Context, cfg *Config, profile string) (*Stats, error) {
 	client, err := newSupabaseClient(cfg)
 	if err != nil {
 		return nil, err
 	}
 
-	q := url.Values{}
-	q.Set("select", "id,source,tags,expires_at,confidence")
-	q.Set("profile", "eq."+profile)
-	q.Set("or", "(expires_at.is.null,expires_at.gt.now())")
-	q.Set("limit", "1000")
-	endpoint := client.baseURL + "/memories?" + q.Encode()
-	raw, err := client.getJSON(ctx, endpoint)
-	if err != nil {
-		return nil, err
-	}
-	var rows []struct {
-		ID         string   `json:"id"`
-		Source     *string  `json:"source"`
-		Tags       []string `json:"tags"`
-		ExpiresAt  *string  `json:"expires_at"`
-		Confidence *float64 `json:"confidence"`
-	}
-	if err := json.Unmarshal(raw, &rows); err != nil {
-		return nil, fmt.Errorf("native stats: parse: %w (body: %s)", err, truncateForError(raw))
+	// Shared filter set: profile + active (not-expired) predicate mirrors
+	// the Postgres CTE in statsPostgres. PostgREST composes `or=(...)`
+	// correctly when URL-escaped, so keep it raw here.
+	activeFilter := func() url.Values {
+		v := url.Values{}
+		v.Set("profile", "eq."+profile)
+		v.Set("or", "(expires_at.is.null,expires_at.gt.now())")
+		return v
 	}
 
-	s := &Stats{Profile: profile, Total: int64(len(rows))}
+	s := &Stats{Profile: profile}
+
+	// Total active memories -- HEAD with count=exact. This is the headline
+	// number rendered as the Overview "Memories" card.
+	total, err := client.headCountExact(ctx, "memories", activeFilter())
+	if err != nil {
+		return nil, fmt.Errorf("native stats: total: %w", err)
+	}
+	s.Total = total
+
+	// Untagged: active memories with tags IS NULL OR tags = {}. PostgREST's
+	// `is.null` handles NULL; `eq.{}` matches the empty text[] literal.
+	// Wrapping in or= preserves the active filter at top-level.
+	untaggedFilter := activeFilter()
+	untaggedFilter.Set("tags", "is.null")
+	if n, err := client.headCountExact(ctx, "memories", untaggedFilter); err != nil {
+		return nil, fmt.Errorf("native stats: untagged: %w", err)
+	} else {
+		s.Untagged = n
+	}
+	// Add the "tags = {}" bucket: PostgREST filters compose as AND, so we
+	// issue a second HEAD and sum. Splitting into two keeps the filter
+	// string simple -- a single `or=(tags.is.null,tags.eq.{})` inside the
+	// existing `or=(expires_at...)` would require nested-or escaping.
+	emptyTagsFilter := activeFilter()
+	emptyTagsFilter.Set("tags", "eq.{}")
+	if n, err := client.headCountExact(ctx, "memories", emptyTagsFilter); err != nil {
+		return nil, fmt.Errorf("native stats: empty-tags: %w", err)
+	} else {
+		s.Untagged += n
+	}
+
+	// WithTTL: any expires_at set (NULL excluded).
+	ttlFilter := activeFilter()
+	ttlFilter.Set("expires_at", "not.is.null")
+	if n, err := client.headCountExact(ctx, "memories", ttlFilter); err != nil {
+		return nil, fmt.Errorf("native stats: with-ttl: %w", err)
+	} else {
+		s.WithTTL = n
+	}
+
+	// Expiring within 7 days: TTL set AND expires_at < now+7d.
+	expiringFilter := activeFilter()
+	expiringFilter.Set("expires_at", "not.is.null")
+	expiringFilter.Add("expires_at", "lt."+time.Now().UTC().Add(7*24*time.Hour).Format(time.RFC3339))
+	if n, err := client.headCountExact(ctx, "memories", expiringFilter); err != nil {
+		return nil, fmt.Errorf("native stats: expiring: %w", err)
+	} else {
+		s.Expiring = n
+	}
+
+	// DecayCount: active + confidence < floor. nil confidence must NOT
+	// count as decayed (absence is not decay) -- `lt.` in PostgREST does
+	// NOT match NULL, so the semantics match the Postgres path by default.
+	decayFilter := activeFilter()
+	decayFilter.Set("confidence", fmt.Sprintf("lt.%v", DecayThreshold))
+	if n, err := client.headCountExact(ctx, "memories", decayFilter); err != nil {
+		return nil, fmt.Errorf("native stats: decay: %w", err)
+	} else {
+		s.DecayCount = n
+	}
+
+	// Top-N sources + tags: still need the row data. Page in 1000-row
+	// chunks via Range so we cover the full active set (managed Supabase
+	// caps a single GET at 1000 rows regardless of explicit ?limit=).
+	// Cap the scan at 50 pages (50k rows) to bound worst-case latency --
+	// beyond that, prefer the direct Postgres backend.
+	const rowPageSize = 1000
+	const rowMaxPages = 50
+
 	sources := map[string]int64{}
 	tags := map[string]int64{}
-	activeIDs := make(map[string]struct{}, len(rows))
-	for _, r := range rows {
-		src := "(unknown)"
-		if r.Source != nil && *r.Source != "" {
-			src = *r.Source
+	activeIDs := make(map[string]struct{}, int(s.Total))
+
+	baseQ := activeFilter()
+	baseQ.Set("select", "id,source,tags")
+	baseQ.Set("order", "id.asc") // deterministic paging
+	endpoint := client.baseURL + "/memories?" + baseQ.Encode()
+
+	for page := 0; page < rowMaxPages; page++ {
+		start := page * rowPageSize
+		raw, err := client.getJSONRange(ctx, endpoint, start, start+rowPageSize-1)
+		if err != nil {
+			return nil, fmt.Errorf("native stats: rows page %d: %w", page, err)
 		}
-		sources[src]++
-		if len(r.Tags) == 0 {
-			s.Untagged++
+		var rows []struct {
+			ID     string   `json:"id"`
+			Source *string  `json:"source"`
+			Tags   []string `json:"tags"`
 		}
-		for _, t := range r.Tags {
-			tags[t]++
+		if err := json.Unmarshal(raw, &rows); err != nil {
+			return nil, fmt.Errorf("native stats: parse: %w (body: %s)", err, truncateForError(raw))
 		}
-		if r.ExpiresAt != nil {
-			s.WithTTL++
+		if len(rows) == 0 {
+			break
 		}
-		if r.Confidence != nil && *r.Confidence < DecayThreshold {
-			s.DecayCount++
+		for _, r := range rows {
+			src := "(unknown)"
+			if r.Source != nil && *r.Source != "" {
+				src = *r.Source
+			}
+			sources[src]++
+			for _, t := range r.Tags {
+				tags[t]++
+			}
+			if r.ID != "" {
+				activeIDs[r.ID] = struct{}{}
+			}
 		}
-		if r.ID != "" {
-			activeIDs[r.ID] = struct{}{}
+		if len(rows) < rowPageSize {
+			break
 		}
 	}
 	s.Sources = topN(sources, 10)
 	s.TopTags = topN(tags, 10)
 
-	// ConnectedPct: pull the profile's relationship edges via PostgREST
-	// and count distinct source/target ids that land in the active set.
-	// Same 1000-row cap as the memories query -- parity with the "for
-	// very large profiles prefer direct Postgres" caveat above.
-	if len(activeIDs) > 0 {
+	// ConnectedPct: intersect the paginated relationships table with the
+	// full active-id set. Now that activeIDs covers every active memory
+	// (not just the first 1000), the numerator is accurate on profiles
+	// that grow past the per-request cap.
+	if len(activeIDs) > 0 && s.Total > 0 {
 		connected, err := connectedCountSupabase(ctx, client, activeIDs)
 		if err != nil {
 			return nil, err
@@ -412,11 +490,12 @@ ORDER BY 1`
 }
 
 func storeCountsByDaySupabase(ctx context.Context, cfg *Config, profile string, days int) ([]DayCount, error) {
-	// PostgREST can't GROUP BY. We pull only the created_at column for
-	// the last `days` days and aggregate client-side. At 1 memory every
-	// 2 minutes that's 262k rows/year; 1000-row default PostgREST cap
-	// would truncate, so we page in 10k-row chunks (Prefer: count=exact
-	// + Range header) until the result set is exhausted.
+	// PostgREST can't GROUP BY, so we pull the created_at column for the
+	// last `days` days and bucket client-side. Managed Supabase caps each
+	// GET at 1000 rows regardless of explicit ?limit=, so an explicit
+	// ?limit=50000 silently truncates at 1000 -- that is the root cause of
+	// the "1000 memories across N days" Calendar bug. Page via the Range
+	// request header until a short page signals end-of-set.
 	client, err := newSupabaseClient(cfg)
 	if err != nil {
 		return nil, err
@@ -429,30 +508,37 @@ func storeCountsByDaySupabase(ctx context.Context, cfg *Config, profile string, 
 	q.Add("created_at", "gte."+cutoff.Format(time.RFC3339))
 	q.Set("or", "(expires_at.is.null,expires_at.gt.now())")
 	q.Set("order", "created_at.asc")
-	// Large cap -- calendar covers a year, so expect anything up to a
-	// few thousand rows for a real profile. 50000 is the PostgREST
-	// per-request ceiling on most self-host configurations.
-	q.Set("limit", "50000")
 
-	raw, err := client.selectTable(ctx, q)
-	if err != nil {
-		return nil, err
-	}
-	var rows []struct {
-		CreatedAt time.Time `json:"created_at"`
-	}
-	if err := json.Unmarshal(raw, &rows); err != nil {
-		return nil, fmt.Errorf("native daycounts: parse: %w", err)
-	}
+	endpoint := client.baseURL + "/memories?" + q.Encode()
 
-	// Bucket into UTC days. map keyed by unix-seconds-at-midnight to
-	// keep equality reliable (time.Time equality is finicky across
-	// monotonic clocks).
+	const pageSize = 1000
+	const maxPages = 100 // 100k rows -- one year at 3 memories/minute sustained
+
 	buckets := map[int64]int64{}
-	for _, r := range rows {
-		day := r.CreatedAt.UTC().Truncate(24 * time.Hour)
-		buckets[day.Unix()]++
+	for page := 0; page < maxPages; page++ {
+		start := page * pageSize
+		raw, err := client.getJSONRange(ctx, endpoint, start, start+pageSize-1)
+		if err != nil {
+			return nil, fmt.Errorf("native daycounts: page %d: %w", page, err)
+		}
+		var rows []struct {
+			CreatedAt time.Time `json:"created_at"`
+		}
+		if err := json.Unmarshal(raw, &rows); err != nil {
+			return nil, fmt.Errorf("native daycounts: parse: %w", err)
+		}
+		if len(rows) == 0 {
+			break
+		}
+		for _, r := range rows {
+			day := r.CreatedAt.UTC().Truncate(24 * time.Hour)
+			buckets[day.Unix()]++
+		}
+		if len(rows) < pageSize {
+			break
+		}
 	}
+
 	out := make([]DayCount, 0, len(buckets))
 	for ts, c := range buckets {
 		out = append(out, DayCount{Day: time.Unix(ts, 0).UTC(), Count: c})
