@@ -108,30 +108,25 @@ func formatContent(m native.Memory) string {
 	return c
 }
 
-// LifecycleCard renders the FRESH / STABLE / EDITING counts on Overview.
-// Counts come from native.PipelineCounts; a nil-safe lookup means the
-// card renders 0s on a pre-026 DB or if the lookup failed (handler falls
-// back to an empty map before calling us).
+// LifecycleCard renders FRESH / STABLE / EDITING as a compact pill row
+// under the stat-card grid. Counts come from native.PipelineCounts; the
+// handler falls back to an empty map if the backend couldn't answer, so
+// pills safely show 0s on a pre-026 DB.
 templ LifecycleCard(counts map[string]int64) {
-	<div data-slot="card" class="bg-card text-card-foreground rounded-xl border py-6 shadow-sm mb-6">
-		<div class="px-6 mb-4">
-			<div class="text-sm text-muted-foreground uppercase tracking-wide">Lifecycle</div>
-		</div>
-		<div class="px-6 grid grid-cols-3 gap-4">
-			<div class="text-center">
-				<div class="text-2xl font-semibold" style="font-family: var(--font-serif);">{ fmt.Sprint(counts["fresh"]) }</div>
-				<div class="text-xs text-muted-foreground">FRESH</div>
-			</div>
-			<div class="text-center">
-				<div class="text-2xl font-semibold" style="font-family: var(--font-serif);">{ fmt.Sprint(counts["stable"]) }</div>
-				<div class="text-xs text-muted-foreground">STABLE</div>
-			</div>
-			<div class="text-center">
-				<div class="text-2xl font-semibold" style="font-family: var(--font-serif);">{ fmt.Sprint(counts["editing"]) }</div>
-				<div class="text-xs text-muted-foreground">EDITING</div>
-			</div>
-		</div>
+	<div class="flex flex-wrap items-center gap-2 mb-6">
+		<span class="text-xs text-muted-foreground uppercase tracking-wide mr-1">Lifecycle</span>
+		@lifecyclePill("FRESH", counts["fresh"])
+		@lifecyclePill("STABLE", counts["stable"])
+		@lifecyclePill("EDITING", counts["editing"])
 	</div>
+}
+
+// lifecyclePill is the single-line pill: label chip + serif count.
+templ lifecyclePill(label string, n int64) {
+	<span class="inline-flex items-center gap-2 rounded-full border px-3 py-1 text-sm" style="border-color: var(--border); background: var(--card);">
+		<span class="text-xs text-muted-foreground tracking-wide">{ label }</span>
+		<span class="font-semibold" style="font-family: var(--font-serif);">{ fmt.Sprint(n) }</span>
+	</span>
 }
 
 // MemoryRows is reusable between the Overview table body and the /filter
