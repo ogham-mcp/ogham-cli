@@ -8,6 +8,10 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"net/http"
+	"net/url"
+	"strconv"
+	"strings"
 
 	"github.com/jackc/pgx/v5"
 )
@@ -99,14 +103,137 @@ func pipelineCountsPostgres(ctx context.Context, cfg *Config, profile string) (m
 	return out, nil
 }
 
-// pipelineCountsSupabase retrieves counts via PostgREST. Stubbed out
-// pending follow-up -- the Postgres path covers scratch + BEAM + most
-// self-hosted users, which is the MVP target for Phase 6. A fuller
-// Supabase path (table-existence probe via /rest/v1/memory_lifecycle?limit=0
-// with 404 fallback to memories count) can land once the Postgres
-// read-only flow is validated end-to-end.
+// pipelineCountsSupabase retrieves counts via PostgREST. Issues one HEAD
+// request per stage against memory_lifecycle, filtered by profile + stage,
+// and pulls the count from the Content-Range response header (driven by
+// the "Prefer: count=exact" request header).
+//
+// Mixed-version safe: first probes whether memory_lifecycle exists at all.
+// Pre-migration-026 DBs don't have the table -- in that case we fall back
+// to counting memories for the profile and returning the total as 'fresh'.
+// Mirrors the Postgres path's existence check.
 func pipelineCountsSupabase(ctx context.Context, cfg *Config, profile string) (map[string]int64, error) {
-	return nil, fmt.Errorf("native lifecycle: supabase PipelineCounts not yet implemented -- use postgres backend or wait for follow-up")
+	client, err := newSupabaseClient(cfg)
+	if err != nil {
+		return nil, fmt.Errorf("native lifecycle: supabase client: %w", err)
+	}
+
+	out := map[string]int64{"fresh": 0, "stable": 0, "editing": 0}
+
+	// Probe: does memory_lifecycle exist on this DB?
+	_, probeErr := client.headCountExact(ctx, "memory_lifecycle", nil)
+	if probeErr != nil {
+		if isRelationNotFound(probeErr) {
+			// Pre-026 DB -- everything is implicitly fresh. Mirror the
+			// Postgres fallback: count memories for the profile and stuff
+			// the total under 'fresh'.
+			total, fallbackErr := client.headCountExact(ctx, "memories", url.Values{"profile": []string{"eq." + profile}})
+			if fallbackErr != nil {
+				return nil, fmt.Errorf("native lifecycle: fallback count: %w", fallbackErr)
+			}
+			out["fresh"] = total
+			return out, nil
+		}
+		return nil, fmt.Errorf("native lifecycle: memory_lifecycle probe failed: %w", probeErr)
+	}
+
+	for _, stage := range []string{"fresh", "stable", "editing"} {
+		filters := url.Values{
+			"profile": []string{"eq." + profile},
+			"stage":   []string{"eq." + stage},
+		}
+		n, err := client.headCountExact(ctx, "memory_lifecycle", filters)
+		if err != nil {
+			return nil, fmt.Errorf("native lifecycle: count for stage=%s: %w", stage, err)
+		}
+		out[stage] = n
+	}
+	return out, nil
+}
+
+// headCountExact issues a HEAD request against /rest/v1/{table} with the
+// given filters and returns the total row count from the Content-Range
+// response header. PostgREST emits Content-Range in the form "0-N/TOTAL"
+// (or "*/0" for empty results) whenever "Prefer: count=exact" is set.
+//
+// filters may be nil. Range: 0-0 keeps the response body empty -- we only
+// care about the header.
+func (c *supabaseClient) headCountExact(ctx context.Context, table string, filters url.Values) (int64, error) {
+	q := url.Values{}
+	for k, vs := range filters {
+		for _, v := range vs {
+			q.Add(k, v)
+		}
+	}
+	endpoint := c.baseURL + "/" + table
+	if encoded := q.Encode(); encoded != "" {
+		endpoint += "?" + encoded
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodHead, endpoint, nil)
+	if err != nil {
+		return 0, err
+	}
+	req.Header.Set("Accept", "application/json")
+	req.Header.Set("Prefer", "count=exact")
+	req.Header.Set("Range-Unit", "items")
+	req.Header.Set("Range", "0-0")
+	c.setAuth(req)
+
+	resp, err := c.http.Do(req)
+	if err != nil {
+		return 0, fmt.Errorf("supabase HEAD %s: http: %w", endpoint, err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	// PostgREST returns 200 for non-empty, 206 (Partial Content) when the
+	// returned range is narrower than the full set, and 416 (Range Not
+	// Satisfiable) for an empty table even with the count header set. All
+	// three are valid for a count-only request.
+	switch resp.StatusCode {
+	case http.StatusOK, http.StatusPartialContent, http.StatusRequestedRangeNotSatisfiable:
+		// fallthrough: parse Content-Range
+	case http.StatusNotFound:
+		// PostgREST emits 404 with a JSON error body when the table or
+		// view does not exist. The body is empty on HEAD, so we rely on
+		// status alone here -- isRelationNotFound picks this up via the
+		// wrapped error string below.
+		return 0, fmt.Errorf("supabase HEAD %s: http 404: relation %q does not exist", endpoint, table)
+	default:
+		return 0, fmt.Errorf("supabase HEAD %s: http %d", endpoint, resp.StatusCode)
+	}
+
+	cr := resp.Header.Get("Content-Range")
+	if cr == "" {
+		return 0, fmt.Errorf("supabase HEAD %s: missing Content-Range header (status %d) -- Prefer: count=exact not honored", endpoint, resp.StatusCode)
+	}
+	// Shape: "0-N/TOTAL" or "*/0". The total is after the slash.
+	slash := strings.LastIndex(cr, "/")
+	if slash < 0 || slash == len(cr)-1 {
+		return 0, fmt.Errorf("supabase HEAD %s: malformed Content-Range %q", endpoint, cr)
+	}
+	tail := cr[slash+1:]
+	if tail == "*" {
+		return 0, nil
+	}
+	n, err := strconv.ParseInt(tail, 10, 64)
+	if err != nil {
+		return 0, fmt.Errorf("supabase HEAD %s: parse Content-Range total %q: %w", endpoint, tail, err)
+	}
+	return n, nil
+}
+
+// isRelationNotFound returns true for PostgREST "relation ... does not
+// exist" errors (wraps Postgres 42P01) and HTTP 404s against PostgREST
+// endpoints that reference a missing table.
+func isRelationNotFound(err error) bool {
+	if err == nil {
+		return false
+	}
+	s := err.Error()
+	return strings.Contains(s, "does not exist") ||
+		strings.Contains(s, "42P01") ||
+		strings.Contains(s, "http 404")
 }
 
 // DecayFactor returns Shodh's hybrid decay multiplier for a memory of
