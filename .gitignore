@@ -30,3 +30,6 @@ coverage.html
 # not need to be tracked. See internal/dashboard/_build/README.md.
 internal/dashboard/_build/node_modules/
 internal/dashboard/_build/bun.lock
+
+# Local-only progress / tracking notes (never commit)
+docs/tracking*.md

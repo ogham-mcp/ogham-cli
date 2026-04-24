@@ -1,8 +1,8 @@
 # Changelog
 
 User-facing changes to `ogham-cli` (the Go binary). The Python
-`ogham-mcp` server has its own changelog in the `openbrain-sharedmemory`
-/ `ogham-mcp` repos.
+`ogham-mcp` server has its own changelog in the [ogham-mcp
+repo](https://github.com/ogham-mcp/ogham-mcp).
 
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), loosely.
 
