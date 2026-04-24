@@ -1,0 +1,15 @@
+# gitleaks config for ogham-cli
+#
+# We use the built-in default ruleset (~160 patterns covering AWS, GCP, Stripe,
+# postgres URLs, etc.) and add a path-level allowlist for test files that contain
+# plausibly-shaped-but-fake fixtures. Anything touching real credentials outside
+# these files will still be flagged.
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Unit-test fixtures with fake-but-gitleaks-matching placeholders"
+paths = [
+    '''internal/native/maintenance_test\.go''',
+    '''internal/config/config_test\.go''',
+]
