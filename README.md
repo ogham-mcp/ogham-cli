@@ -2,7 +2,7 @@
 
 A single Go binary that gives AI agents persistent, searchable memory -- even on locked-down enterprise laptops where third-party MCP servers are blocked.
 
-> **Pre-release.** v0.7.0-rc4 cut 2026-04-22. Hybrid MCP proxy, 24 native tools absorbed (CRUD + typed-store + stats + graph walk), sentinel-based active profile, 18-language word-list registry with scoring + date parsing wired through, recurrence detection (EN/DE), narrower person-name regex (parity 93.8% -> 97.9%), `--legacy` renamed to `--sidecar` (backward-compat alias retained), new `ogham capabilities` subcommand, coverage retrofit maintained (extraction 93% / sidecar 87.6% / native 78.4% / mcp 67.7%). Public flip is gated on employer-disclosure + counsel review. Install paths below assume building from source.
+> **v0.7.0 GA** (2026-04-24). Hybrid MCP proxy, 24 native tools absorbed (CRUD + typed-store + stats + graph walk), sentinel-based active profile, 18-language word-list registry with scoring + date parsing wired through, recurrence detection (EN/DE), narrower person-name regex (parity 93.8% -> 97.9%), `--legacy` renamed to `--sidecar` (backward-compat alias retained), new `ogham capabilities` subcommand, coverage retrofit maintained (extraction 93% / sidecar 87.6% / native 78.4% / mcp 67.7%). Cross-platform binaries on the [Releases page](https://github.com/ogham-mcp/ogham-cli/releases/latest) -- macOS (Apple Silicon + Intel), Linux (amd64 + arm64), Windows (amd64).
 
 ## Architecture
 
@@ -84,7 +84,32 @@ The v0.6 hybrid proxy removes the "tool not found" problem for Python-only featu
 
 Remaining sidecar-only features: dashboard (stays Python forever -- absorbing it would require rebuilding the frontend in Node), `export` / `import` tools, compression (`compress_old_memories` needs an LLM chat client Go doesn't have yet).
 
-## Install (pre-release -- build from source)
+## Install
+
+### Pre-built binaries (recommended)
+
+Pick the tarball for your platform from the [latest release](https://github.com/ogham-mcp/ogham-cli/releases/latest):
+
+```bash
+# macOS (Apple Silicon)
+curl -L https://github.com/ogham-mcp/ogham-cli/releases/latest/download/ogham-cli-darwin-arm64.tar.gz | tar -xz
+# macOS (Intel)
+curl -L https://github.com/ogham-mcp/ogham-cli/releases/latest/download/ogham-cli-darwin-amd64.tar.gz | tar -xz
+# Linux (amd64)
+curl -L https://github.com/ogham-mcp/ogham-cli/releases/latest/download/ogham-cli-linux-amd64.tar.gz | tar -xz
+# Linux (arm64)
+curl -L https://github.com/ogham-mcp/ogham-cli/releases/latest/download/ogham-cli-linux-arm64.tar.gz | tar -xz
+# Windows (amd64) -- fetch the .zip from the Releases page and extract
+
+mv ogham /usr/local/bin/ogham
+chmod +x /usr/local/bin/ogham
+```
+
+Verify the checksum against `checksums.txt` on the Releases page. Homebrew tap is coming; track progress at [ogham-mcp/homebrew-tap](https://github.com/ogham-mcp).
+
+**macOS first-run**: binaries are not yet notarized. Either run `xattr -d com.apple.quarantine /usr/local/bin/ogham` once, ad-hoc sign with `codesign -s - --force --deep /usr/local/bin/ogham`, or right-click Open from Finder. See the [download page](https://ogham-mcp.dev/download/) for all four unblock options.
+
+### Build from source
 
 ```bash
 git clone https://github.com/ogham-mcp/ogham-cli.git
@@ -93,13 +118,6 @@ go build -o /usr/local/bin/ogham .
 ```
 
 Requires Go 1.26+. The binary is ~8 MB after `-s -w`.
-
-For v0.4 public release the install will be:
-
-```bash
-brew install ogham-mcp/tap/ogham                       # macOS
-curl -L https://github.com/ogham-mcp/ogham-cli/releases/latest/download/ogham-linux-amd64 -o ogham  # Linux
-```
 
 ## Quick start
 
@@ -362,7 +380,7 @@ This is the policy blocking `claude mcp add ogham`. It's the exact situation the
 `uv tool run --from "ogham-mcp[...]"` downloads the Python distribution + provider SDK the first time. The download is cached per user, so the second run is fast. To skip the ephemeral install entirely: `uv tool install --refresh "ogham-mcp[postgres,gemini]"` once, then `export OGHAM_SIDECAR_CMD="ogham serve"` in your `.env`.
 
 **macOS `"ogham" cannot be opened because Apple cannot check it for malicious software`.**
-Pre-release binaries are unsigned. See the "Removing the quarantine flag on first run" section below for the one-line fix. Signed + notarized builds are planned for v0.4.
+Binaries are not yet notarized. One-line fix: `xattr -d com.apple.quarantine /usr/local/bin/ogham`. Alternatively, ad-hoc sign with `codesign -s - --force --deep /usr/local/bin/ogham`, or right-click the binary in Finder and choose Open. The [download page](https://ogham-mcp.dev/download/) walks through all four options. Signed + notarized builds are tracked as a future distribution-polish item.
 
 **Other MCP clients on the same locked machine.** The enterprise policy applies to *Claude Code* specifically. Cursor / Windsurf / Codex / Claude Desktop have separate config systems. `ogham init` prints snippets for each -- try those too.
 
