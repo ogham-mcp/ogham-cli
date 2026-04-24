@@ -33,3 +33,4 @@ internal/dashboard/_build/bun.lock
 
 # Local-only progress / tracking notes (never commit)
 docs/tracking*.md
+docs/release-v*.md
