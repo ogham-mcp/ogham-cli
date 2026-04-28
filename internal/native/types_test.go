@@ -3,10 +3,11 @@ package native
 import "testing"
 
 // PICT-style coverage for ParseTLDRLevel:
-//   parameter: input string
-//   values: "", "body", "short", "one_line", and an invalid token
-//   expected: every legitimate alias resolves to its constant; unknown
-//             input errors rather than silently downgrading.
+//
+//	parameter: input string
+//	values: "", "body", "short", "one_line", and an invalid token
+//	expected: every legitimate alias resolves to its constant; unknown
+//	          input errors rather than silently downgrading.
 //
 // Test parameters are pairwise-complete by virtue of being a single
 // dimension -- one test per representative.
@@ -46,9 +47,10 @@ func TestParseTLDRLevel(t *testing.T) {
 
 // TestProjectLevel verifies fallback semantics on partial-population
 // rows (the v0.12 -> v0.13 migration case). PICT-style:
-//   levels: one_line, short, body
-//   row state: full, only_short_body, only_body
-//   expected fallback: caller asks one_line on only_short_body -> short
+//
+//	levels: one_line, short, body
+//	row state: full, only_short_body, only_body
+//	expected fallback: caller asks one_line on only_short_body -> short
 func TestProjectLevel(t *testing.T) {
 	full := func() *TopicSummary {
 		one := "one-liner"

@@ -259,4 +259,3 @@ func (r supabaseGraphRow) toGraphNode() GraphNode {
 	}
 	return gn
 }
-

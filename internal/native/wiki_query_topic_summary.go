@@ -31,8 +31,8 @@ import (
 
 // QueryTopicSummaryStatus enumerates the response shapes.
 const (
-	StatusOK         = "ok"
-	StatusNotCached  = "not_cached"
+	StatusOK        = "ok"
+	StatusNotCached = "not_cached"
 )
 
 // QueryTopicSummaryResult is the MCP-shaped response. Mirrors Python's
@@ -42,20 +42,20 @@ const (
 // When Status == "not_cached" only TopicKey + Profile + Message are
 // populated -- the rest are zero values.
 type QueryTopicSummaryResult struct {
-	Status         string  `json:"status"`
-	ID             string  `json:"id,omitempty"`
-	TopicKey       string  `json:"topic_key"`
-	Profile        string  `json:"profile"`
-	Version        int     `json:"version,omitempty"`
-	StatusField    string  `json:"summary_status,omitempty"` // fresh|stale|regenerating
-	SourceCount    int     `json:"source_count,omitempty"`
-	ModelUsed      string  `json:"model_used,omitempty"`
-	UpdatedAt      string  `json:"updated_at,omitempty"`
-	SourceHash     string  `json:"source_hash,omitempty"`
-	Level          string  `json:"level,omitempty"`           // form actually returned
-	RequestedLevel string  `json:"requested_level,omitempty"` // what caller asked for (if differs from Level)
-	Body           string  `json:"body,omitempty"`            // selected text (one_line|short|body)
-	Message        string  `json:"message,omitempty"`         // populated for not_cached
+	Status         string `json:"status"`
+	ID             string `json:"id,omitempty"`
+	TopicKey       string `json:"topic_key"`
+	Profile        string `json:"profile"`
+	Version        int    `json:"version,omitempty"`
+	StatusField    string `json:"summary_status,omitempty"` // fresh|stale|regenerating
+	SourceCount    int    `json:"source_count,omitempty"`
+	ModelUsed      string `json:"model_used,omitempty"`
+	UpdatedAt      string `json:"updated_at,omitempty"`
+	SourceHash     string `json:"source_hash,omitempty"`
+	Level          string `json:"level,omitempty"`           // form actually returned
+	RequestedLevel string `json:"requested_level,omitempty"` // what caller asked for (if differs from Level)
+	Body           string `json:"body,omitempty"`            // selected text (one_line|short|body)
+	Message        string `json:"message,omitempty"`         // populated for not_cached
 }
 
 // QueryTopicSummary fetches a cached summary for (profile, topic) and
@@ -278,4 +278,3 @@ func (r supabaseTopicRow) toTopicSummary() TopicSummary {
 		StaleReason:  r.StaleReason,
 	}
 }
-

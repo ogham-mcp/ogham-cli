@@ -69,9 +69,9 @@ type LintReport struct {
 
 // LintWikiOptions mirrors the Python lint_report keyword args.
 type LintWikiOptions struct {
-	SampleSize    int  // default 10
-	StableDays    int  // default 90
-	IncludeDrift  bool // default true (caller passes opts; LintWiki sets if zero-value)
+	SampleSize      int  // default 10
+	StableDays      int  // default 90
+	IncludeDrift    bool // default true (caller passes opts; LintWiki sets if zero-value)
 	includeDriftSet bool // internal: true when caller explicitly opted in/out
 }
 
@@ -353,9 +353,9 @@ SELECT id, topic_key, source_hash
 	defer rows.Close()
 
 	type freshRow struct {
-		id        string
-		topicKey  string
-		stored    []byte
+		id       string
+		topicKey string
+		stored   []byte
 	}
 	var fresh []freshRow
 	for rows.Next() {
@@ -468,9 +468,9 @@ func lintWikiSupabase(ctx context.Context, cfg *Config, profile string, sampleSi
 
 	// 2. orphans
 	raw, err = client.callRPC(ctx, "wiki_lint_orphans", map[string]any{
-		"p_profile":        profile,
-		"p_sample_size":    sampleSize,
-		"p_grace_minutes":  LintDefaultOrphanGraceMinutes,
+		"p_profile":       profile,
+		"p_sample_size":   sampleSize,
+		"p_grace_minutes": LintDefaultOrphanGraceMinutes,
 	})
 	if err != nil {
 		return err
@@ -479,9 +479,9 @@ func lintWikiSupabase(ctx context.Context, cfg *Config, profile string, sampleSi
 
 	// 3. stale_lifecycle
 	raw, err = client.callRPC(ctx, "wiki_lint_stale_lifecycle", map[string]any{
-		"p_profile":          profile,
-		"p_older_than_days":  stableDays,
-		"p_sample_size":      sampleSize,
+		"p_profile":         profile,
+		"p_older_than_days": stableDays,
+		"p_sample_size":     sampleSize,
 	})
 	if err != nil {
 		return err
@@ -653,4 +653,3 @@ func decodePostgRESTBytea(s string) ([]byte, bool) {
 	}
 	return b, true
 }
-

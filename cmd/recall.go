@@ -108,11 +108,11 @@ indicate the fallback via requested_level in the JSON response.`,
 // recall walk-knowledge
 
 var (
-	recallWalkDepth      int
-	recallWalkDirection  string
+	recallWalkDepth       int
+	recallWalkDirection   string
 	recallWalkMinStrength float64
-	recallWalkLimit      int
-	recallWalkTypes      string
+	recallWalkLimit       int
+	recallWalkTypes       string
 )
 
 var recallWalkKnowledgeCmd = &cobra.Command{
@@ -170,10 +170,10 @@ var recallWalkKnowledgeCmd = &cobra.Command{
 // recall lint-wiki
 
 var (
-	recallLintProfile      string
-	recallLintStableDays   int
-	recallLintSampleSize   int
-	recallLintSkipDrift    bool
+	recallLintProfile    string
+	recallLintStableDays int
+	recallLintSampleSize int
+	recallLintSkipDrift  bool
 )
 
 var recallLintWikiCmd = &cobra.Command{
