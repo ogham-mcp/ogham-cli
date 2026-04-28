@@ -6,6 +6,40 @@ repo](https://github.com/ogham-mcp/ogham-mcp).
 
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), loosely.
 
+## v0.7.2 (2026-04-28)
+
+### Fixed
+
+- **Supabase anon-key 401 trap (#2).** The CLI accepted a Supabase anon
+  JWT in `supabase_key` with no warning, then returned a raw
+  `supabase rpc hybrid_search_memories: http 401: {Invalid API key}` on
+  every read because anon doesn't have SELECT on `memories` or EXECUTE
+  on `hybrid_search_memories` — that's by design, Ogham's RLS expects
+  the secret key. `ogham config show` now classifies the configured key
+  (recognises `sb_secret_*`, `sb_publishable_*`, JWT `role=anon`, and
+  JWT `role=service_role`) and flags an unprivileged key in both `--text`
+  output (`(anon — RPCs will 401)` next to the masked key plus a
+  `[warnings]` section) and JSON (`database.supabase_key_kind` and a
+  top-level `warnings` array). On 401, every Supabase request path
+  prepends an operator-facing hint pointing at Supabase Dashboard →
+  Settings → API → Project API keys.
+
+### Added
+
+- **`install.sh` one-liner (#1).** Platform-detecting install script at
+  the repo root. Detects `darwin` / `linux` / `windows` + `amd64` /
+  `arm64`, downloads the matching release asset, drops the binary into
+  `$INSTALL_DIR` (default `~/.local/bin`), ad-hoc codesigns +
+  `xattr -dr com.apple.quarantine` on macOS so Gatekeeper doesn't block
+  first launch, and self-verifies via `ogham version`. Supports
+  `--version <tag>` for pinned installs and `--install-dir <path>` /
+  `INSTALL_DIR` env var for a custom install location. No `gh` CLI
+  dependency — plain `curl` against `github.com/.../releases/...`.
+
+  ```bash
+  curl -sSL https://raw.githubusercontent.com/ogham-mcp/ogham-cli/main/install.sh | bash
+  ```
+
 ## v0.7.0-rc4 (2026-04-22)
 
 ### Changed
