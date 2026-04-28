@@ -28,9 +28,11 @@ Available Commands:
   import            Bulk-import memories from an export file via the sidecar
   import-agent-zero Import memories from an Agent Zero FAISS pickle file
   init              Interactive wizard: configure backend, embedder, profile; write config files; register MCP clients
+  lifecycle         Memory lifecycle stage management
   list              List recent memories
   plugin            Emit host-specific plugin manifests (OpenClaw, Agent Zero, ...)
   profile           Manage memory profiles
+  recall            Read-only recall verbs (sub-100ms cold-start)
   search            Hybrid search across stored memories
   serve             Start MCP server over stdio (native tools by default)
   stats             Summarise the active profile: total, top sources, top tags
