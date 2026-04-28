@@ -88,7 +88,20 @@ Remaining sidecar-only features: dashboard (stays Python forever -- absorbing it
 
 ### Pre-built binaries (recommended)
 
-Pick the tarball for your platform from the [latest release](https://github.com/ogham-mcp/ogham-cli/releases/latest):
+Quickest path -- one-liner that detects platform, downloads the right asset, ad-hoc signs on macOS, and installs to `~/.local/bin`:
+
+```bash
+curl -sSL https://raw.githubusercontent.com/ogham-mcp/ogham-cli/main/install.sh | bash
+```
+
+Pin a specific release or change the install dir:
+
+```bash
+curl -sSL https://raw.githubusercontent.com/ogham-mcp/ogham-cli/main/install.sh | bash -s -- --version v0.7.1
+INSTALL_DIR=/usr/local/bin curl -sSL https://raw.githubusercontent.com/ogham-mcp/ogham-cli/main/install.sh | bash
+```
+
+Or grab the tarball for your platform from the [latest release](https://github.com/ogham-mcp/ogham-cli/releases/latest) by hand:
 
 ```bash
 # macOS (Apple Silicon)
@@ -107,7 +120,7 @@ chmod +x /usr/local/bin/ogham
 
 Verify the checksum against `checksums.txt` on the Releases page. Homebrew tap is coming; track progress at [ogham-mcp/homebrew-tap](https://github.com/ogham-mcp).
 
-**macOS first-run**: binaries are not yet notarized. Either run `xattr -d com.apple.quarantine /usr/local/bin/ogham` once, ad-hoc sign with `codesign -s - --force --deep /usr/local/bin/ogham`, or right-click Open from Finder. See the [download page](https://ogham-mcp.dev/download/) for all four unblock options.
+**macOS first-run** (manual install only -- the one-liner above handles this): binaries are not yet notarized. Either run `xattr -d com.apple.quarantine /usr/local/bin/ogham` once, ad-hoc sign with `codesign -s - --force --deep /usr/local/bin/ogham`, or right-click Open from Finder. See the [download page](https://ogham-mcp.dev/download/) for all four unblock options.
 
 ### Build from source
 
