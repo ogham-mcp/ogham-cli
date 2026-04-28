@@ -363,6 +363,119 @@ func TestLive_LintWiki_HealthyEmpty(t *testing.T) {
 	}
 }
 
+// Force a contradiction edge so wiki_lint_contradictions has rows.
+func TestLive_LintWiki_DetectsContradictions(t *testing.T) {
+	cfg, profile := liveCfg(t)
+	liveCleanup(t, cfg, profile)
+
+	ids := seedMemories(t, cfg, profile, []seedRow{
+		{content: "claim A"},
+		{content: "claim B"},
+	})
+	seedRelationship(t, cfg, ids[0], ids[1], "contradicts", 0.9)
+
+	rep, err := LintWiki(context.Background(), cfg, profile, LintWikiOptions{})
+	if err != nil {
+		t.Fatalf("LintWiki: %v", err)
+	}
+	if rep.Contradictions.Count < 1 {
+		t.Errorf("expected >=1 contradictions; got %+v", rep.Contradictions)
+	}
+}
+
+// Stuck-in-stable lifecycle row past the threshold -> rep.StaleLifecycle.Count >=1.
+func TestLive_LintWiki_StaleLifecycle(t *testing.T) {
+	cfg, profile := liveCfg(t)
+	liveCleanup(t, cfg, profile)
+
+	ids := seedMemories(t, cfg, profile, []seedRow{{content: "stuck"}})
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	conn, err := pgx.Connect(ctx, cfg.Database.URL)
+	if err != nil {
+		t.Fatalf("connect: %v", err)
+	}
+	defer func() { _ = conn.Close(ctx) }()
+	// Backdate 100 days into stable so the default 90-day threshold trips.
+	_, err = conn.Exec(ctx, `
+INSERT INTO memory_lifecycle (memory_id, profile, stage, stage_entered_at)
+VALUES ($1::uuid, $2, 'stable', now() - interval '100 days')
+ON CONFLICT (memory_id) DO UPDATE
+SET stage = 'stable', stage_entered_at = now() - interval '100 days'`,
+		ids[0], profile,
+	)
+	if err != nil {
+		t.Fatalf("seed lifecycle: %v", err)
+	}
+
+	rep, err := LintWiki(context.Background(), cfg, profile, LintWikiOptions{})
+	if err != nil {
+		t.Fatalf("LintWiki: %v", err)
+	}
+	if rep.StaleLifecycle.Count < 1 {
+		t.Errorf("expected >=1 stale_lifecycle; got %+v", rep.StaleLifecycle)
+	}
+	if rep.StaleLifecycle.OlderThanDays != 90 {
+		t.Errorf("OlderThanDays = %d, want 90", rep.StaleLifecycle.OlderThanDays)
+	}
+}
+
+// Stale summary in topic_summaries -> rep.StaleSummaries.Count >=1.
+func TestLive_LintWiki_StaleSummaries(t *testing.T) {
+	cfg, profile := liveCfg(t)
+	liveCleanup(t, cfg, profile)
+
+	ids := seedMemories(t, cfg, profile, []seedRow{{content: "old fact"}})
+	id := seedTopicSummary(t, cfg, profile, "stale-topic", "body", "one", "short", ids)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	conn, err := pgx.Connect(ctx, cfg.Database.URL)
+	if err != nil {
+		t.Fatalf("connect: %v", err)
+	}
+	defer func() { _ = conn.Close(ctx) }()
+	_, err = conn.Exec(ctx, `UPDATE topic_summaries SET status = 'stale', stale_reason = 'test' WHERE id = $1::uuid`, id)
+	if err != nil {
+		t.Fatalf("flip stale: %v", err)
+	}
+
+	rep, err := LintWiki(context.Background(), cfg, profile, LintWikiOptions{})
+	if err != nil {
+		t.Fatalf("LintWiki: %v", err)
+	}
+	if rep.StaleSummaries.Count < 1 {
+		t.Errorf("expected >=1 stale_summaries; got %+v", rep.StaleSummaries)
+	}
+}
+
+// Summary drift: stored hash mismatches re-computed hash -> drift entry.
+func TestLive_LintWiki_SummaryDrift(t *testing.T) {
+	cfg, profile := liveCfg(t)
+	liveCleanup(t, cfg, profile)
+
+	// Two memories tagged "drift-topic"; the summary is seeded with a
+	// hash computed against ONLY the first id, so when wiki_lint_drift
+	// recomputes it pulls both ids and the hash mismatches.
+	ids := seedMemories(t, cfg, profile, []seedRow{
+		{content: "drift fact A", tags: []string{"drift-topic"}},
+		{content: "drift fact B", tags: []string{"drift-topic"}},
+	})
+	// Seed summary with hash for ids[:1] only.
+	seedTopicSummary(t, cfg, profile, "drift-topic", "body", "one", "short", ids[:1])
+
+	rep, err := LintWiki(context.Background(), cfg, profile, LintWikiOptions{})
+	if err != nil {
+		t.Fatalf("LintWiki: %v", err)
+	}
+	if rep.SummaryDrift.Skipped {
+		t.Fatal("drift should not be skipped by default")
+	}
+	if rep.SummaryDrift.Count < 1 {
+		t.Errorf("expected >=1 summary_drift; got %+v", rep.SummaryDrift)
+	}
+}
+
 func TestLive_LintWiki_DetectsOrphans(t *testing.T) {
 	cfg, profile := liveCfg(t)
 	liveCleanup(t, cfg, profile)
