@@ -18,6 +18,7 @@ import (
 type supabaseClient struct {
 	baseURL    string
 	apiKey     string
+	keyKind    SupabaseKeyKind
 	http       *http.Client
 	authScheme string // "Bearer" by default -- only Basic is ever needed for edge cases
 }
@@ -36,8 +37,21 @@ func newSupabaseClient(cfg *Config) (*supabaseClient, error) {
 	return &supabaseClient{
 		baseURL: u + "/rest/v1",
 		apiKey:  cfg.Database.SupabaseKey,
+		keyKind: ClassifySupabaseKey(cfg.Database.SupabaseKey),
 		http:    &http.Client{Timeout: 30 * time.Second},
 	}, nil
+}
+
+// httpStatusErr wraps a non-OK Supabase response in a single error format.
+// On 401, if the configured key looks like an anon/publishable key, we
+// prepend the same hint `ogham config show` emits so the operator gets
+// a clear next step instead of the raw "Invalid API key" PostgREST blob.
+func (c *supabaseClient) httpStatusErr(op string, status int, body []byte) error {
+	msg := fmt.Sprintf("supabase %s: http %d: %s", op, status, truncateForError(body))
+	if status == http.StatusUnauthorized && !c.keyKind.IsRPCCapable() {
+		msg += " — " + supabaseAnonWarning(c.keyKind)
+	}
+	return fmt.Errorf("%s", msg)
 }
 
 // setAuth applies the standard Supabase header pair. Some routes expect
@@ -76,7 +90,7 @@ func (c *supabaseClient) callRPC(ctx context.Context, name string, args map[stri
 		return nil, fmt.Errorf("supabase rpc %s: read: %w", name, err)
 	}
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("supabase rpc %s: http %d: %s", name, resp.StatusCode, truncateForError(respBody))
+		return nil, c.httpStatusErr("rpc "+name, resp.StatusCode, respBody)
 	}
 	return respBody, nil
 }
@@ -110,7 +124,7 @@ func (c *supabaseClient) getJSON(ctx context.Context, endpoint string) ([]byte, 
 		return nil, fmt.Errorf("supabase GET %s: read: %w", endpoint, err)
 	}
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("supabase GET %s: http %d: %s", endpoint, resp.StatusCode, truncateForError(respBody))
+		return nil, c.httpStatusErr("GET "+endpoint, resp.StatusCode, respBody)
 	}
 	return respBody, nil
 }
@@ -149,7 +163,7 @@ func (c *supabaseClient) getJSONRange(ctx context.Context, endpoint string, star
 	case http.StatusRequestedRangeNotSatisfiable:
 		return []byte("[]"), nil
 	default:
-		return nil, fmt.Errorf("supabase GET %s: http %d: %s", endpoint, resp.StatusCode, truncateForError(respBody))
+		return nil, c.httpStatusErr("GET "+endpoint, resp.StatusCode, respBody)
 	}
 }
 
@@ -184,7 +198,7 @@ func (c *supabaseClient) postJSON(ctx context.Context, path string, body any, ex
 		return nil, fmt.Errorf("supabase POST %s: read: %w", path, err)
 	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return nil, fmt.Errorf("supabase POST %s: http %d: %s", path, resp.StatusCode, truncateForError(respBody))
+		return nil, c.httpStatusErr("POST "+path, resp.StatusCode, respBody)
 	}
 	return respBody, nil
 }

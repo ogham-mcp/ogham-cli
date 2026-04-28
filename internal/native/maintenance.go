@@ -654,6 +654,10 @@ type MaskedConfig struct {
 	Database  MaskedDatabase    `json:"database"`
 	Embedding MaskedEmbedding   `json:"embedding"`
 	Paths     map[string]string `json:"paths"`
+	// Warnings is a list of operator-facing diagnostics. Empty when the
+	// config looks healthy. Currently flags configured-but-unprivileged
+	// Supabase keys (anon / publishable) before the first request 401s.
+	Warnings []string `json:"warnings,omitempty"`
 }
 
 type MaskedDatabase struct {
@@ -661,6 +665,10 @@ type MaskedDatabase struct {
 	URL         string `json:"url,omitempty"`
 	SupabaseURL string `json:"supabase_url,omitempty"`
 	SupabaseKey string `json:"supabase_key,omitempty"`
+	// SupabaseKeyKind reports the role behind the configured key:
+	// "secret" / "service_role" (good), "anon" / "publishable" (bad,
+	// will 401 on RPCs), or "unknown" (couldn't tell — try anyway).
+	SupabaseKeyKind string `json:"supabase_key_kind,omitempty"`
 }
 
 type MaskedEmbedding struct {
@@ -682,6 +690,11 @@ func Mask(cfg *Config) MaskedConfig {
 	m.Database.SupabaseURL = cfg.Database.SupabaseURL
 	if cfg.Database.SupabaseKey != "" {
 		m.Database.SupabaseKey = maskSecret(cfg.Database.SupabaseKey)
+		kind := ClassifySupabaseKey(cfg.Database.SupabaseKey)
+		m.Database.SupabaseKeyKind = string(kind)
+		if !kind.IsRPCCapable() {
+			m.Warnings = append(m.Warnings, supabaseAnonWarning(kind))
+		}
 	}
 	m.Embedding.Provider = cfg.Embedding.Provider
 	m.Embedding.Model = cfg.Embedding.Model
@@ -690,6 +703,29 @@ func Mask(cfg *Config) MaskedConfig {
 		m.Embedding.APIKey = maskSecret(cfg.Embedding.APIKey)
 	}
 	return m
+}
+
+// supabaseAnonWarning is the canonical operator-facing message when a
+// Supabase key is configured but lacks the privileges Ogham needs. The
+// same wording is used by `ogham config show` and the 401-hint path so
+// users see one consistent mental model. Kept here next to Mask() since
+// both call sites format the same warning.
+func supabaseAnonWarning(kind SupabaseKeyKind) string {
+	label := string(kind)
+	if label == "" {
+		label = "unprivileged"
+	}
+	article := "a"
+	if label != "" {
+		switch label[0] {
+		case 'a', 'e', 'i', 'o', 'u':
+			article = "an"
+		}
+	}
+	return "supabase_key looks like " + article + " " + label +
+		" key — RPCs (hybrid_search, store, list) will 401. " +
+		"Use the secret key (sb_secret_…) from Supabase Dashboard → " +
+		"Settings → API → Project API keys."
 }
 
 // maskSecret shows the first 4 and last 4 chars to help users match
@@ -735,7 +771,7 @@ func (c *supabaseClient) doAuthed(ctx context.Context, method, endpoint string, 
 		return nil, fmt.Errorf("supabase %s %s: read: %w", method, endpoint, err)
 	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return nil, fmt.Errorf("supabase %s %s: http %d: %s", method, endpoint, resp.StatusCode, truncateForError(rawBody))
+		return nil, c.httpStatusErr(method+" "+endpoint, resp.StatusCode, rawBody)
 	}
 	return rawBody, nil
 }

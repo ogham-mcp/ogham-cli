@@ -54,7 +54,13 @@ subcommand reading the wrong profile?" debugging.`,
 			fmt.Printf("  supabase_url:   %s\n", masked.Database.SupabaseURL)
 		}
 		if masked.Database.SupabaseKey != "" {
-			fmt.Printf("  supabase_key:   %s\n", masked.Database.SupabaseKey)
+			suffix := ""
+			if masked.Database.SupabaseKeyKind != "" &&
+				masked.Database.SupabaseKeyKind != string(native.SupabaseKeySecret) &&
+				masked.Database.SupabaseKeyKind != string(native.SupabaseKeyServiceRole) {
+				suffix = fmt.Sprintf("  (%s — RPCs will 401)", masked.Database.SupabaseKeyKind)
+			}
+			fmt.Printf("  supabase_key:   %s%s\n", masked.Database.SupabaseKey, suffix)
 		}
 		fmt.Println()
 		fmt.Printf("[embedding]\n")
@@ -67,6 +73,13 @@ subcommand reading the wrong profile?" debugging.`,
 		fmt.Printf("  dimension:      %d\n", masked.Embedding.Dimension)
 		if masked.Embedding.APIKey != "" {
 			fmt.Printf("  api_key:        %s\n", masked.Embedding.APIKey)
+		}
+		if len(masked.Warnings) > 0 {
+			fmt.Println()
+			fmt.Printf("[warnings]\n")
+			for _, w := range masked.Warnings {
+				fmt.Printf("  - %s\n", w)
+			}
 		}
 		return nil
 	},

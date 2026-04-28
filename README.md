@@ -132,7 +132,7 @@ One-time config -- drop a `.env` in your working directory or `~/.ogham/config.e
 # Database -- pick one backend
 DATABASE_BACKEND=supabase
 SUPABASE_URL=https://your-project.supabase.co
-SUPABASE_KEY=sb_secret_...
+SUPABASE_KEY=sb_secret_...    # NOT the anon / publishable key -- see below
 
 # Or for vanilla Postgres / Neon
 # DATABASE_BACKEND=postgres
@@ -208,7 +208,7 @@ The Go binary auto-loads all three and passes the resolved environment to the Py
 | Variable | Purpose |
 |---|---|
 | `DATABASE_BACKEND` | `supabase` or `postgres` |
-| `SUPABASE_URL`, `SUPABASE_KEY` | Supabase backend credentials |
+| `SUPABASE_URL`, `SUPABASE_KEY` | Supabase backend credentials. **Use the secret key (`sb_secret_…`) from Supabase Dashboard → Settings → API → Project API keys** -- not the anon or publishable key. The anon key is gated by RLS and will return HTTP 401 on `hybrid_search_memories` and the memories table. `ogham config show` flags an anon key with `(anon — RPCs will 401)` so the misconfiguration is caught before the first request. |
 | `DATABASE_URL` | Postgres backend connection string |
 | `EMBEDDING_PROVIDER` | `ollama` / `openai` / `voyage` / `gemini` / `mistral` |
 | `GEMINI_API_KEY` / `OPENAI_API_KEY` / `VOYAGE_API_KEY` / `MISTRAL_API_KEY` | Provider-specific keys |
