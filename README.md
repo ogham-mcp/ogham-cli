@@ -86,9 +86,79 @@ Remaining sidecar-only features: dashboard (stays Python forever -- absorbing it
 
 ## Install
 
-### Pre-built binaries (recommended)
+Pick the row that matches what you already have on the machine. macOS users with Go installed should prefer `go install` -- it builds the binary locally so Gatekeeper has nothing to flag, and you skip the `xattr` / `codesign` dance entirely.
 
-Quickest path -- one-liner that detects platform, downloads the right asset, ad-hoc signs on macOS, and installs to `~/.local/bin`:
+| You have… | Run | macOS quarantine step? |
+| --- | --- | --- |
+| Go ≥ 1.26 | `go install github.com/ogham-mcp/ogham-cli@latest` | **No** -- recommended for macOS |
+| `curl` + bash | `curl -sSL https://raw.githubusercontent.com/ogham-mcp/ogham-cli/main/install.sh \| bash` | No -- the script handles it |
+| `brew` (when tap publishes) | `brew install ogham-mcp/tap/ogham-cli` | No -- Homebrew clears it |
+| A release tarball, by hand | Extract, move onto `$PATH`, then on macOS run `xattr -d` + `codesign -` (see below) | Yes -- manual step |
+
+`ogham` is a single static binary (~8 MB after `-s -w`). Pick whichever directory in your `$PATH` you prefer:
+
+| Location | Scope | sudo? | When to choose |
+| --- | --- | --- | --- |
+| `~/.local/bin` | user-only | no | XDG-style; lowest friction. Add to `PATH` if not already there. |
+| `~/bin` | user-only | no | Classic per-user path. macOS adds it to `PATH` automatically when present. |
+| `/usr/local/bin` | system-wide | **yes** | Shared with other CLI tools; survives user-profile resets. |
+| `/opt/homebrew/bin` (Apple Silicon) `/usr/local/bin` (Intel) | system-wide | depends | If you want to drop alongside Homebrew tools. |
+
+After install, confirm:
+
+```bash
+which ogham        # → /Users/you/.local/bin/ogham (or wherever)
+ogham --version    # → ogham vX.Y.Z (...)
+```
+
+If `which` finds nothing, the directory isn't on `$PATH`. Add to `~/.zshrc` (zsh) or `~/.bashrc` (bash):
+
+```bash
+export PATH="$HOME/.local/bin:$PATH"
+```
+
+### `go install` (recommended on macOS)
+
+Requires Go ≥ 1.26.
+
+```bash
+go install github.com/ogham-mcp/ogham-cli@latest
+# binary lands in $(go env GOBIN) or $(go env GOPATH)/bin
+```
+
+Add `$(go env GOPATH)/bin` to your `PATH` if it isn't already:
+
+```bash
+echo 'export PATH="$(go env GOPATH)/bin:$PATH"' >> ~/.zshrc
+source ~/.zshrc
+ogham --version
+```
+
+**No `xattr` / `codesign` step is needed.** The binary is built on your machine, so it never receives the `com.apple.quarantine` extended attribute that browsers and `curl` set on downloaded files.
+
+**`ogham: command not found` after `go install`?** Most common cause: the install succeeded, but `$GOPATH/bin` isn't on your `$PATH`. Three quick checks:
+
+```bash
+# 1. Where does Go put binaries on your machine?
+go env GOBIN GOPATH
+# If GOBIN is set, the binary is in $GOBIN.
+# If GOBIN is empty, it's in $(go env GOPATH)/bin (typically ~/go/bin).
+
+# 2. Does the binary actually exist?
+ls -l "$(go env GOPATH)/bin/ogham"
+
+# 3. Is that directory on your PATH?
+echo "$PATH" | tr ':' '\n' | grep -E '(/go/bin|GOBIN)'
+```
+
+Other failure modes:
+
+- **Corporate proxy** blocking `proxy.golang.org` → `GOPROXY=direct go install github.com/ogham-mcp/ogham-cli@latest` (slower, bypasses the module proxy).
+- **`~/go` owned by root** from a previous `sudo go install` → `sudo chown -R "$USER" ~/go`.
+
+### `install.sh` one-liner (curl + bash)
+
+Detects platform, downloads the right asset, ad-hoc signs on macOS, and installs to `~/.local/bin`:
 
 ```bash
 curl -sSL https://raw.githubusercontent.com/ogham-mcp/ogham-cli/main/install.sh | bash
@@ -101,7 +171,9 @@ curl -sSL https://raw.githubusercontent.com/ogham-mcp/ogham-cli/main/install.sh 
 INSTALL_DIR=/usr/local/bin curl -sSL https://raw.githubusercontent.com/ogham-mcp/ogham-cli/main/install.sh | bash
 ```
 
-Or grab the tarball for your platform from the [latest release](https://github.com/ogham-mcp/ogham-cli/releases/latest) by hand:
+### Pre-built binaries by hand
+
+Download the platform tarball from the [latest release](https://github.com/ogham-mcp/ogham-cli/releases/latest) and verify the SHA256 against `checksums.txt`:
 
 ```bash
 # macOS (Apple Silicon)
@@ -114,20 +186,60 @@ curl -L https://github.com/ogham-mcp/ogham-cli/releases/latest/download/ogham-cl
 curl -L https://github.com/ogham-mcp/ogham-cli/releases/latest/download/ogham-cli-linux-arm64.tar.gz | tar -xz
 # Windows (amd64) -- fetch the .zip from the Releases page and extract
 
-mv ogham /usr/local/bin/ogham
-chmod +x /usr/local/bin/ogham
+mv ogham ~/.local/bin/        # or wherever (see table above)
+chmod +x ~/.local/bin/ogham
 ```
 
-Verify the checksum against `checksums.txt` on the Releases page. Homebrew tap is coming; track progress at [ogham-mcp/homebrew-tap](https://github.com/ogham-mcp).
+### macOS: clear the download quarantine
 
-**macOS first-run** (manual install only -- the one-liner above handles this): binaries are not yet notarized. Either run `xattr -d com.apple.quarantine /usr/local/bin/ogham` once, ad-hoc sign with `codesign -s - --force --deep /usr/local/bin/ogham`, or right-click Open from Finder. See the [download page](https://ogham-mcp.dev/download/) for all four unblock options.
+Browsers and `curl` set the `com.apple.quarantine` extended attribute on downloaded files. If you try to run the binary without clearing it, macOS shows: *"ogham" cannot be opened because the developer cannot be verified.* (Skip this section if you used `go install` -- locally built binaries don't get the xattr.)
+
+**Recommended (no sudo, user-local install):**
+
+```bash
+# 1. Strip the quarantine xattr
+xattr -d com.apple.quarantine ~/.local/bin/ogham
+
+# 2. Ad-hoc sign so future Gatekeeper checks pass
+codesign --force --sign - ~/.local/bin/ogham
+
+# 3. Verify
+ogham --version
+```
+
+**System-wide install (`/usr/local/bin`, requires sudo):**
+
+```bash
+sudo xattr -d com.apple.quarantine /usr/local/bin/ogham
+sudo codesign --force --sign - /usr/local/bin/ogham
+ogham --version
+```
+
+If `xattr -d` reports *No such xattr*, the file wasn't quarantined -- skip to the `codesign` step (or run `ogham --version` directly; it may already work).
+
+**Why this works:** stripping `com.apple.quarantine` opts you out of the first-launch Gatekeeper review for that file. The ad-hoc `codesign -` (the dash means "sign with no developer identity") gives the binary a local signature so subsequent integrity checks pass. This is appropriate for a binary you've SHA256-verified yourself. Once we publish notarized releases, the manual `codesign` step won't be needed.
+
+### Windows: Mark of the Web
+
+Edge / Chrome / curl mark downloaded `.exe`s with a Mark-of-the-Web zone identifier. SmartScreen prompts the first time you run them.
+
+**GUI:** Right-click `ogham.exe` → **Properties** → tick **Unblock** → **OK**.
+
+**PowerShell (equivalent, scriptable):**
+
+```powershell
+Unblock-File -Path .\ogham.exe
+.\ogham.exe --version
+```
+
+**Linux:** no quarantine system; `chmod +x` and run.
 
 ### Build from source
 
 ```bash
 git clone https://github.com/ogham-mcp/ogham-cli.git
 cd ogham-cli
-go build -o /usr/local/bin/ogham .
+go build -o ~/.local/bin/ogham .
 ```
 
 Requires Go 1.26+. The binary is ~8 MB after `-s -w`.
