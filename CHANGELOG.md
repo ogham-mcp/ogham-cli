@@ -6,6 +6,59 @@ repo](https://github.com/ogham-mcp/ogham-mcp).
 
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), loosely.
 
+## v0.7.3 (2026-05-21)
+
+### Fixed
+
+- **`ogham hooks run <event>` 401 on Supabase-only setups (#6).** The
+  four hook events (session-start, post-tool, inscribe, recall) all
+  routed through the gateway client with `X-Api-Key: <cfg.APIKey>`.
+  On machines where the only configured auth was a Supabase
+  service_role key, the empty api_key header produced `401 Missing
+  authentication` every time Claude Code fired SessionStart,
+  PreCompact, or PostCompact. Headless CI and sandboxed agents had no
+  way to authenticate at all.
+
+  Adds a native path: when `cfg.ResolveBackend()` resolves to a working
+  postgres / supabase backend, `session-start`, `recall`, and
+  `inscribe` run locally against your store -- no gateway round-trip
+  required. `--gateway` flag forces the legacy path explicitly for
+  Pro+ users who want server-side smart hooks. `post-tool` stays
+  gateway-only for now; its smart filtering (classification, dedup,
+  secret masking) hasn't been ported. The error message when no auth
+  is configured points at the right config knobs instead of returning
+  a bare 401.
+
+### Added
+
+- **`ogham health --extended` (Path B of #5).** Partial port of v0.13's
+  8-dimension health from the Python sidecar. Three dimensions live:
+  `DB freshness` (last memory write recency with 24h / 72h / 30d
+  scoring curve), `Corpus size` (memory count thresholds), and `E2E
+  probe` (store -> hybrid_search -> delete round-trip). Output is a
+  scored 0-10 readout per dimension with stoplight zones
+  (GREEN/AMBER/RED) plus an overall mean. Text mode pretty-prints,
+  JSON mode emits the full `ExtendedHealthReport`. The remaining 5
+  dimensions (schema_integrity, hybrid_search_latency, wiki_coverage,
+  profile_health, concurrency) are deferred to a follow-up release;
+  the report carries `ported_dimensions` / `total_dimensions` /
+  `deferred_notice` fields so callers see the partial state
+  explicitly. New `--profile` flag for per-invocation profile
+  selection on `ogham health`.
+
+- **`make deps-check` and `make security-scan` Makefile targets.**
+  `deps-check` surfaces outdated Go modules via `go list -u -m all`
+  (informational, never blocks daily iteration). `security-scan` runs
+  `gosec` (SAST) + `govulncheck` (known CVEs) via `go run @latest`,
+  cached after first invocation. `make ship-check` bundles both with
+  `lint` + `test` as a pre-release gate. `make check` stays fast
+  (`lint` + `test`) for daily flow.
+
+- **`gosec` + `govulncheck` pre-commit hooks.** Local hooks in
+  `.pre-commit-config.yaml` that fire on `.go` file changes. Mirrors
+  the openbrain-sharedmemory bandit pattern -- secrets/vuln checks
+  happen at commit time so issues surface before they land on main.
+
 ## v0.7.2 (2026-04-28)
 
 ### Fixed
