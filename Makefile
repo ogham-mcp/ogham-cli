@@ -1,6 +1,6 @@
 # Ogham CLI development tasks
 
-.PHONY: build test test-race lint check clean cross-compile snapshot tag release-check cover cover-html bench pict-regen live
+.PHONY: build test test-race lint check clean cross-compile snapshot tag release-check cover cover-html bench pict-regen live deps-check security-scan ship-check
 
 VERSION ?= dev
 
@@ -129,8 +129,38 @@ pict-regen:
 	    echo "regenerated $$(basename $$pf).tsv (canonical-sorted)"; \
 	done
 
-# Pre-commit checks
+# Show outdated direct + transitive Go modules. Informational: exits 0
+# even when modules are stale, so it can be wired into a daily-driver
+# loop without blocking. Use `make ship-check` for a release gate.
+#
+# `go list -u -m all` prints every module; lines with an available
+# update carry a `[vX.Y.Z]` bracket. We grep for that pattern so the
+# output only shows the ones that need attention.
+deps-check:
+	@echo "== Outdated Go modules =="
+	@go list -u -m all 2>/dev/null | grep -E '\[[^]]+\]' || echo "(all dependencies up to date)"
+
+# SAST (gosec) + dependency vuln scan (govulncheck). Both fetched via
+# `go run`, cached in $$GOPATH/pkg/mod after first run. Exits non-zero
+# on findings so this can gate releases via `make ship-check`.
+#
+# gosec excludes:
+#   G104 -- "Errors unhandled" overlaps with errcheck (already in
+#           golangci-lint config); keeping both produces noisy duplicate
+#           reports. errcheck wins because it integrates with the
+#           project's existing nolint annotations.
+security-scan:
+	@echo "== gosec (static security analysis) =="
+	go run github.com/securego/gosec/v2/cmd/gosec@latest -quiet -exclude=G104 ./...
+	@echo "== govulncheck (known CVEs in deps + stdlib) =="
+	go run golang.org/x/vuln/cmd/govulncheck@latest ./...
+
+# Pre-commit checks (fast feedback for daily iteration).
 check: lint test
+
+# Pre-release gate (slower, includes security scan + dep-currency
+# report). Run this before `make tag VERSION=vX.Y.Z`.
+ship-check: lint test security-scan deps-check
 
 # Clean build artifacts
 clean:

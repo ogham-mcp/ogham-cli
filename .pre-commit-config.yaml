@@ -25,3 +25,29 @@ repos:
     rev: v8.21.2
     hooks:
       - id: gitleaks
+
+  # gosec -- Go SAST. Catches hardcoded credentials, weak crypto,
+  # unvalidated SQL, file permission issues, etc. G104 excluded because
+  # errcheck (in golangci-lint) already covers it with better nolint
+  # integration. Run via `go run` so the version tracks the Makefile's
+  # `security-scan` target rather than drifting in the pre-commit cache.
+  - repo: local
+    hooks:
+      - id: gosec
+        name: gosec (Go SAST)
+        entry: go run github.com/securego/gosec/v2/cmd/gosec@latest -quiet -exclude=G104 ./...
+        language: system
+        types: [go]
+        pass_filenames: false
+
+  # govulncheck -- Go's official known-CVE scanner. Checks both direct
+  # deps and stdlib. Runs on every commit so a dependency advisory
+  # surfaces before it lands on main.
+  - repo: local
+    hooks:
+      - id: govulncheck
+        name: govulncheck (known CVEs)
+        entry: go run golang.org/x/vuln/cmd/govulncheck@latest ./...
+        language: system
+        types: [go]
+        pass_filenames: false
