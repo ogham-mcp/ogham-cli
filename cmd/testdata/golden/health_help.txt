@@ -13,8 +13,10 @@ Usage:
   ogham health [flags]
 
 Flags:
-  -h, --help            help for health
-      --live-embedder   Native: make a real embedding API call (costs one provider token)
+      --extended         Run the 8-dimension extended health report (partial port -- 3 of 8 dimensions; see issue #5)
+  -h, --help             help for health
+      --live-embedder    Native: make a real embedding API call (costs one provider token)
+      --profile string   Profile to score (empty => cfg.Profile or 'default')
 
 Global Flags:
       --python          Alias for --sidecar

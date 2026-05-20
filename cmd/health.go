@@ -17,6 +17,8 @@ var (
 	healthJSONDeprecated   bool
 	healthNativeDeprecated bool
 	healthLiveEmbedder     bool
+	healthExtended         bool
+	healthProfile          string
 )
 
 var healthCmd = &cobra.Command{
@@ -41,8 +43,56 @@ round-trip embedding request.`,
 		if useSidecar() {
 			return runHealthSidecar(ctx)
 		}
+		if healthExtended {
+			return runHealthExtended(ctx)
+		}
 		return runHealthNative(ctx)
 	},
+}
+
+// runHealthExtended emits the 8-dimension extended health report.
+// Currently a partial port (Path B: 3 of 8 dimensions) -- see issue
+// #5. The report carries PortedDimensions / TotalDimensions so
+// downstream consumers can see the partial state explicitly.
+func runHealthExtended(ctx context.Context) error {
+	cfg, err := native.Load(native.DefaultPath())
+	if err != nil {
+		return err
+	}
+	report := native.ComposeExtendedHealth(ctx, cfg, healthProfile)
+
+	if !useText() {
+		return emitJSON(report)
+	}
+
+	zoneMark := map[native.Zone]string{
+		native.ZoneGreen: "✓",
+		native.ZoneAmber: "~",
+		native.ZoneRed:   "✗",
+	}
+
+	fmt.Printf("ogham health (extended, profile=%s, elapsed=%s)\n",
+		report.Profile,
+		time.Duration(report.DurationMs*float64(time.Millisecond)).Truncate(time.Millisecond),
+	)
+	fmt.Printf("  overall: %.1f/10 (%s)\n", report.OverallScore, report.OverallZone)
+	fmt.Println()
+	for _, d := range report.Dimensions {
+		mark := zoneMark[d.Zone]
+		if mark == "" {
+			mark = "?"
+		}
+		fmt.Printf("  %s %-18s %4.1f/10  %s\n", mark, d.Name, d.Score, d.Detail)
+	}
+	if report.DeferredNotice != "" {
+		fmt.Println()
+		fmt.Printf("  (%d of %d dimensions ported; %s)\n",
+			report.PortedDimensions, report.TotalDimensions, report.DeferredNotice)
+	}
+	if report.OverallZone == native.ZoneRed {
+		return fmt.Errorf("extended health overall is RED (score %.1f/10)", report.OverallScore)
+	}
+	return nil
 }
 
 func runHealthNative(ctx context.Context) error {
@@ -140,5 +190,7 @@ func init() {
 	_ = healthCmd.Flags().MarkHidden("json")
 	_ = healthCmd.Flags().MarkHidden("native")
 	healthCmd.Flags().BoolVar(&healthLiveEmbedder, "live-embedder", false, "Native: make a real embedding API call (costs one provider token)")
+	healthCmd.Flags().BoolVar(&healthExtended, "extended", false, "Run the 8-dimension extended health report (partial port -- 3 of 8 dimensions; see issue #5)")
+	healthCmd.Flags().StringVar(&healthProfile, "profile", "", "Profile to score (empty => cfg.Profile or 'default')")
 	rootCmd.AddCommand(healthCmd)
 }
