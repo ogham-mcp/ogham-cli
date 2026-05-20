@@ -11,6 +11,7 @@ import (
 
 	"github.com/ogham-mcp/ogham-cli/internal/config"
 	"github.com/ogham-mcp/ogham-cli/internal/gateway"
+	"github.com/ogham-mcp/ogham-cli/internal/native"
 	"github.com/spf13/cobra"
 )
 
@@ -23,72 +24,213 @@ var hooksCmd = &cobra.Command{
 var hooksRunCmd = &cobra.Command{
 	Use:   "run [event]",
 	Short: "Run a hook event (session-start, post-tool, inscribe, recall)",
-	Args:  cobra.ExactArgs(1),
+	Long: `Run a lifecycle hook event.
+
+Routing:
+  - Native (Supabase / Postgres direct) is used when the local config
+    has a database backend configured. session-start, inscribe, and
+    recall all run locally with no gateway required -- this is the
+    headless / sandboxed-CI path that Claude Code SessionStart hooks
+    need on machines that can't complete an interactive OAuth login.
+  - Gateway is used as a fallback (or explicitly via --gateway) and
+    is currently the only path for the smart-filtered post-tool
+    event. Requires a valid api_key in config.toml.
+
+See issue #6 for the rationale behind the native routing.`,
+	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		event := args[0]
 
-		cfg, err := config.Load("")
-		if err != nil {
-			return fmt.Errorf("load config: %w", err)
-		}
-		client := gateway.New(cfg.GatewayURL, cfg.APIKey, "ogham-cli/hooks")
-
-		// Hooks fire from Claude Code's wrapper; honour Ctrl+C and give
-		// the call a bounded window so a slow gateway can't stall the
-		// editor indefinitely.
 		ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 		defer cancel()
 
-		// Read stdin for hook input
 		input := readStdin()
-
 		profile, _ := cmd.Flags().GetString("profile")
+		forceGateway, _ := cmd.Flags().GetBool("gateway")
+
+		// Decide routing: native (Supabase / Postgres direct) wins by
+		// default; --gateway flips back to the legacy gateway path.
+		nativeCfg, nativeReady := loadNativeIfReady(profile)
+		useNative := nativeReady && !forceGateway
 
 		switch event {
 		case "session-start":
-			cwd := getField(input, "cwd", ".")
-			hookCtx, err := client.HookSessionStart(ctx, cwd, profile)
-			if err != nil {
-				return err
+			if useNative {
+				return runNativeSessionStart(ctx, nativeCfg, input, profile)
 			}
-			if hookCtx != "" {
-				fmt.Print(hookCtx)
-			}
-
-		case "post-tool":
-			toolName := getField(input, "tool_name", "")
-			if toolName == "" {
-				return nil // nothing to capture
-			}
-			var toolInput map[string]any
-			if ti, ok := input["tool_input"].(map[string]any); ok {
-				toolInput = ti
-			}
-			cwd := getField(input, "cwd", "")
-			sessionID := getField(input, "session_id", "")
-			return client.HookPostTool(ctx, toolName, toolInput, cwd, sessionID, profile)
-
-		case "inscribe":
-			sessionID := getField(input, "session_id", "unknown")
-			cwd := getField(input, "cwd", ".")
-			return client.HookInscribe(ctx, sessionID, cwd, profile)
+			return runGatewaySessionStart(ctx, input, profile)
 
 		case "recall":
-			cwd := getField(input, "cwd", ".")
-			hookCtx, err := client.HookRecall(ctx, cwd, profile)
-			if err != nil {
-				return err
+			if useNative {
+				return runNativeRecall(ctx, nativeCfg, input, profile)
 			}
-			if hookCtx != "" {
-				fmt.Print(hookCtx)
+			return runGatewayRecall(ctx, input, profile)
+
+		case "inscribe":
+			if useNative {
+				return runNativeInscribe(ctx, nativeCfg, input, profile)
 			}
+			return runGatewayInscribe(ctx, input, profile)
+
+		case "post-tool":
+			// post-tool's smart filtering (classification, duplicate
+			// detection, secret masking) lives only in the Python
+			// implementation today. Gateway is the only path until
+			// a native port lands -- see issue #6 follow-up. Even if
+			// the user has a native backend configured, we can't use
+			// it here because the native pipeline would just store
+			// every tool call without filtering. Pass the explicit
+			// "post-tool only" hint to requireGateway so the error
+			// message doesn't mislead users into thinking native
+			// would work.
+			return runGatewayPostTool(ctx, input, profile)
 
 		default:
 			return fmt.Errorf("unknown hook event: %s (use session-start, post-tool, inscribe, or recall)", event)
 		}
-
-		return nil
 	},
+}
+
+// loadNativeIfReady returns the native config when a working backend
+// is configured. Returns (cfg, true) when SessionStart / Recall /
+// Inscribe can run locally, (nil, false) otherwise.
+//
+// Honours --profile by overriding cfg.Profile when the flag is set,
+// so per-invocation profile selection works the same way as the
+// existing native commands (store, search, list).
+func loadNativeIfReady(profile string) (*native.Config, bool) {
+	cfg, err := native.Load(native.DefaultPath())
+	if err != nil {
+		return nil, false
+	}
+	if _, err := cfg.ResolveBackend(); err != nil {
+		return nil, false
+	}
+	if profile != "" {
+		cfg.Profile = profile
+	}
+	return cfg, true
+}
+
+// ---- Native event runners -------------------------------------------
+
+func runNativeSessionStart(ctx context.Context, cfg *native.Config, input map[string]any, profile string) error {
+	cwd := getField(input, "cwd", ".")
+	out, err := native.SessionStart(ctx, cfg, cwd, native.HookOptions{Profile: profile})
+	if err != nil {
+		return err
+	}
+	if out != "" {
+		fmt.Print(out)
+	}
+	return nil
+}
+
+func runNativeRecall(ctx context.Context, cfg *native.Config, input map[string]any, profile string) error {
+	cwd := getField(input, "cwd", ".")
+	out, err := native.Recall(ctx, cfg, cwd, native.HookOptions{Profile: profile})
+	if err != nil {
+		return err
+	}
+	if out != "" {
+		fmt.Print(out)
+	}
+	return nil
+}
+
+func runNativeInscribe(ctx context.Context, cfg *native.Config, input map[string]any, profile string) error {
+	sessionID := getField(input, "session_id", "unknown")
+	cwd := getField(input, "cwd", ".")
+	_, err := native.Inscribe(ctx, cfg, sessionID, cwd, native.HookOptions{Profile: profile})
+	return err
+}
+
+// ---- Gateway event runners (legacy / Pro+ path) ---------------------
+
+// requireGateway builds a gateway client and errors out cleanly if no
+// API key is configured. Replaces the silent 401 from issue #6 with a
+// surfaced hint. The hint mentions native config as an alternative for
+// event types that have a working native path (session-start, recall,
+// inscribe). post-tool is gateway-only today -- its smart filtering
+// hasn't been ported -- so it gets a different message that doesn't
+// dangle a "try native instead" suggestion that wouldn't actually help.
+func requireGateway(usage string) (*gateway.Client, error) {
+	cfg, err := config.Load("")
+	if err != nil {
+		return nil, fmt.Errorf("load config: %w", err)
+	}
+	if cfg.APIKey == "" {
+		if usage == "post-tool" {
+			return nil, fmt.Errorf(
+				"hooks post-tool: gateway api_key required (run `ogham auth login`). post-tool's smart filtering (classification, duplicate detection, secret masking) is not yet available on the native path; track issue #6 follow-up for the native port",
+			)
+		}
+		return nil, fmt.Errorf(
+			"hooks %s: no gateway api_key configured (run `ogham auth login`) and no native database backend configured (set SUPABASE_URL+SUPABASE_KEY or DATABASE_URL in ~/.ogham/config.env to use the native path)",
+			usage,
+		)
+	}
+	return gateway.New(cfg.GatewayURL, cfg.APIKey, "ogham-cli/hooks"), nil
+}
+
+func runGatewaySessionStart(ctx context.Context, input map[string]any, profile string) error {
+	client, err := requireGateway("session-start")
+	if err != nil {
+		return err
+	}
+	cwd := getField(input, "cwd", ".")
+	hookCtx, err := client.HookSessionStart(ctx, cwd, profile)
+	if err != nil {
+		return err
+	}
+	if hookCtx != "" {
+		fmt.Print(hookCtx)
+	}
+	return nil
+}
+
+func runGatewayRecall(ctx context.Context, input map[string]any, profile string) error {
+	client, err := requireGateway("recall")
+	if err != nil {
+		return err
+	}
+	cwd := getField(input, "cwd", ".")
+	hookCtx, err := client.HookRecall(ctx, cwd, profile)
+	if err != nil {
+		return err
+	}
+	if hookCtx != "" {
+		fmt.Print(hookCtx)
+	}
+	return nil
+}
+
+func runGatewayInscribe(ctx context.Context, input map[string]any, profile string) error {
+	client, err := requireGateway("inscribe")
+	if err != nil {
+		return err
+	}
+	sessionID := getField(input, "session_id", "unknown")
+	cwd := getField(input, "cwd", ".")
+	return client.HookInscribe(ctx, sessionID, cwd, profile)
+}
+
+func runGatewayPostTool(ctx context.Context, input map[string]any, profile string) error {
+	toolName := getField(input, "tool_name", "")
+	if toolName == "" {
+		return nil // nothing to capture
+	}
+	client, err := requireGateway("post-tool")
+	if err != nil {
+		return err
+	}
+	var toolInput map[string]any
+	if ti, ok := input["tool_input"].(map[string]any); ok {
+		toolInput = ti
+	}
+	cwd := getField(input, "cwd", "")
+	sessionID := getField(input, "session_id", "")
+	return client.HookPostTool(ctx, toolName, toolInput, cwd, sessionID, profile)
 }
 
 var hooksInstallCmd = &cobra.Command{
@@ -140,6 +282,7 @@ var hooksStatusCmd = &cobra.Command{
 
 func init() {
 	hooksRunCmd.Flags().String("profile", "work", "Memory profile")
+	hooksRunCmd.Flags().Bool("gateway", false, "Force gateway path even when native backend is configured")
 	hooksCmd.AddCommand(hooksRunCmd)
 	hooksCmd.AddCommand(hooksInstallCmd)
 	hooksCmd.AddCommand(hooksStatusCmd)
