@@ -6,6 +6,69 @@ repo](https://github.com/ogham-mcp/ogham-mcp).
 
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), loosely.
 
+## v0.7.4 (unreleased)
+
+### Fixed
+
+- **`hooks install` wrote hook commands that don't exist (#7).** The four
+  events (SessionStart, PostToolUse, PreCompact, PostCompact) all wrote
+  `ogham-cli hooks run <verb>` into Claude Code's `~/.claude/settings.json`,
+  but the shipped binary is named `ogham`, not `ogham-cli`. Anyone who
+  ran `hooks install` between v0.4.0 (2026-03-22, introduced in commit
+  `fac78dc`) and v0.7.3 has a settings file that fires "command not
+  found" on every SessionStart, PostToolUse, PreCompact, and PostCompact
+  event -- non-destructive, but no memory features worked.
+
+  v0.7.4 generates the hook command from `os.Executable()` (absolute
+  path to the running binary, mirroring the pattern `ogham plugin` has
+  used for openclaw / agent-zero emitters since v0.4). The hook now
+  works regardless of binary name or `$PATH` state.
+
+  Detection of stale entries uses verb-shape, not binary name: the
+  three-token `ogham hooks run <verb>` form is Go-side; the two-token
+  `ogham hooks <verb>` form is Python ogham-mcp. The idempotent
+  pre-pass and `hooks uninstall` only touch Go-owned entries, leaving
+  any Python `ogham hooks <verb>` lines intact.
+
+- **`hooks install` printed Kiro setup instructions with the same broken
+  `ogham-cli` command.** Now uses the resolved absolute binary path
+  consistently.
+
+### Added
+
+- **`ogham hooks uninstall`** -- removes Go-owned ogham hook entries from
+  Claude Code's `settings.json`. Remediation path for anyone whose
+  config has been silently broken since v0.4.0.
+
+  If you ran `hooks install` previously, run:
+
+  ```
+  ogham hooks uninstall   # cleans up the broken entries
+  ogham hooks install     # writes the v0.7.4 fixed config
+  ```
+
+- **`install.sh --force` flag**, with a PATH-collision check that
+  refuses to install over an existing `ogham` binary on PATH unless
+  `--force` is set or the existing binary is at the install target
+  itself (so in-place upgrades still work transparently). The check
+  catches the common case of installing the Go CLI on a machine that
+  already has the Python `ogham-mcp` package, where typing `ogham`
+  would otherwise become ambiguous and depend on PATH order.
+
+### Notes
+
+- `hooks install` continues to mutate the global `~/.claude/settings.json`.
+  v0.8 will add `ogham plugin claude-code` as a manifest-emitting
+  alternative (parallel to existing `openclaw` / `agent-zero` plugin
+  emitters) using `${CLAUDE_PLUGIN_ROOT}` for path resolution -- the
+  Anthropic-prescribed pattern for plugin-scoped hooks. `hooks install`
+  stays as a convenience.
+- The native `inscribe` hook still writes a metadata-only stub at
+  PreCompact -- low signal at scale (issue #7 finding #5). v0.8 will
+  reshape `inscribe` from hook to explicit `ogham inscribe` verb that
+  accepts prepared content; the signal-gated capture pattern documented
+  in the superpowers-memory bridge spec is the intended target.
+
 ## v0.7.3 (2026-05-21)
 
 ### Fixed

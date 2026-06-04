@@ -7,6 +7,7 @@ Available Commands:
   install     Detect AI client and install hooks configuration
   run         Run a hook event (session-start, post-tool, inscribe, recall)
   status      Show installed hooks
+  uninstall   Remove ogham hook entries from the client's settings
 
 Flags:
   -h, --help   help for hooks
