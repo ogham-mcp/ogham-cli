@@ -6,7 +6,9 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"os/signal"
+	"regexp"
 	"syscall"
 
 	"github.com/ogham-mcp/ogham-cli/internal/config"
@@ -14,6 +16,118 @@ import (
 	"github.com/ogham-mcp/ogham-cli/internal/native"
 	"github.com/spf13/cobra"
 )
+
+// oghamGoHookCommandRegex matches hook commands owned by THIS Go binary.
+// The verb shape `hooks run <verb>` distinguishes the Go CLI's three-token
+// form from the Python ogham-mcp's two-token `hooks <verb>` form, so the
+// idempotent install pre-pass and `hooks uninstall` only touch Go-owned
+// entries -- a user with both Python and Go ogham binaries installed
+// won't have their Python hook lines accidentally stripped (#7).
+//
+// Matches:
+//
+//	ogham-cli hooks run session-start           (pre-v0.7.4 broken form)
+//	/usr/local/bin/ogham hooks run session-start
+//	/Users/foo/.local/bin/ogham hooks run recall
+//
+// Does NOT match (Python ogham-mcp):
+//
+//	/path/to/.venv/bin/ogham hooks recall
+//	/path/to/.venv/bin/ogham hooks inscribe
+var oghamGoHookCommandRegex = regexp.MustCompile(`(?:^|/)(ogham-cli|ogham)\s+hooks\s+run\s+`)
+
+// oghamBinaryPath returns the absolute path of the running ogham binary,
+// for use when writing hook commands into settings.json. Resolution order:
+//
+//  1. os.Executable() -- the binary that's actually running, regardless of
+//     $PATH state at execution time. Matches the pattern cmd/plugin.go
+//     uses for openclaw/agent-zero emitters.
+//  2. exec.LookPath("ogham") -- fallback if os.Executable() can't resolve
+//     (rare, generally only on platforms where /proc/self/exe is missing).
+//  3. Bare "ogham" -- last resort. Will still trigger #2's $PATH issue
+//     for users with no ogham on $PATH, but at least the hooks install
+//     succeeds and the user gets a diagnostic when the hook fires.
+//
+// The returned path is what Claude Code will execute when SessionStart /
+// PostToolUse / PreCompact / PostCompact fires.
+func oghamBinaryPath() string {
+	if p, err := os.Executable(); err == nil && p != "" {
+		return p
+	}
+	if p, err := exec.LookPath("ogham"); err == nil && p != "" {
+		return p
+	}
+	return "ogham"
+}
+
+// oghamHookCommand formats the command string for a Go-side hook event.
+// Mirrors `ogham hooks run <verb>` with the resolved absolute binary path.
+func oghamHookCommand(verb string) string {
+	return fmt.Sprintf("%s hooks run %s", oghamBinaryPath(), verb)
+}
+
+// pruneOghamGoHooks walks settings["hooks"] and strips any inner hook
+// command matching oghamGoHookCommandRegex. Returns the number of inner
+// hook commands removed. Mutates the passed settings map in place.
+//
+// Used as the idempotent pre-pass on install (so re-running `hooks
+// install` after a broken-binary-name install cleans up before adding the
+// fresh entries) and as the core of `hooks uninstall`.
+//
+// Leaves Python `ogham hooks <verb>` entries untouched -- those are owned
+// by ogham-mcp, not by us.
+func pruneOghamGoHooks(settings map[string]any) int {
+	hooks, ok := settings["hooks"].(map[string]any)
+	if !ok {
+		return 0
+	}
+	removed := 0
+	for event, eventHooksRaw := range hooks {
+		eventHooks, ok := eventHooksRaw.([]any)
+		if !ok {
+			continue
+		}
+		kept := make([]any, 0, len(eventHooks))
+		for _, entry := range eventHooks {
+			entryMap, ok := entry.(map[string]any)
+			if !ok {
+				kept = append(kept, entry)
+				continue
+			}
+			innerHooks, ok := entryMap["hooks"].([]any)
+			if !ok {
+				kept = append(kept, entry)
+				continue
+			}
+			filteredInner := make([]any, 0, len(innerHooks))
+			for _, h := range innerHooks {
+				hm, ok := h.(map[string]any)
+				if !ok {
+					filteredInner = append(filteredInner, h)
+					continue
+				}
+				cmd, _ := hm["command"].(string)
+				if oghamGoHookCommandRegex.MatchString(cmd) {
+					removed++
+					continue
+				}
+				filteredInner = append(filteredInner, h)
+			}
+			if len(filteredInner) == 0 {
+				continue // drop empty matcher block entirely
+			}
+			entryMap["hooks"] = filteredInner
+			kept = append(kept, entryMap)
+		}
+		if len(kept) == 0 {
+			delete(hooks, event)
+		} else {
+			hooks[event] = kept
+		}
+	}
+	settings["hooks"] = hooks
+	return removed
+}
 
 var hooksCmd = &cobra.Command{
 	Use:   "hooks",
@@ -280,11 +394,37 @@ var hooksStatusCmd = &cobra.Command{
 	},
 }
 
+var hooksUninstallCmd = &cobra.Command{
+	Use:   "uninstall",
+	Short: "Remove ogham hook entries from the client's settings",
+	Long: `Strip Go-owned ogham hook entries from Claude Code's
+~/.claude/settings.json. Leaves Python ogham-mcp hook entries and any
+unrelated hooks alone -- detection is by command verb shape (ogham
+hooks run <verb> = Go; ogham hooks <verb> = Python).
+
+Remediation path for users stuck with the broken ` + "`ogham-cli hooks run`" + `
+commands written by pre-v0.7.4 installs of this tool (#7). After
+running uninstall, re-run ` + "`ogham hooks install`" + ` to land the fixed
+config.`,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		client := detectClient()
+		switch client {
+		case "claude-code":
+			return uninstallClaudeCodeHooks()
+		default:
+			fmt.Printf("Uninstall is currently only implemented for Claude Code (detected: %s).\n", client)
+			fmt.Println("For Kiro / Cursor / generic clients, remove the entries manually from the host's config.")
+			return nil
+		}
+	},
+}
+
 func init() {
 	hooksRunCmd.Flags().String("profile", "work", "Memory profile")
 	hooksRunCmd.Flags().Bool("gateway", false, "Force gateway path even when native backend is configured")
 	hooksCmd.AddCommand(hooksRunCmd)
 	hooksCmd.AddCommand(hooksInstallCmd)
+	hooksCmd.AddCommand(hooksUninstallCmd)
 	hooksCmd.AddCommand(hooksStatusCmd)
 	rootCmd.AddCommand(hooksCmd)
 }
@@ -332,52 +472,54 @@ func detectClient() string {
 	return "generic"
 }
 
-// installClaudeCodeHooks writes ogham-cli hooks to Claude Code settings.json.
+// installClaudeCodeHooks writes ogham hook entries to Claude Code's global
+// settings.json (~/.claude/settings.json). Idempotent by construction:
+// pruneOghamGoHooks strips any Go-owned ogham hook entries first, so
+// re-running `hooks install` after a broken-binary-name install (#7) ends
+// up with a clean, correct config -- no stale `ogham-cli hooks run ...`
+// lines left behind alongside the fresh ones.
+//
+// Hook commands embed the absolute path of the running binary
+// (oghamBinaryPath), so they execute correctly regardless of binary name
+// or $PATH state -- the load-bearing fix for #7 findings #1 and #2.
 func installClaudeCodeHooks() error {
 	settings, _ := readClaudeSettings()
 	if settings == nil {
 		settings = make(map[string]any)
 	}
 
+	// Pre-pass: remove any Go-owned ogham hook entries before we add the
+	// fresh ones. Leaves Python `ogham hooks <verb>` entries alone.
+	removed := pruneOghamGoHooks(settings)
+
 	hooks, ok := settings["hooks"].(map[string]any)
 	if !ok {
 		hooks = make(map[string]any)
 	}
 
+	binPath := oghamBinaryPath()
 	oghamHooks := map[string]map[string]any{
 		"SessionStart": {
 			"matcher": "",
-			"hooks":   []map[string]string{{"type": "command", "command": "ogham-cli hooks run session-start"}},
+			"hooks":   []map[string]string{{"type": "command", "command": oghamHookCommand("session-start")}},
 		},
 		"PostToolUse": {
 			"matcher": "",
-			"hooks":   []map[string]string{{"type": "command", "command": "ogham-cli hooks run post-tool"}},
+			"hooks":   []map[string]string{{"type": "command", "command": oghamHookCommand("post-tool")}},
 		},
 		"PreCompact": {
 			"matcher": "",
-			"hooks":   []map[string]string{{"type": "command", "command": "ogham-cli hooks run inscribe"}},
+			"hooks":   []map[string]string{{"type": "command", "command": oghamHookCommand("inscribe")}},
 		},
 		"PostCompact": {
 			"matcher": "",
-			"hooks":   []map[string]string{{"type": "command", "command": "ogham-cli hooks run recall"}},
+			"hooks":   []map[string]string{{"type": "command", "command": oghamHookCommand("recall")}},
 		},
 	}
 
 	for event, hookEntry := range oghamHooks {
 		existing, _ := hooks[event].([]any)
-		// Check if already installed
-		found := false
-		for _, e := range existing {
-			if m, ok := e.(map[string]any); ok {
-				if fmt.Sprint(m["hooks"]) == fmt.Sprint(hookEntry["hooks"]) {
-					found = true
-					break
-				}
-			}
-		}
-		if !found {
-			existing = append(existing, hookEntry)
-		}
+		existing = append(existing, hookEntry)
 		hooks[event] = existing
 	}
 
@@ -394,8 +536,52 @@ func installClaudeCodeHooks() error {
 	}
 
 	fmt.Printf("Claude Code hooks installed to %s\n", path)
-	fmt.Println("  SessionStart, PostToolUse, PreCompact (inscribe), PostCompact (recall)")
+	fmt.Printf("  Binary: %s\n", binPath)
+	fmt.Println("  Events: SessionStart, PostToolUse, PreCompact (inscribe), PostCompact (recall)")
+	if removed > 0 {
+		fmt.Printf("  Cleaned %d stale ogham hook entr%s from previous install.\n",
+			removed, plural(removed, "y", "ies"))
+	}
 	return nil
+}
+
+// uninstallClaudeCodeHooks strips Go-owned ogham hook entries from Claude
+// Code's settings.json. Leaves Python ogham-mcp entries and unrelated
+// hooks untouched. The remediation path for users stuck with the broken
+// `ogham-cli hooks run ...` commands from pre-v0.7.4 installs (#7).
+func uninstallClaudeCodeHooks() error {
+	settings, err := readClaudeSettings()
+	if err != nil || settings == nil {
+		fmt.Println("No Claude Code settings.json found -- nothing to uninstall.")
+		return nil
+	}
+
+	removed := pruneOghamGoHooks(settings)
+	if removed == 0 {
+		fmt.Println("No ogham hook entries found in settings.json -- nothing to remove.")
+		return nil
+	}
+
+	home, _ := os.UserHomeDir()
+	path := home + "/.claude/settings.json"
+	data, err := json.MarshalIndent(settings, "", "  ")
+	if err != nil {
+		return err
+	}
+	if err := os.WriteFile(path, data, 0644); err != nil {
+		return err
+	}
+
+	fmt.Printf("Removed %d ogham hook entr%s from %s\n",
+		removed, plural(removed, "y", "ies"), path)
+	return nil
+}
+
+func plural(n int, singular, pluralForm string) string {
+	if n == 1 {
+		return singular
+	}
+	return pluralForm
 }
 
 // readClaudeSettings reads ~/.claude/settings.json.
@@ -412,8 +598,12 @@ func readClaudeSettings() (map[string]any, error) {
 	return settings, nil
 }
 
-// printKiroInstructions outputs Kiro Hook UI setup steps.
+// printKiroInstructions outputs Kiro Hook UI setup steps. Uses the
+// resolved absolute binary path so the printed instructions stay correct
+// regardless of binary name or $PATH state (#7).
 func printKiroInstructions() {
+	sessionStartCmd := oghamHookCommand("session-start")
+	postToolCmd := oghamHookCommand("post-tool")
 	fmt.Println("\nKiro hooks -- manual setup via Hook UI:")
 	fmt.Println("")
 	fmt.Println("  1. Open Command Palette (Cmd+Shift+P / Ctrl+Shift+P)")
@@ -423,10 +613,10 @@ func printKiroInstructions() {
 	fmt.Println("  Hook 1: Session Start")
 	fmt.Println("    Event: User prompt submit")
 	fmt.Println("    Action: Run Command")
-	fmt.Println("    Command: ogham-cli hooks run session-start")
+	fmt.Printf("    Command: %s\n", sessionStartCmd)
 	fmt.Println("")
 	fmt.Println("  Hook 2: Post Tool")
 	fmt.Println("    Event: Post tool invocation")
 	fmt.Println("    Action: Run Command")
-	fmt.Println("    Command: ogham-cli hooks run post-tool")
+	fmt.Printf("    Command: %s\n", postToolCmd)
 }

@@ -171,6 +171,20 @@ curl -sSL https://raw.githubusercontent.com/ogham-mcp/ogham-cli/main/install.sh 
 INSTALL_DIR=/usr/local/bin curl -sSL https://raw.githubusercontent.com/ogham-mcp/ogham-cli/main/install.sh | bash
 ```
 
+**PATH-collision check (v0.7.4+).** The Python `ogham-mcp` package and this Go CLI both ship a binary named `ogham`. If `install.sh` finds an existing `ogham` on `$PATH` that isn't at the install target, it refuses to install -- typing `ogham` would otherwise depend on PATH order and be easy to confuse. Three ways out:
+
+```bash
+# 1. Force the install (you'll manage PATH order yourself)
+curl -sSL https://.../install.sh | bash -s -- --force
+
+# 2. Install to a sandboxed dir off PATH
+curl -sSL https://.../install.sh | bash -s -- --install-dir ~/tools/bin
+
+# 3. Uninstall the Python ogham-mcp first (if you don't need it)
+```
+
+In-place upgrades over an existing install at the target dir proceed transparently -- no flag required.
+
 ### Pre-built binaries by hand
 
 Download the platform tarball from the [latest release](https://github.com/ogham-mcp/ogham-cli/releases/latest) and verify the SHA256 against `checksums.txt`:
@@ -382,7 +396,7 @@ Every command outputs JSON by default and runs natively where possible. Pass `--
 | `ogham init` | interactive | huh TUI wizard; writes TOML + env |
 | `ogham dashboard [--port N]` | Python subprocess | Starts the Prefab dashboard (Python stays Python for the frontend) |
 | `ogham serve` | MCP server | Run as an MCP stdio server. Native Go tools by default (store_memory, hybrid_search, list_recent, health_check) + Python sidecar auto-proxied for everything else (delete_memory, compression, graph, typed-store, etc.). Native handlers win on name collision. Pass `--no-sidecar` for strict native-only. |
-| `ogham hooks install / run <event>` | sidecar | Wire into Claude Code hooks |
+| `ogham hooks install / uninstall / run <event>` | sidecar | Wire into Claude Code hooks. `install` writes hook entries with the absolute path of the running binary; `uninstall` strips Go-owned ogham entries (verb-shape `hooks run <verb>`), leaves Python `ogham hooks <verb>` lines alone. v0.7.4 fixed the broken binary name -- see CHANGELOG. |
 | `ogham plugin openclaw` / `agent-zero` | offline | Emit host plugin manifest |
 | `ogham auth login --api-key KEY` | gateway only | Gateway API-key management (build-tag gated) |
 | `ogham version` | offline | Print version + commit + build date + Go version + platform |
@@ -433,7 +447,7 @@ The Go CLI aims at parity with the Python `ogham` CLI for day-to-day use. Dev-on
 | `profiles` | `profile list` | Go splits into subcommand group (`profile current/switch/list/ttl`) |
 | `use` | `profile switch` | Go persists to TOML+env |
 | `delete`, `cleanup`, `decay`, `audit`, `config` | `delete`, `cleanup`, `decay`, `audit`, `config show` | native-only; mirror the Python SQL RPCs |
-| `hooks install/recall/inscribe` | `hooks install` / `hooks run <event>` | same underlying Python handlers |
+| `hooks install/recall/inscribe` | `hooks install` / `hooks uninstall` / `hooks run <event>` | same underlying Python handlers; Go adds `uninstall` (v0.7.4) for remediation |
 | `export`, `import` | — | still Python-only -- pair with native `store` when entity extractor is ported |
 | `openapi` | — | dev-only; stays Python |
 

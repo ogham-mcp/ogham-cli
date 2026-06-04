@@ -22,9 +22,12 @@ set -euo pipefail
 REPO="ogham-mcp/ogham-cli"
 INSTALL_DIR="${INSTALL_DIR:-$HOME/.local/bin}"
 VERSION="${VERSION:-latest}"
+FORCE="${FORCE:-0}"
 
 # --version <tag> overrides the default of "latest". Useful for pinning a
 # specific release in CI or when you need to roll back.
+# --force overrides the PATH-collision check (see below) so an upgrade
+# over an existing install always proceeds without a prompt.
 while [ $# -gt 0 ]; do
   case "$1" in
     --version)
@@ -43,6 +46,10 @@ while [ $# -gt 0 ]; do
       INSTALL_DIR="${1#--install-dir=}"
       shift
       ;;
+    --force)
+      FORCE=1
+      shift
+      ;;
     -h|--help)
       sed -n '2,18p' "$0"
       exit 0
@@ -53,6 +60,29 @@ while [ $# -gt 0 ]; do
       ;;
   esac
 done
+
+# PATH-collision check (#7): the Python ogham-mcp package and the Go
+# ogham-cli both ship a binary named `ogham`. If a user installs the Go
+# CLI on a machine that already has the Python binary on PATH, the
+# resulting shell-typed `ogham` will be ambiguous and depend on PATH
+# order. Refuse to install in that case unless --force is passed; an
+# in-place upgrade (existing ogham == our install target) proceeds
+# without prompting.
+EXISTING_OGHAM="$(command -v ogham 2>/dev/null || true)"
+TARGET_PATH="${INSTALL_DIR%/}/ogham"
+if [ -n "$EXISTING_OGHAM" ] && [ "$EXISTING_OGHAM" != "$TARGET_PATH" ] && [ "$FORCE" != "1" ]; then
+  echo "==> An ogham binary is already on \$PATH:" >&2
+  echo "      ${EXISTING_OGHAM}" >&2
+  echo "    This is most likely the Python ogham-mcp package (separate product)." >&2
+  echo "    Installing the Go CLI to ${TARGET_PATH} will create a name collision -- which one" >&2
+  echo "    wins on the shell depends on PATH order and is easy to confuse." >&2
+  echo "" >&2
+  echo "    Options:" >&2
+  echo "      1. Re-run with --force to install anyway (you'll manage PATH order yourself)." >&2
+  echo "      2. Re-run with --install-dir=<path> to install somewhere off PATH (e.g. ~/tools/bin/)." >&2
+  echo "      3. Uninstall the Python ogham-mcp first if you don't need it." >&2
+  exit 1
+fi
 
 # Platform detection. Match the GoReleaser asset naming in the release
 # manifest -- darwin/linux/windows + amd64/arm64. Anything else fails fast
