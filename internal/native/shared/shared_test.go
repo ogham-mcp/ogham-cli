@@ -1,9 +1,20 @@
 package shared
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"regexp"
 	"strings"
 	"testing"
+)
+
+// Manifest of expected SHA-256 hashes for the shared-data-v0.1.0
+// tag. Bump alongside any new git subtree pull. A mismatch means the
+// vendored copy was edited locally instead of upstream; revert and
+// re-pull from the latest shared-data-vX.Y.Z tag.
+const (
+	expectedSHA256_hooksConfig = "40eecf6de03c8659bc4dd3f5225b448db8d0127d0528ca3ad526fee92829da14"
+	expectedSHA256_schema      = "bd1aa1bec8f5e981041d673daf4fc3f16fa1c19251b6d0710cde61926a4aa0a9"
 )
 
 func TestLoadHooksConfigSmoke(t *testing.T) {
@@ -46,6 +57,29 @@ func TestSecretPatternsCompileAsRE2(t *testing.T) {
 	for _, tok := range cfg.Secrets.BareTokens {
 		if _, err := regexp.Compile(tok.Pattern); err != nil {
 			t.Errorf("RE2 reject for %q: pattern %q -- %v", tok.Name, tok.Pattern, err)
+		}
+	}
+}
+
+func TestSHA256Parity(t *testing.T) {
+	cases := []struct {
+		name     string
+		got      []byte
+		expected string
+	}{
+		{"hooks_config.yaml", RawHooksConfig(), expectedSHA256_hooksConfig},
+		{"schema.yaml", RawSchema(), expectedSHA256_schema},
+	}
+	for _, tc := range cases {
+		sum := sha256.Sum256(tc.got)
+		actual := hex.EncodeToString(sum[:])
+		if actual != tc.expected {
+			t.Errorf("%s SHA-256 drift\n  expected: %s\n  actual:   %s\n"+
+				"  Vendored copy was edited locally. Revert and re-run "+
+				"`git subtree pull --prefix=internal/native/shared "+
+				"<public-repo> shared-data-vX.Y.Z --squash` against the "+
+				"current shared-data tag, then bump the expected hash here.",
+				tc.name, tc.expected, actual)
 		}
 	}
 }
