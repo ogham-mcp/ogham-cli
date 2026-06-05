@@ -112,6 +112,7 @@ func init() {
 	pluginCmd.Run = func(cmd *cobra.Command, args []string) {
 		fmt.Fprintln(os.Stderr, "usage: ogham plugin <host>")
 		fmt.Fprintln(os.Stderr, "supported hosts:")
+		fmt.Fprintln(os.Stderr, "  claude-code  Anthropic Claude Code plugin scaffold (.claude-plugin/, hooks/, bin/)")
 		fmt.Fprintln(os.Stderr, "  openclaw     OpenClaw native plugin manifest")
 		fmt.Fprintln(os.Stderr, "  agent-zero   Agent Zero memory backend config")
 		os.Exit(2)

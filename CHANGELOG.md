@@ -8,6 +8,60 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), loosely.
 
 ## v0.8.0 (unreleased)
 
+### Added
+
+- **`ogham plugin claude-code` -- Anthropic Plugins scaffold emitter (#9).**
+  Mutating `~/.claude/settings.json` is the opposite of `plugin`'s stated
+  design intent ("emit manifests, host-portable, no curl-bash installer
+  required"). The new emitter produces a first-class Claude Code plugin
+  scaffold instead:
+
+  ```
+  ~/.claude/skills/ogham/
+    .claude-plugin/plugin.json
+    hooks/hooks.json
+    bin/ogham           # copy of the running binary
+  ```
+
+  Hook commands use `${CLAUDE_PLUGIN_ROOT}/bin/ogham` in exec form
+  (command + args), the Anthropic-prescribed pattern for plugin-scoped
+  hooks. This is intentionally different from `hooks install`, which
+  uses `os.Executable()` -- the absolute-path form is right for
+  `~/.claude/settings.json` (the install dir never changes), but a
+  plugin's install dir changes on update, so a baked absolute path
+  there goes stale. `${CLAUDE_PLUGIN_ROOT}` re-resolves on every fire.
+
+  Default target: `~/.claude/skills/ogham/` (skills-directory plugin
+  layout). Loads next session as `ogham@skills-dir`, no marketplace
+  plumbing required. `--scope project` writes to `./.claude/skills/ogham/`
+  instead. `--output PATH` overrides the target entirely.
+
+  Composes with the #10 gateway-key check: when no `api_key` is
+  configured the emitted `hooks.json` omits PostToolUse, same logic as
+  `hooks install`. PreCompact / PostCompact use the `manual|auto`
+  matcher (avoids double-firing on `/compact`); PostToolUse, when
+  wired, uses `Write|Edit|Bash`.
+
+  `--migrate-from-settings` strips Go-owned hook entries from
+  `~/.claude/settings.json` (verb-shape regex; Python `ogham hooks
+  <verb>` lines stay intact) so the same hooks don't fire twice via
+  both paths. Round-trip in one command.
+
+  `--with-mcp` (opt-in) also emits `.mcp.json` registering ogham as a
+  plugin-scope MCP server. Default: refused. At plugin scope every
+  subagent gains access to `ogham_*` MCP tools, which violates the
+  superpowers-memory bridge's "subagents structurally never touch the
+  store" invariant. Opt in only if you understand that scope rule.
+
+  Other flags: `--dry-run` prints the scaffold plan as JSON (no
+  filesystem writes), `--force` overwrites existing files (default:
+  refused), `--skip-binary-copy` skips the `bin/ogham` copy (useful
+  for CI-built scaffolds where the binary is pre-staged).
+
+  `hooks install` continues to work as a convenience -- no removal in
+  v0.8. The two paths are documented side-by-side, the plugin path is
+  the recommended one going forward.
+
 ### Changed
 
 - **`hooks install` is now gateway-key-aware (#10).** Previously the

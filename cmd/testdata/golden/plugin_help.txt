@@ -13,6 +13,7 @@ Usage:
 
 Available Commands:
   agent-zero  Emit Agent Zero memory backend config
+  claude-code Emit a Claude Code plugin scaffold for Ogham
   openclaw    Emit OpenClaw native plugin manifest
 
 Flags:
