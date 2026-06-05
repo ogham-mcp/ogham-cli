@@ -6,7 +6,149 @@ repo](https://github.com/ogham-mcp/ogham-mcp).
 
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), loosely.
 
-## v0.8.0 (2026-06-05)
+## v0.9.0 (2026-06-05)
+
+Hooks no longer need a gateway. `PostToolUse` runs entirely in Go
+against the local backend: classify the event, mask secrets,
+SIGKILL-safe queue the result, drain at next `SessionStart`. The
+Railway gateway is no longer in the hot path and no longer required
+for any hook feature. v0.8's `"skipped: gateway api_key not
+configured"` install hint is retired.
+
+### Added
+
+- **`shared/` cross-stack data artifact (#16).** Promotes the
+  signal/noise filter + secret-masking ruleset out of the Python
+  ogham-mcp repo into an independent versioned tag stream
+  (`shared-data-vX.Y.Z`) consumed by both sides. Vendored into Go via
+  `git subtree` and `//go:embed`, SHA-locked in CI on both
+  consumers.
+
+  Why this matters: the prior "keep parallel copies in sync by hand"
+  convention had already failed for the language YAMLs (~100-line
+  drift between repos). For security-critical secret-detection
+  regex, a missed pattern would leak credentials into the memory
+  store. The shared-data artifact + parity gate removes that failure
+  mode structurally. All 45 secret patterns are RE2-compatible and
+  enforced by `TestSecretPatternsCompileAsRE2`.
+
+- **`internal/native/filters/` -- native post-tool engine (#17).**
+  Pure-Go port of the classification, dedup, and secret-masking
+  primitives previously stranded behind the gateway.
+
+  - `Classify(toolName) Verdict` -- `O(1)` map lookup against
+    `always_skip_tools` / `routine_tools` / `response_gated_tools`
+    plus an Ogham-self-reference guard (`mcp__ogham__`, `ogham_`,
+    `store_memory`, `hybrid_search` prefixes).
+  - `Deduper.IsDuplicate(sessionID, toolName, target)` -- 5-minute
+    window, 30-minute prune threshold, clock-injectable for tests.
+  - `MaskSecrets(text)` -- four layers applied in order:
+    1. Bare tokens (45 patterns: GitHub PAT, AWS, Anthropic,
+       OpenAI, Stripe, Azure, GCP, Slack, Discord, Telegram,
+       Linear, Mailgun, Grafana, Doppler, Vault, ...).
+    2. `KEY=value` for service prefixes -- value masked, key kept.
+    3. URL credentials (`://user:pass@host`).
+    4. Generic env-key=value (`api_key=`, `password=`, `database_url=`,
+       ...).
+
+  Patterns pre-compile at package init. Hot-path numbers (Apple M1
+  Pro):
+
+  ```
+  Classify              22 ns/call
+  MaskSecrets safe      47 us
+  MaskSecrets w/ token  65 us
+  MaskSecrets 2 KB     2.7 ms     <- worst case
+  IsDuplicate (new)    9.8 us
+  ```
+
+- **`internal/native/outbox/` -- SIGKILL-safe directory queue (#18).**
+  Durable buffer between ephemeral hook writers and the
+  SessionStart-time drainer. Each writer creates one
+  `{unix-nano}-{8-hex}.jsonl` file using
+  `open -> write -> fsync -> rename`. POSIX guarantees rename
+  atomicity, so a SIGKILL between any two steps leaves either
+  nothing, a stray `.tmp` (cleaned next drain), or a complete
+  `.jsonl` -- never a torn record.
+
+  Bounds match the v0.9 council perf seat: drain caps at 1000
+  records per call, context deadline bounds wall-time (30s in the
+  SessionStart hook). Stray `.tmp` files older than 5 min are
+  cleaned up; fresher ones are spared (could be a live writer).
+  Malformed JSON or future `schema_version` is quarantined by
+  renaming to `.malformed` so postmortem stays possible without
+  blocking the queue.
+
+  Numbers (Apple M1 Pro):
+
+  ```
+  Write                5.1 ms    <- hook hot path
+  Drain (100 records)  9.5 ms    <- SessionStart cost
+  ```
+
+  `OGHAM_OUTBOX_DIR` overrides the default
+  `$UserCacheDir/ogham/outbox` for tests and sysadmins who want the
+  queue on a different volume.
+
+### Changed
+
+- **`hooks install` always wires PostToolUse (#19).** v0.8's
+  apiKey-conditional skip for `PostToolUse` is gone. The native
+  PostToolUse path (Classify -> MaskSecrets -> outbox) works without
+  any gateway key, so every fresh install now gets the full hook
+  set: `SessionStart`, `PostCompact`, `PostToolUse` (matcher:
+  `Write|Edit|Bash`). Users with active gateway setups can still
+  pass `--gateway` to force the legacy synchronous gateway path
+  per-event.
+
+- **`hooks run post-tool` defaults to native (#19).** Routing in
+  `hooksRunCmd` now sends `post-tool` through `runNativePostTool`
+  when a native backend is configured. The flow:
+
+  ```
+  PostToolUse fire -> filters.Classify
+                   -> filters.MaskSecrets
+                   -> filters.IsDuplicate (process-local)
+                   -> outbox.Write              (POSIX-atomic)
+                   EXIT 0
+
+  next SessionStart fire -> outbox.Drain (30 s bounded, 1000-cap)
+                         -> native.Store        (Supabase/Postgres)
+  ```
+
+  Minimal extraction in this release: `Bash` captures command +
+  truncated response; `Edit` / `Write` capture file_path. Richer
+  extraction (diff summarisation, gh-action classification, the full
+  port of Python's `_extract_memory_content`) is on the v0.10+
+  track.
+
+- **`hooks run session-start` drains the outbox first (#19).** Any
+  queued PostToolUse records from prior hook fires ship to the
+  store before the session context is rendered. Drain failures log
+  to stderr but never block the session-start return -- the
+  remaining records stay queued for the next attempt.
+
+- **`runGatewayPostTool` install-hint message updated (#19).** The
+  v0.8 message implied users needed to wire a gateway api_key to
+  enable post-tool capture. Now that the native path is the
+  default, the message is only emitted when `--gateway` is passed
+  explicitly without a configured key, and it points users at
+  dropping the flag rather than wiring a key. The `"skipped:
+  gateway api_key not configured"` install hint that confused
+  users in v0.8 is retired.
+
+### Fixed
+
+- **Bare-token secret patterns now cover ~45 services, up from
+  ~15.** v0.8 inherited a partial Python-side bare-token regex.
+  The shared-data extraction (#16) added the full set: Grafana,
+  Linear, Postman, Vault, Twilio, Mailgun, Shopify, Planetscale,
+  Doppler, Heroku, GCP service-account JSON, Azure SAS / connection
+  strings, Stripe restricted, GitHub fine-grained PATs, plus the
+  ones already covered. Test corpus exercises GitHub, Anthropic,
+  Ogham, Supabase, AWS, Neon, and Slack token shapes.
+
+
 
 ### Added
 
