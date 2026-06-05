@@ -328,12 +328,25 @@ func TestWriteRejectsNilRecord(t *testing.T) {
 }
 
 func TestDefaultDirNonEmpty(t *testing.T) {
+	t.Setenv("OGHAM_OUTBOX_DIR", "")
 	d, err := DefaultDir()
 	if err != nil {
 		t.Fatalf("DefaultDir: %v", err)
 	}
 	if !strings.Contains(d, "ogham") || !strings.HasSuffix(d, "outbox") {
 		t.Errorf("DefaultDir = %q, want path containing 'ogham' ending in 'outbox'", d)
+	}
+}
+
+func TestDefaultDirHonoursEnvOverride(t *testing.T) {
+	override := filepath.Join(t.TempDir(), "custom-queue")
+	t.Setenv("OGHAM_OUTBOX_DIR", override)
+	d, err := DefaultDir()
+	if err != nil {
+		t.Fatalf("DefaultDir: %v", err)
+	}
+	if d != override {
+		t.Errorf("DefaultDir = %q, want %q from OGHAM_OUTBOX_DIR", d, override)
 	}
 }
 
