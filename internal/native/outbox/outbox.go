@@ -258,9 +258,13 @@ func shortUUID() string {
 }
 
 // DefaultDir returns the canonical path for the per-user outbox.
-// Used by the production runPostTool path; tests should pass their
-// own t.TempDir().
+// Honours OGHAM_OUTBOX_DIR for ops-level overrides (e.g. mounting the
+// queue on a different volume) and tests; falls back to
+// $UserCacheDir/ogham/outbox.
 func DefaultDir() (string, error) {
+	if override := os.Getenv("OGHAM_OUTBOX_DIR"); override != "" {
+		return override, nil
+	}
 	cache, err := os.UserCacheDir()
 	if err != nil {
 		return "", fmt.Errorf("outbox: user cache dir: %w", err)

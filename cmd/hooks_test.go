@@ -219,46 +219,44 @@ func TestPruneOghamGoHooksHandlesNoHooksKey(t *testing.T) {
 	}
 }
 
-// ---------------- #10 gateway-aware install -----------------------------
+// ---------------- v0.9 #278: native PostToolUse default ----------------
 
-// TestBuildOghamHookSetSkipsPostToolWhenKeyEmpty: with no gateway api_key
-// configured, PostToolUse must NOT appear in the emitted hook set. The
-// three native-capable events (SessionStart, PreCompact, PostCompact)
-// must still be present.
-func TestBuildOghamHookSetSkipsPostToolWhenKeyEmpty(t *testing.T) {
-	hooks := buildOghamHookSet("", "/usr/local/bin/ogham")
-
-	if _, exists := hooks["PostToolUse"]; exists {
-		t.Errorf("PostToolUse should NOT be wired when apiKey is empty (got %v)", hooks["PostToolUse"])
+// TestBuildOghamHookSetWiresPostToolUnconditionally: v0.9 (#278) drops
+// the v0.8 apiKey gate on PostToolUse. The native path (Classify ->
+// MaskSecrets -> outbox.Write) works without a gateway key, so
+// PostToolUse must appear in the hook set whether apiKey is empty or
+// not. The matcher must still be the scoped defaultPostToolMatcher so
+// we don't fire on every tool call.
+func TestBuildOghamHookSetWiresPostToolUnconditionally(t *testing.T) {
+	for _, apiKey := range []string{"", "sk_test_nonempty"} {
+		hooks := buildOghamHookSet(apiKey, "/usr/local/bin/ogham")
+		pt, ok := hooks["PostToolUse"]
+		if !ok {
+			t.Errorf("apiKey=%q: PostToolUse missing -- v0.9 wires it on every install", apiKey)
+			continue
+		}
+		matcher, _ := pt["matcher"].(string)
+		if matcher != defaultPostToolMatcher {
+			t.Errorf("apiKey=%q: PostToolUse matcher = %q; want %q", apiKey, matcher, defaultPostToolMatcher)
+		}
+		if matcher == "" {
+			t.Errorf("apiKey=%q: empty matcher would fire on every tool call (pre-v0.8 noise)", apiKey)
+		}
 	}
-	// #11: PreCompact -> inscribe dropped from defaults. SessionStart
-	// and PostCompact (recall) remain.
+}
+
+// TestBuildOghamHookSetIncludesSessionEvents: SessionStart and
+// PostCompact must always be present. PreCompact must never be in the
+// default scaffold (#11: native inscribe writes low-signal stubs).
+func TestBuildOghamHookSetIncludesSessionEvents(t *testing.T) {
+	hooks := buildOghamHookSet("", "/usr/local/bin/ogham")
 	for _, required := range []string{"SessionStart", "PostCompact"} {
 		if _, exists := hooks[required]; !exists {
-			t.Errorf("event %s missing from native-only hook set; should be present regardless of apiKey", required)
+			t.Errorf("event %s missing from default hook set", required)
 		}
 	}
 	if _, exists := hooks["PreCompact"]; exists {
 		t.Error("PreCompact must NOT be in the default scaffold (#11: native inscribe writes low-signal stubs; use the explicit `ogham inscribe` verb)")
-	}
-}
-
-// TestBuildOghamHookSetIncludesPostToolWithMatcherWhenKeyPresent: with a
-// gateway key configured, PostToolUse must appear AND use the scoped
-// defaultPostToolMatcher rather than "" (which fires on every tool call).
-func TestBuildOghamHookSetIncludesPostToolWithMatcherWhenKeyPresent(t *testing.T) {
-	hooks := buildOghamHookSet("sk_test_anything_nonempty", "/usr/local/bin/ogham")
-
-	pt, ok := hooks["PostToolUse"]
-	if !ok {
-		t.Fatal("PostToolUse should be wired when apiKey is non-empty")
-	}
-	matcher, _ := pt["matcher"].(string)
-	if matcher != defaultPostToolMatcher {
-		t.Errorf("PostToolUse matcher = %q; want %q (scoped to write-class tools)", matcher, defaultPostToolMatcher)
-	}
-	if matcher == "" {
-		t.Error("PostToolUse matcher must NOT be empty (would fire on every tool call -- the pre-v0.8 noise problem)")
 	}
 }
 
@@ -311,8 +309,9 @@ func TestNoticePostToolUnconfiguredOnceIsIdempotent(t *testing.T) {
 }
 
 // TestNoticePostToolUnconfiguredOnceWritesUsefulDiagnostic: the stderr
-// output must mention both remediation paths (install + auth login) so a
-// confused user has a clear next step.
+// output must mention both remediation paths (drop --gateway for the
+// v0.9 native default, or run `ogham auth login` to keep the gateway
+// path) so a confused user has a clear next step.
 func TestNoticePostToolUnconfiguredOnceWritesUsefulDiagnostic(t *testing.T) {
 	tmp := t.TempDir()
 	marker := filepath.Join(tmp, "ogham", "notice")
@@ -322,7 +321,7 @@ func TestNoticePostToolUnconfiguredOnceWritesUsefulDiagnostic(t *testing.T) {
 
 	out := buf.String()
 	wantSubstrings := []string{
-		"ogham hooks install",
+		"--gateway",
 		"ogham auth login",
 		"exit 0",
 	}

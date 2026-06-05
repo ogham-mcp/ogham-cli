@@ -11,12 +11,20 @@ import (
 	"path/filepath"
 	"regexp"
 	"syscall"
+	"time"
 
 	"github.com/ogham-mcp/ogham-cli/internal/config"
 	"github.com/ogham-mcp/ogham-cli/internal/gateway"
 	"github.com/ogham-mcp/ogham-cli/internal/native"
+	"github.com/ogham-mcp/ogham-cli/internal/native/filters"
+	"github.com/ogham-mcp/ogham-cli/internal/native/outbox"
 	"github.com/spf13/cobra"
 )
+
+// drainDeadline bounds how long runNativeSessionStart spends draining
+// queued PostToolUse records before falling through to the actual
+// session-context build. Mirrors the council perf-seat 30s figure.
+const drainDeadline = 30 * time.Second
 
 // defaultPostToolMatcher scopes PostToolUse to write-class tools so the
 // gateway post-tool hook fires only on calls that produce content worth
@@ -83,17 +91,18 @@ func oghamHookCommandFor(binPath, verb string) string {
 }
 
 // buildOghamHookSet returns the map of Claude Code hook event names to
-// their hook entries. PostToolUse is wired only when apiKey is non-empty:
-// post-tool's smart filtering is gateway-only today, and firing the hook
-// on every tool call with no key produces transcript-noise hook errors on
-// native-only setups (#10).
+// their hook entries. v0.9 (#278) wires PostToolUse unconditionally:
+// the native post-tool path (Classify -> MaskSecrets -> outbox.Write)
+// works without a gateway api_key, so v0.8's apiKey gate is gone.
+// Users with active gateway setups can still opt back into the
+// synchronous gateway path with `ogham hooks run post-tool --gateway`.
 //
-// Pure helper: no filesystem access, no config loading. Callers resolve
-// apiKey + binPath from their own sources (typically config.Load +
-// oghamBinaryPath).
+// Pure helper: no filesystem access, no config loading. apiKey is
+// accepted for ABI compatibility with v0.7/v0.8 callers and unit-test
+// fixtures but no longer affects the output.
 //
-// When wired, PostToolUse uses defaultPostToolMatcher rather than "" so
-// the hook only fires on write-class tools.
+// PostToolUse uses defaultPostToolMatcher rather than "" so the hook
+// only fires on write-class tools (Write / Edit / Bash).
 //
 // #11: PreCompact -> inscribe is NOT in the default scaffold from v0.8
 // onwards. The legacy native inscribe writes a metadata-only stub on
@@ -106,7 +115,8 @@ func oghamHookCommandFor(binPath, verb string) string {
 // bridge spec §4.3 for the signal-gated + staged + distilled pattern
 // the verb is designed to compose with).
 func buildOghamHookSet(apiKey, binPath string) map[string]map[string]any {
-	hooks := map[string]map[string]any{
+	_ = apiKey // parameter kept for ABI compat; see doc comment.
+	return map[string]map[string]any{
 		"SessionStart": {
 			"matcher": "",
 			"hooks":   []map[string]string{{"type": "command", "command": oghamHookCommandFor(binPath, "session-start")}},
@@ -115,14 +125,11 @@ func buildOghamHookSet(apiKey, binPath string) map[string]map[string]any {
 			"matcher": "",
 			"hooks":   []map[string]string{{"type": "command", "command": oghamHookCommandFor(binPath, "recall")}},
 		},
-	}
-	if apiKey != "" {
-		hooks["PostToolUse"] = map[string]any{
+		"PostToolUse": {
 			"matcher": defaultPostToolMatcher,
 			"hooks":   []map[string]string{{"type": "command", "command": oghamHookCommandFor(binPath, "post-tool")}},
-		}
+		},
 	}
-	return hooks
 }
 
 // postToolNoticeMarkerPath returns the cache-dir marker that tracks
@@ -156,9 +163,9 @@ func noticePostToolUnconfiguredOnce(markerPath string, w io.Writer) bool {
 		_ = os.MkdirAll(filepath.Dir(markerPath), 0700)
 		_ = os.WriteFile(markerPath, []byte("noticed\n"), 0600)
 	}
-	fmt.Fprintln(w, "ogham: hooks post-tool fired without gateway api_key configured -- skipping (exit 0).")
-	fmt.Fprintln(w, "  To silence: run `ogham hooks install` (v0.8+ skips post-tool wiring on native-only setups).")
-	fmt.Fprintln(w, "  To enable post-tool capture: run `ogham auth login --api-key KEY` then `ogham hooks install`.")
+	fmt.Fprintln(w, "ogham: post-tool ran with --gateway but no gateway api_key configured -- skipping (exit 0).")
+	fmt.Fprintln(w, "  To use the v0.9 native path: drop the --gateway flag (or omit it in your settings.json hook entry).")
+	fmt.Fprintln(w, "  To keep the gateway path: run `ogham auth login --api-key KEY`.")
 	if markerPath != "" {
 		fmt.Fprintf(w, "  This notice will not repeat (marker: %s).\n", markerPath)
 	}
@@ -239,15 +246,15 @@ var hooksRunCmd = &cobra.Command{
 	Short: "Run a hook event (session-start, post-tool, inscribe, recall)",
 	Long: `Run a lifecycle hook event.
 
-Routing:
-  - Native (Supabase / Postgres direct) is used when the local config
-    has a database backend configured. session-start, inscribe, and
-    recall all run locally with no gateway required -- this is the
-    headless / sandboxed-CI path that Claude Code SessionStart hooks
-    need on machines that can't complete an interactive OAuth login.
-  - Gateway is used as a fallback (or explicitly via --gateway) and
-    is currently the only path for the smart-filtered post-tool
-    event. Requires a valid api_key in config.toml.
+Routing (v0.9):
+  - Native (Supabase / Postgres direct) is the default for all four
+    events. session-start, recall, and inscribe run synchronously
+    against the local backend. post-tool classifies + secret-masks
+    the event and queues to a SIGKILL-safe directory outbox; the
+    queued records ship to the store on next session-start.
+  - Gateway is the legacy synchronous path. --gateway forces it for
+    any event, useful only for installs that still have a working
+    gateway api_key in config.toml.
 
 DEPRECATED (v0.8, #11): the 'inscribe' event runner stays for users
 with pre-v0.8 hook entries in their settings.json, but PreCompact ->
@@ -295,16 +302,15 @@ the inscribe verb reshape.`,
 			return runGatewayInscribe(ctx, input, profile)
 
 		case "post-tool":
-			// post-tool's smart filtering (classification, duplicate
-			// detection, secret masking) lives only in the Python
-			// implementation today. Gateway is the only path until
-			// a native port lands -- see issue #6 follow-up. Even if
-			// the user has a native backend configured, we can't use
-			// it here because the native pipeline would just store
-			// every tool call without filtering. Pass the explicit
-			// "post-tool only" hint to requireGateway so the error
-			// message doesn't mislead users into thinking native
-			// would work.
+			// v0.9 (#278): native path is now the default. Classify
+			// the event with the embedded shared-data ruleset, secret-
+			// mask the content, then queue to the SIGKILL-safe outbox.
+			// The next session-start drains the queue into the store.
+			// --gateway forces the legacy synchronous path for users
+			// with active gateway setups.
+			if useNative {
+				return runNativePostTool(ctx, nativeCfg, input, profile)
+			}
 			return runGatewayPostTool(ctx, input, profile)
 
 		default:
@@ -337,6 +343,14 @@ func loadNativeIfReady(profile string) (*native.Config, bool) {
 // ---- Native event runners -------------------------------------------
 
 func runNativeSessionStart(ctx context.Context, cfg *native.Config, input map[string]any, profile string) error {
+	// Drain any PostToolUse records queued by hook fires that happened
+	// since the last SessionStart. Best-effort -- a failed drain (e.g.
+	// transient DB outage) logs but does not block the session-start
+	// context that follows.
+	if err := drainOutbox(ctx, cfg, profile); err != nil {
+		fmt.Fprintf(os.Stderr, "ogham: outbox drain warning: %v\n", err)
+	}
+
 	cwd := getField(input, "cwd", ".")
 	out, err := native.SessionStart(ctx, cfg, cwd, native.HookOptions{Profile: profile})
 	if err != nil {
@@ -346,6 +360,166 @@ func runNativeSessionStart(ctx context.Context, cfg *native.Config, input map[st
 		fmt.Print(out)
 	}
 	return nil
+}
+
+// runNativePostTool is the v0.9 default PostToolUse path. Classifies
+// the event against the embedded shared-data ruleset, secret-masks
+// any content, builds a minimal memory string, and queues to the
+// SIGKILL-safe outbox. The actual store write happens at next
+// session-start when the drainer runs. Returns nil on skip-classified
+// events (Read, Glob, etc.) so the hook always exits 0.
+func runNativePostTool(ctx context.Context, _ *native.Config, input map[string]any, profile string) error {
+	toolName := getField(input, "tool_name", "")
+	if toolName == "" {
+		return nil
+	}
+
+	verdict := filters.Classify(toolName)
+	if !verdict.ShouldCapture() {
+		return nil
+	}
+
+	toolInput, _ := input["tool_input"].(map[string]any)
+	cwd := getField(input, "cwd", "")
+	sessionID := getField(input, "session_id", "")
+	toolResponse := readToolResponse(input)
+
+	content, target := buildPostToolContent(toolName, toolInput, toolResponse)
+	if content == "" {
+		return nil
+	}
+	content = filters.MaskSecrets(content)
+
+	if filters.DefaultDeduper.IsDuplicate(sessionID, toolName, target) {
+		return nil
+	}
+
+	tags := []string{"type:action", "tool:" + toolName}
+	if sessionID != "" {
+		tags = append(tags, "session:"+sessionID)
+	}
+
+	dir, err := outbox.DefaultDir()
+	if err != nil {
+		return fmt.Errorf("post-tool: resolve outbox dir: %w", err)
+	}
+	box, err := outbox.New(dir)
+	if err != nil {
+		return fmt.Errorf("post-tool: open outbox: %w", err)
+	}
+	rec := &outbox.Record{
+		Content:   content,
+		Profile:   profile,
+		Source:    "hook:post-tool",
+		Tags:      tags,
+		SessionID: sessionID,
+		ToolName:  toolName,
+		Cwd:       cwd,
+	}
+	if err := box.Write(rec); err != nil {
+		return fmt.Errorf("post-tool: queue: %w", err)
+	}
+	_ = ctx
+	return nil
+}
+
+// drainOutbox is called from runNativeSessionStart to flush queued
+// PostToolUse records into the store via native.Store. Bounded by
+// drainDeadline and DefaultDrainBatch to keep SessionStart snappy
+// even after a long-idle gap.
+func drainOutbox(ctx context.Context, cfg *native.Config, profile string) error {
+	dir, err := outbox.DefaultDir()
+	if err != nil {
+		return err
+	}
+	if _, statErr := os.Stat(dir); os.IsNotExist(statErr) {
+		return nil // nothing queued
+	}
+	box, err := outbox.New(dir)
+	if err != nil {
+		return err
+	}
+
+	dctx, cancel := context.WithTimeout(ctx, drainDeadline)
+	defer cancel()
+
+	stats, err := box.Drain(dctx, func(c context.Context, rec *outbox.Record) error {
+		recProfile := rec.Profile
+		if recProfile == "" {
+			recProfile = profile
+		}
+		_, sErr := native.Store(c, cfg, rec.Content, native.StoreOptions{
+			Tags:    rec.Tags,
+			Source:  rec.Source,
+			Profile: recProfile,
+		})
+		return sErr
+	})
+	if stats.Processed+stats.Failed+stats.Orphaned+stats.Malformed > 0 {
+		fmt.Fprintf(os.Stderr,
+			"ogham: drained outbox -- processed=%d failed=%d orphaned=%d malformed=%d remaining=%d\n",
+			stats.Processed, stats.Failed, stats.Orphaned, stats.Malformed, stats.Remaining)
+	}
+	return err
+}
+
+// readToolResponse pulls the tool-output text out of the hook input,
+// trying the various field names Claude Code has used over time.
+// Mirrors the equivalent dispatch in src/ogham/hooks.py post_tool.
+// Truncated to 2000 chars to match the Python truncation cap.
+func readToolResponse(input map[string]any) string {
+	for _, k := range []string{"tool_response", "response", "tool_output", "output"} {
+		if v, ok := input[k]; ok {
+			if s, ok := v.(string); ok {
+				return truncateResponse(s, 2000)
+			}
+		}
+	}
+	return ""
+}
+
+func truncateResponse(s string, max int) string {
+	if len(s) <= max {
+		return s
+	}
+	return s[:max]
+}
+
+// buildPostToolContent produces a short, human-readable memory string
+// + a dedup target for one PostToolUse event. The shape mirrors what
+// Python's _extract_memory_content emits today, but the v0.9 port is
+// deliberately minimal -- richer extraction (diff summarisation,
+// gh-action classification, etc.) lands incrementally in v0.10+.
+func buildPostToolContent(toolName string, toolInput map[string]any, toolResponse string) (content, target string) {
+	switch toolName {
+	case "Bash":
+		cmd := getField(toolInput, "command", "")
+		if cmd == "" {
+			return "", ""
+		}
+		content = "Bash: " + cmd
+		if toolResponse != "" {
+			content += "\n" + toolResponse
+		}
+		target = cmd
+	case "Edit":
+		path := getField(toolInput, "file_path", "")
+		if path == "" {
+			return "", ""
+		}
+		content = "Edit: " + path
+		target = path
+	case "Write":
+		path := getField(toolInput, "file_path", "")
+		if path == "" {
+			return "", ""
+		}
+		content = "Write: " + path
+		target = path
+	default:
+		return "", ""
+	}
+	return content, target
 }
 
 func runNativeRecall(ctx context.Context, cfg *native.Config, input map[string]any, profile string) error {
@@ -442,11 +616,12 @@ func runGatewayPostTool(ctx context.Context, input map[string]any, profile strin
 	if toolName == "" {
 		return nil // nothing to capture
 	}
-	// Defense-in-depth for #10: when post-tool fires without a gateway
-	// api_key configured, exit 0 with a one-time stderr notice rather
-	// than returning a non-zero per-call error. Settings.json may
-	// pre-date v0.8's install-time skip; we don't want to paper-cut
-	// every tool call with a hook error.
+	// Defense-in-depth: when post-tool fires without a gateway api_key
+	// configured, exit 0 with a one-time stderr notice rather than
+	// returning a non-zero per-call error. v0.9 makes native the
+	// default, so this path is only reached when the user explicitly
+	// passed --gateway. The notice now points them at dropping the
+	// flag rather than wiring a key.
 	cfg, err := config.Load(config.DefaultPath())
 	if err != nil || cfg == nil || cfg.APIKey == "" {
 		noticePostToolUnconfiguredOnce(postToolNoticeMarkerPath(), os.Stderr)
