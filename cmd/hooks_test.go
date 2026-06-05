@@ -231,10 +231,15 @@ func TestBuildOghamHookSetSkipsPostToolWhenKeyEmpty(t *testing.T) {
 	if _, exists := hooks["PostToolUse"]; exists {
 		t.Errorf("PostToolUse should NOT be wired when apiKey is empty (got %v)", hooks["PostToolUse"])
 	}
-	for _, required := range []string{"SessionStart", "PreCompact", "PostCompact"} {
+	// #11: PreCompact -> inscribe dropped from defaults. SessionStart
+	// and PostCompact (recall) remain.
+	for _, required := range []string{"SessionStart", "PostCompact"} {
 		if _, exists := hooks[required]; !exists {
 			t.Errorf("event %s missing from native-only hook set; should be present regardless of apiKey", required)
 		}
+	}
+	if _, exists := hooks["PreCompact"]; exists {
+		t.Error("PreCompact must NOT be in the default scaffold (#11: native inscribe writes low-signal stubs; use the explicit `ogham inscribe` verb)")
 	}
 }
 

@@ -94,15 +94,22 @@ func oghamHookCommandFor(binPath, verb string) string {
 //
 // When wired, PostToolUse uses defaultPostToolMatcher rather than "" so
 // the hook only fires on write-class tools.
+//
+// #11: PreCompact -> inscribe is NOT in the default scaffold from v0.8
+// onwards. The legacy native inscribe writes a metadata-only stub on
+// every compact event (session_id / cwd / timestamp only -- no
+// transcript content), which dilutes recall at scale. Users keep their
+// existing entries until they `hooks uninstall` then `hooks install`.
+// The new explicit `ogham inscribe` verb is the preferred commit
+// primitive for pre-distilled content (whether from a transcript
+// reader, a skill, or a future plugin -- see the superpowers-memory
+// bridge spec §4.3 for the signal-gated + staged + distilled pattern
+// the verb is designed to compose with).
 func buildOghamHookSet(apiKey, binPath string) map[string]map[string]any {
 	hooks := map[string]map[string]any{
 		"SessionStart": {
 			"matcher": "",
 			"hooks":   []map[string]string{{"type": "command", "command": oghamHookCommandFor(binPath, "session-start")}},
-		},
-		"PreCompact": {
-			"matcher": "",
-			"hooks":   []map[string]string{{"type": "command", "command": oghamHookCommandFor(binPath, "inscribe")}},
 		},
 		"PostCompact": {
 			"matcher": "",
@@ -242,7 +249,16 @@ Routing:
     is currently the only path for the smart-filtered post-tool
     event. Requires a valid api_key in config.toml.
 
-See issue #6 for the rationale behind the native routing.`,
+DEPRECATED (v0.8, #11): the 'inscribe' event runner stays for users
+with pre-v0.8 hook entries in their settings.json, but PreCompact ->
+inscribe is no longer wired by ` + "`hooks install`" + ` -- the native
+implementation writes a metadata-only stub on every compact event,
+which dilutes recall at scale. Use the explicit ` + "`ogham inscribe`" + ` verb
+instead and let the caller (orchestrator / skill / scribe / plugin)
+decide what to commit.
+
+See issue #6 for the rationale behind the native routing and #11 for
+the inscribe verb reshape.`,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		event := args[0]
@@ -631,9 +647,9 @@ func installClaudeCodeHooks() error {
 	fmt.Printf("Claude Code hooks installed to %s\n", path)
 	fmt.Printf("  Binary: %s\n", binPath)
 	if apiKey != "" {
-		fmt.Printf("  Events: SessionStart, PostToolUse (matcher: %s), PreCompact (inscribe), PostCompact (recall)\n", defaultPostToolMatcher)
+		fmt.Printf("  Events: SessionStart, PostToolUse (matcher: %s), PostCompact (recall)\n", defaultPostToolMatcher)
 	} else {
-		fmt.Println("  Events: SessionStart, PreCompact (inscribe), PostCompact (recall)")
+		fmt.Println("  Events: SessionStart, PostCompact (recall)")
 		fmt.Println("  Skipped PostToolUse: gateway api_key not configured.")
 		fmt.Println("    Run `ogham auth login --api-key KEY` then re-run `ogham hooks install` to enable post-tool capture.")
 	}

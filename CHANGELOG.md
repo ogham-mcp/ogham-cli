@@ -10,6 +10,39 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), loosely.
 
 ### Added
 
+- **`ogham inscribe` -- explicit commit primitive (#11).** The legacy
+  PreCompact `inscribe` hook wrote a metadata-only stub on every
+  compaction (`session_id` / `cwd` / `timestamp` -- no transcript
+  content). At scale that dilutes recall: every search has to sift
+  through dozens of metadata stubs that say nothing about what actually
+  happened in the session.
+
+  v0.8 separates `commit` from `distill`: the caller distills (whether
+  by transcript reader, skill, scribe, or future plugin), and
+  `ogham inscribe` is the durable commit target.
+
+  Content sources (mutually exclusive):
+
+  - Positional args (joined by spaces) -- `ogham inscribe "prepared note"`
+  - `--file PATH` -- read content from a file
+  - `--stdin` -- read content from stdin explicitly (also auto-detected
+    when stdin is a pipe and no explicit source is given)
+  - `--transcript-path PATH` -- read a Claude Code PreCompact transcript
+    JSONL, concatenate user+assistant turns raw (tool calls / tool
+    results / images skipped). No LLM distillation; if you want a
+    distilled summary, pipe content through your own LLM first.
+
+  Standard flags: `--profile`, `--tags`, `--summary`, `--source`,
+  `--dry-run`. Inscribed content is auto-tagged `type:inscribed` so
+  downstream search / maintenance can distinguish from interactive
+  `ogham store` writes.
+
+  Composes cleanly with the superpowers-memory bridge spec §4.3:
+  signal-gated capture -> staged JSONL buffer -> distilled flush, where
+  the flush step is exactly `ogham inscribe --file <distilled.md>`.
+  ogham-cli stays a fast, reliable commit target instead of accidentally
+  growing into claude-mem-in-Go.
+
 - **`ogham plugin claude-code` -- Anthropic Plugins scaffold emitter (#9).**
   Mutating `~/.claude/settings.json` is the opposite of `plugin`'s stated
   design intent ("emit manifests, host-portable, no curl-bash installer
@@ -64,6 +97,22 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), loosely.
 
 ### Changed
 
+- **`hooks install` no longer wires PreCompact -> inscribe by default
+  (#11).** The legacy native inscribe writes a metadata-only stub on
+  every compaction (`session_id` / `cwd` / `timestamp` -- no transcript
+  content), which dilutes recall at scale. Fresh installs from v0.8
+  onwards wire only SessionStart, PostCompact (recall), and PostToolUse
+  (when an api_key is configured -- see below). Existing users keep
+  their PreCompact entry until they run `ogham hooks uninstall` then
+  `ogham hooks install` to refresh.
+
+  The same change applies to `ogham plugin claude-code`: emitted plugin
+  scaffolds no longer include PreCompact.
+
+  The `ogham hooks run inscribe` event runner stays in place for users
+  with legacy entries; its docstring now marks it deprecated and points
+  at the explicit `ogham inscribe` verb.
+
 - **`hooks install` is now gateway-key-aware (#10).** Previously the
   installer unconditionally wired `PostToolUse -> post-tool` with
   `matcher: ""`, so post-tool fired on every tool call. But post-tool's
@@ -76,9 +125,10 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), loosely.
 
   - **No api_key configured (native-only setup):** `PostToolUse` is
     skipped entirely. The installer prints a one-line hint pointing at
-    `ogham auth login` for users who want to enable it later. The other
-    three events (SessionStart, PreCompact, PostCompact) still wire --
-    they run natively against Supabase / Postgres.
+    `ogham auth login` for users who want to enable it later. The
+    remaining events (SessionStart, PostCompact -- see #11 for why
+    PreCompact dropped out of the default set) still wire and run
+    natively against Supabase / Postgres.
   - **api_key configured:** `PostToolUse` wires with
     `matcher: "Write|Edit|Bash"` (write-class tools only) rather than
     `""`. Read-class tools (Read, Grep, Glob) get filtered out by the

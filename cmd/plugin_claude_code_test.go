@@ -103,10 +103,15 @@ func TestBuildPluginHooksFileSkipsPostToolWhenKeyEmpty(t *testing.T) {
 	if _, exists := hooks["PostToolUse"]; exists {
 		t.Error("PostToolUse should NOT be wired when apiKey is empty (#10 composition: same logic as hooks install)")
 	}
-	for _, required := range []string{"SessionStart", "PreCompact", "PostCompact"} {
+	// #11: PreCompact -> inscribe dropped from defaults. SessionStart
+	// and PostCompact (recall) remain.
+	for _, required := range []string{"SessionStart", "PostCompact"} {
 		if _, exists := hooks[required]; !exists {
 			t.Errorf("event %s missing -- should be present even on native-only setups", required)
 		}
+	}
+	if _, exists := hooks["PreCompact"]; exists {
+		t.Error("PreCompact must NOT be in the plugin scaffold (#11: explicit `ogham inscribe` verb replaces the low-signal hook)")
 	}
 }
 
@@ -124,20 +129,18 @@ func TestBuildPluginHooksFileIncludesPostToolWithScopedMatcher(t *testing.T) {
 	}
 }
 
-func TestBuildPluginHooksFileCompactMatchersAreManualAuto(t *testing.T) {
+func TestBuildPluginHooksFileCompactMatcherIsManualAuto(t *testing.T) {
 	hooksFile := buildPluginHooksFile("")
 	hooks := hooksFile["hooks"].(map[string]any)
 
-	for _, event := range []string{"PreCompact", "PostCompact"} {
-		entries, ok := hooks[event].([]map[string]any)
-		if !ok || len(entries) == 0 {
-			t.Errorf("%s entries missing", event)
-			continue
-		}
-		matcher, _ := entries[0]["matcher"].(string)
-		if matcher != "manual|auto" {
-			t.Errorf("%s matcher = %q; want %q (avoids double-firing on /compact)", event, matcher, "manual|auto")
-		}
+	// #11: only PostCompact remains; PreCompact dropped from defaults.
+	entries, ok := hooks["PostCompact"].([]map[string]any)
+	if !ok || len(entries) == 0 {
+		t.Fatal("PostCompact entries missing")
+	}
+	matcher, _ := entries[0]["matcher"].(string)
+	if matcher != "manual|auto" {
+		t.Errorf("PostCompact matcher = %q; want %q (avoids double-firing on /compact)", matcher, "manual|auto")
 	}
 }
 
