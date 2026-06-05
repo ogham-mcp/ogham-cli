@@ -787,19 +787,11 @@ func installClaudeCodeHooks() error {
 		hooks = make(map[string]any)
 	}
 
-	// #10: gateway-aware install. When no api_key is configured, skip
-	// PostToolUse wiring entirely so the user doesn't get hook-error
-	// transcript noise on every tool call. The runtime defense in
-	// runGatewayPostTool covers stale settings.json files from older
-	// installs.
-	cfg, _ := config.Load(config.DefaultPath())
-	apiKey := ""
-	if cfg != nil {
-		apiKey = cfg.APIKey
-	}
-
+	// v0.9 (#278): PostToolUse runs natively (Classify -> MaskSecrets ->
+	// outbox). No gateway api_key required. The v0.8 conditional-skip
+	// path was retired -- every install gets the full hook set.
 	binPath := oghamBinaryPath()
-	oghamHooks := buildOghamHookSet(apiKey, binPath)
+	oghamHooks := buildOghamHookSet("", binPath)
 
 	for event, hookEntry := range oghamHooks {
 		existing, _ := hooks[event].([]any)
@@ -821,13 +813,8 @@ func installClaudeCodeHooks() error {
 
 	fmt.Printf("Claude Code hooks installed to %s\n", path)
 	fmt.Printf("  Binary: %s\n", binPath)
-	if apiKey != "" {
-		fmt.Printf("  Events: SessionStart, PostToolUse (matcher: %s), PostCompact (recall)\n", defaultPostToolMatcher)
-	} else {
-		fmt.Println("  Events: SessionStart, PostCompact (recall)")
-		fmt.Println("  Skipped PostToolUse: gateway api_key not configured.")
-		fmt.Println("    Run `ogham auth login --api-key KEY` then re-run `ogham hooks install` to enable post-tool capture.")
-	}
+	fmt.Printf("  Events: SessionStart, PostToolUse (matcher: %s), PostCompact (recall)\n", defaultPostToolMatcher)
+	fmt.Println("  PostToolUse runs natively against your local backend -- no gateway api_key required.")
 	if removed > 0 {
 		fmt.Printf("  Cleaned %d stale ogham hook entr%s from previous install.\n",
 			removed, plural(removed, "y", "ies"))

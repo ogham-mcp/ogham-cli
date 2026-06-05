@@ -139,6 +139,17 @@ configured"` install hint is retired.
 
 ### Fixed
 
+- **`hooks install` no longer prints the stale "Skipped PostToolUse:
+  gateway api_key not configured" message.** v0.9.0 wired PostToolUse
+  unconditionally in `buildOghamHookSet` but `installClaudeCodeHooks`
+  still ran its v0.8 apiKey-conditional print path -- so installs
+  emitted a false-negative line claiming the hook was skipped even
+  while it was successfully written to `settings.json`. The install
+  output now prints the full `SessionStart, PostToolUse, PostCompact`
+  event list and explicitly notes the native path needs no api_key.
+  The hook set itself was correct in v0.9.0 -- only the install
+  message lied.
+
 - **Bare-token secret patterns now cover ~45 services, up from
   ~15.** v0.8 inherited a partial Python-side bare-token regex.
   The shared-data extraction (#16) added the full set: Grafana,
