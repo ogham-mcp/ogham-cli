@@ -6,6 +6,50 @@ repo](https://github.com/ogham-mcp/ogham-mcp).
 
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), loosely.
 
+## v0.8.0 (unreleased)
+
+### Changed
+
+- **`hooks install` is now gateway-key-aware (#10).** Previously the
+  installer unconditionally wired `PostToolUse -> post-tool` with
+  `matcher: ""`, so post-tool fired on every tool call. But post-tool's
+  smart filtering (classification, dedup, secret masking) lives only on
+  the gateway path -- on a machine with no gateway api_key configured,
+  every tool call spawned a subprocess that exited non-zero and Claude
+  Code logged a hook error on every turn.
+
+  v0.8 splits the install behaviour:
+
+  - **No api_key configured (native-only setup):** `PostToolUse` is
+    skipped entirely. The installer prints a one-line hint pointing at
+    `ogham auth login` for users who want to enable it later. The other
+    three events (SessionStart, PreCompact, PostCompact) still wire --
+    they run natively against Supabase / Postgres.
+  - **api_key configured:** `PostToolUse` wires with
+    `matcher: "Write|Edit|Bash"` (write-class tools only) rather than
+    `""`. Read-class tools (Read, Grep, Glob) get filtered out by the
+    gateway anyway -- now they don't even reach it. Reduces subprocess
+    spawns and gateway requests roughly 3-5x in a typical session.
+
+- **Runtime defense-in-depth for stale settings.json (#10).** When the
+  post-tool hook fires but no gateway api_key is configured (settings.json
+  pre-dating v0.8's install skip), `ogham hooks run post-tool` now exits
+  0 with a one-time stderr notice instead of a non-zero per-call error.
+  The notice mentions both remediation paths (`hooks install` to silence,
+  `auth login` then `hooks install` to enable) and uses a marker file in
+  `os.UserCacheDir()/ogham/` so it surfaces once and stays quiet after.
+
+### Fixed
+
+- **`requireGateway` now reads the persistent config file.** A latent
+  bug: `cmd/hooks.go::requireGateway` called `config.Load("")` instead of
+  `config.Load(config.DefaultPath())`, so it only honoured the
+  `OGHAM_API_KEY` env var -- never what `ogham auth login` had written to
+  `~/.ogham/config.toml`. Users who configured the gateway via the auth
+  command would still hit "no api_key configured" on every hook fire.
+  Every other call site (auth, serve, import_agent_zero) was already
+  passing `DefaultPath()`. Now hooks does too.
+
 ## v0.7.4 (2026-06-04)
 
 ### Fixed

@@ -396,7 +396,7 @@ Every command outputs JSON by default and runs natively where possible. Pass `--
 | `ogham init` | interactive | huh TUI wizard; writes TOML + env |
 | `ogham dashboard [--port N]` | Python subprocess | Starts the Prefab dashboard (Python stays Python for the frontend) |
 | `ogham serve` | MCP server | Run as an MCP stdio server. Native Go tools by default (store_memory, hybrid_search, list_recent, health_check) + Python sidecar auto-proxied for everything else (delete_memory, compression, graph, typed-store, etc.). Native handlers win on name collision. Pass `--no-sidecar` for strict native-only. |
-| `ogham hooks install / uninstall / run <event>` | sidecar | Wire into Claude Code hooks. `install` writes hook entries with the absolute path of the running binary; `uninstall` strips Go-owned ogham entries (verb-shape `hooks run <verb>`), leaves Python `ogham hooks <verb>` lines alone. v0.7.4 fixed the broken binary name -- see CHANGELOG. |
+| `ogham hooks install / uninstall / run <event>` | sidecar | Wire into Claude Code hooks. `install` writes hook entries with the absolute path of the running binary; v0.8 makes the install gateway-key-aware (skips `PostToolUse` when no api_key is configured, scopes its matcher to `Write\|Edit\|Bash` when wired). `uninstall` strips Go-owned ogham entries (verb-shape `hooks run <verb>`), leaves Python `ogham hooks <verb>` lines alone. See CHANGELOG for #7 (v0.7.4) and #10 (v0.8). |
 | `ogham plugin openclaw` / `agent-zero` | offline | Emit host plugin manifest |
 | `ogham auth login --api-key KEY` | gateway only | Gateway API-key management (build-tag gated) |
 | `ogham version` | offline | Print version + commit + build date + Go version + platform |

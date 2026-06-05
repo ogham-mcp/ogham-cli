@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"os/signal"
+	"path/filepath"
 	"regexp"
 	"syscall"
 
@@ -16,6 +17,13 @@ import (
 	"github.com/ogham-mcp/ogham-cli/internal/native"
 	"github.com/spf13/cobra"
 )
+
+// defaultPostToolMatcher scopes PostToolUse to write-class tools so the
+// gateway post-tool hook fires only on calls that produce content worth
+// capturing (Write / Edit / Bash). Pre-v0.8 the matcher was "" which fires
+// on every tool call -- read-class tools (Read, Grep, Glob) produce noise
+// the gateway's smart filter then discards anyway. See #10.
+const defaultPostToolMatcher = "Write|Edit|Bash"
 
 // oghamGoHookCommandRegex matches hook commands owned by THIS Go binary.
 // The verb shape `hooks run <verb>` distinguishes the Go CLI's three-token
@@ -63,7 +71,91 @@ func oghamBinaryPath() string {
 // oghamHookCommand formats the command string for a Go-side hook event.
 // Mirrors `ogham hooks run <verb>` with the resolved absolute binary path.
 func oghamHookCommand(verb string) string {
-	return fmt.Sprintf("%s hooks run %s", oghamBinaryPath(), verb)
+	return oghamHookCommandFor(oghamBinaryPath(), verb)
+}
+
+// oghamHookCommandFor is the testable form of oghamHookCommand: callers
+// can pass an explicit binary path instead of resolving from
+// os.Executable(). The split lets buildOghamHookSet stay pure (no
+// filesystem reads) so the matcher/wired-or-skipped logic is unit-testable.
+func oghamHookCommandFor(binPath, verb string) string {
+	return fmt.Sprintf("%s hooks run %s", binPath, verb)
+}
+
+// buildOghamHookSet returns the map of Claude Code hook event names to
+// their hook entries. PostToolUse is wired only when apiKey is non-empty:
+// post-tool's smart filtering is gateway-only today, and firing the hook
+// on every tool call with no key produces transcript-noise hook errors on
+// native-only setups (#10).
+//
+// Pure helper: no filesystem access, no config loading. Callers resolve
+// apiKey + binPath from their own sources (typically config.Load +
+// oghamBinaryPath).
+//
+// When wired, PostToolUse uses defaultPostToolMatcher rather than "" so
+// the hook only fires on write-class tools.
+func buildOghamHookSet(apiKey, binPath string) map[string]map[string]any {
+	hooks := map[string]map[string]any{
+		"SessionStart": {
+			"matcher": "",
+			"hooks":   []map[string]string{{"type": "command", "command": oghamHookCommandFor(binPath, "session-start")}},
+		},
+		"PreCompact": {
+			"matcher": "",
+			"hooks":   []map[string]string{{"type": "command", "command": oghamHookCommandFor(binPath, "inscribe")}},
+		},
+		"PostCompact": {
+			"matcher": "",
+			"hooks":   []map[string]string{{"type": "command", "command": oghamHookCommandFor(binPath, "recall")}},
+		},
+	}
+	if apiKey != "" {
+		hooks["PostToolUse"] = map[string]any{
+			"matcher": defaultPostToolMatcher,
+			"hooks":   []map[string]string{{"type": "command", "command": oghamHookCommandFor(binPath, "post-tool")}},
+		}
+	}
+	return hooks
+}
+
+// postToolNoticeMarkerPath returns the cache-dir marker that tracks
+// whether the "post-tool fired without gateway key" notice has already
+// been emitted on this machine. Empty string when UserCacheDir errors --
+// callers treat that as "always emit" so the user still gets diagnostic
+// output even on systems without a usable cache dir.
+func postToolNoticeMarkerPath() string {
+	cacheDir, err := os.UserCacheDir()
+	if err != nil {
+		return ""
+	}
+	return filepath.Join(cacheDir, "ogham", "post-tool-unconfigured-notice")
+}
+
+// noticePostToolUnconfiguredOnce emits a one-time stderr diagnostic when
+// the post-tool hook fires without a gateway api_key configured. Uses
+// markerPath as a stash file so subsequent invocations stay silent.
+// Returns true when it actually wrote a notice, false when the marker
+// already existed (idempotent re-entry).
+//
+// Defense-in-depth for #10: settings.json may pre-date the v0.8
+// install-time skip; without this fallback, every tool call would spawn a
+// subprocess that exits non-zero and Claude Code would log a hook error
+// on every turn.
+func noticePostToolUnconfiguredOnce(markerPath string, w io.Writer) bool {
+	if markerPath != "" {
+		if _, err := os.Stat(markerPath); err == nil {
+			return false // already notified on this machine
+		}
+		_ = os.MkdirAll(filepath.Dir(markerPath), 0700)
+		_ = os.WriteFile(markerPath, []byte("noticed\n"), 0600)
+	}
+	fmt.Fprintln(w, "ogham: hooks post-tool fired without gateway api_key configured -- skipping (exit 0).")
+	fmt.Fprintln(w, "  To silence: run `ogham hooks install` (v0.8+ skips post-tool wiring on native-only setups).")
+	fmt.Fprintln(w, "  To enable post-tool capture: run `ogham auth login --api-key KEY` then `ogham hooks install`.")
+	if markerPath != "" {
+		fmt.Fprintf(w, "  This notice will not repeat (marker: %s).\n", markerPath)
+	}
+	return true
 }
 
 // pruneOghamGoHooks walks settings["hooks"] and strips any inner hook
@@ -269,7 +361,7 @@ func runNativeInscribe(ctx context.Context, cfg *native.Config, input map[string
 // hasn't been ported -- so it gets a different message that doesn't
 // dangle a "try native instead" suggestion that wouldn't actually help.
 func requireGateway(usage string) (*gateway.Client, error) {
-	cfg, err := config.Load("")
+	cfg, err := config.Load(config.DefaultPath())
 	if err != nil {
 		return nil, fmt.Errorf("load config: %w", err)
 	}
@@ -334,10 +426,17 @@ func runGatewayPostTool(ctx context.Context, input map[string]any, profile strin
 	if toolName == "" {
 		return nil // nothing to capture
 	}
-	client, err := requireGateway("post-tool")
-	if err != nil {
-		return err
+	// Defense-in-depth for #10: when post-tool fires without a gateway
+	// api_key configured, exit 0 with a one-time stderr notice rather
+	// than returning a non-zero per-call error. Settings.json may
+	// pre-date v0.8's install-time skip; we don't want to paper-cut
+	// every tool call with a hook error.
+	cfg, err := config.Load(config.DefaultPath())
+	if err != nil || cfg == nil || cfg.APIKey == "" {
+		noticePostToolUnconfiguredOnce(postToolNoticeMarkerPath(), os.Stderr)
+		return nil
 	}
+	client := gateway.New(cfg.GatewayURL, cfg.APIKey, "ogham-cli/hooks")
 	var toolInput map[string]any
 	if ti, ok := input["tool_input"].(map[string]any); ok {
 		toolInput = ti
@@ -497,25 +596,19 @@ func installClaudeCodeHooks() error {
 		hooks = make(map[string]any)
 	}
 
-	binPath := oghamBinaryPath()
-	oghamHooks := map[string]map[string]any{
-		"SessionStart": {
-			"matcher": "",
-			"hooks":   []map[string]string{{"type": "command", "command": oghamHookCommand("session-start")}},
-		},
-		"PostToolUse": {
-			"matcher": "",
-			"hooks":   []map[string]string{{"type": "command", "command": oghamHookCommand("post-tool")}},
-		},
-		"PreCompact": {
-			"matcher": "",
-			"hooks":   []map[string]string{{"type": "command", "command": oghamHookCommand("inscribe")}},
-		},
-		"PostCompact": {
-			"matcher": "",
-			"hooks":   []map[string]string{{"type": "command", "command": oghamHookCommand("recall")}},
-		},
+	// #10: gateway-aware install. When no api_key is configured, skip
+	// PostToolUse wiring entirely so the user doesn't get hook-error
+	// transcript noise on every tool call. The runtime defense in
+	// runGatewayPostTool covers stale settings.json files from older
+	// installs.
+	cfg, _ := config.Load(config.DefaultPath())
+	apiKey := ""
+	if cfg != nil {
+		apiKey = cfg.APIKey
 	}
+
+	binPath := oghamBinaryPath()
+	oghamHooks := buildOghamHookSet(apiKey, binPath)
 
 	for event, hookEntry := range oghamHooks {
 		existing, _ := hooks[event].([]any)
@@ -537,7 +630,13 @@ func installClaudeCodeHooks() error {
 
 	fmt.Printf("Claude Code hooks installed to %s\n", path)
 	fmt.Printf("  Binary: %s\n", binPath)
-	fmt.Println("  Events: SessionStart, PostToolUse, PreCompact (inscribe), PostCompact (recall)")
+	if apiKey != "" {
+		fmt.Printf("  Events: SessionStart, PostToolUse (matcher: %s), PreCompact (inscribe), PostCompact (recall)\n", defaultPostToolMatcher)
+	} else {
+		fmt.Println("  Events: SessionStart, PreCompact (inscribe), PostCompact (recall)")
+		fmt.Println("  Skipped PostToolUse: gateway api_key not configured.")
+		fmt.Println("    Run `ogham auth login --api-key KEY` then re-run `ogham hooks install` to enable post-tool capture.")
+	}
 	if removed > 0 {
 		fmt.Printf("  Cleaned %d stale ogham hook entr%s from previous install.\n",
 			removed, plural(removed, "y", "ies"))
