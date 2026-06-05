@@ -28,6 +28,7 @@ Available Commands:
   import            Bulk-import memories from an export file via the sidecar
   import-agent-zero Import memories from an Agent Zero FAISS pickle file
   init              Interactive wizard: configure backend, embedder, profile; write config files; register MCP clients
+  inscribe          Commit prepared content as a memory (explicit verb; replaces the legacy PreCompact hook)
   lifecycle         Memory lifecycle stage management
   list              List recent memories
   plugin            Emit host-specific plugin manifests (OpenClaw, Agent Zero, ...)

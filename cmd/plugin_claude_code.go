@@ -43,14 +43,18 @@ type claudeCodeHookEvent struct {
 //     keeps the hook firing on every compact event without double-
 //     dispatching when the user types `/compact`.
 func claudeCodeHookEventList(apiKey string) []claudeCodeHookEvent {
+	// #11: PreCompact -> inscribe dropped from the plugin scaffold for
+	// the same reason it was dropped from hooks install: the native
+	// inscribe writes a metadata-only stub at PreCompact (no transcript
+	// content) which dilutes recall at scale. The explicit `ogham
+	// inscribe` verb is the preferred commit primitive.
 	events := []claudeCodeHookEvent{
 		{Event: "SessionStart", Verb: "session-start", Matcher: ""},
-		{Event: "PreCompact", Verb: "inscribe", Matcher: "manual|auto"},
 		{Event: "PostCompact", Verb: "recall", Matcher: "manual|auto"},
 	}
 	if apiKey != "" {
-		// Insert PostToolUse between SessionStart and PreCompact to
-		// match the conventional ordering emitted by `hooks install`.
+		// Insert PostToolUse between SessionStart and PostCompact to
+		// match the conventional ordering.
 		events = append(events[:1], append(
 			[]claudeCodeHookEvent{{Event: "PostToolUse", Verb: "post-tool", Matcher: defaultPostToolMatcher}},
 			events[1:]...,
