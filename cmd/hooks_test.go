@@ -1,6 +1,8 @@
 package cmd
 
 import (
+	"bytes"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -214,5 +216,128 @@ func TestPruneOghamGoHooksHandlesNoHooksKey(t *testing.T) {
 		if removed != 0 {
 			t.Errorf("case %d: removed %d; want 0", i, removed)
 		}
+	}
+}
+
+// ---------------- #10 gateway-aware install -----------------------------
+
+// TestBuildOghamHookSetSkipsPostToolWhenKeyEmpty: with no gateway api_key
+// configured, PostToolUse must NOT appear in the emitted hook set. The
+// three native-capable events (SessionStart, PreCompact, PostCompact)
+// must still be present.
+func TestBuildOghamHookSetSkipsPostToolWhenKeyEmpty(t *testing.T) {
+	hooks := buildOghamHookSet("", "/usr/local/bin/ogham")
+
+	if _, exists := hooks["PostToolUse"]; exists {
+		t.Errorf("PostToolUse should NOT be wired when apiKey is empty (got %v)", hooks["PostToolUse"])
+	}
+	for _, required := range []string{"SessionStart", "PreCompact", "PostCompact"} {
+		if _, exists := hooks[required]; !exists {
+			t.Errorf("event %s missing from native-only hook set; should be present regardless of apiKey", required)
+		}
+	}
+}
+
+// TestBuildOghamHookSetIncludesPostToolWithMatcherWhenKeyPresent: with a
+// gateway key configured, PostToolUse must appear AND use the scoped
+// defaultPostToolMatcher rather than "" (which fires on every tool call).
+func TestBuildOghamHookSetIncludesPostToolWithMatcherWhenKeyPresent(t *testing.T) {
+	hooks := buildOghamHookSet("sk_test_anything_nonempty", "/usr/local/bin/ogham")
+
+	pt, ok := hooks["PostToolUse"]
+	if !ok {
+		t.Fatal("PostToolUse should be wired when apiKey is non-empty")
+	}
+	matcher, _ := pt["matcher"].(string)
+	if matcher != defaultPostToolMatcher {
+		t.Errorf("PostToolUse matcher = %q; want %q (scoped to write-class tools)", matcher, defaultPostToolMatcher)
+	}
+	if matcher == "" {
+		t.Error("PostToolUse matcher must NOT be empty (would fire on every tool call -- the pre-v0.8 noise problem)")
+	}
+}
+
+// TestBuildOghamHookSetEmbedsAbsoluteBinaryPath: every emitted hook
+// command must start with the binPath argument. This is the load-bearing
+// link between #7's os.Executable() fix and #10's install-time behavior.
+func TestBuildOghamHookSetEmbedsAbsoluteBinaryPath(t *testing.T) {
+	const binPath = "/Users/test/.local/bin/ogham"
+	hooks := buildOghamHookSet("sk_test_key", binPath)
+
+	for event, entry := range hooks {
+		innerHooks, ok := entry["hooks"].([]map[string]string)
+		if !ok || len(innerHooks) == 0 {
+			t.Errorf("event %s: missing inner hooks slice", event)
+			continue
+		}
+		cmd := innerHooks[0]["command"]
+		if !strings.HasPrefix(cmd, binPath+" ") {
+			t.Errorf("event %s: command = %q; want prefix %q", event, cmd, binPath+" ")
+		}
+	}
+}
+
+// TestNoticePostToolUnconfiguredOnceIsIdempotent: first call writes the
+// stash marker AND returns true; second call returns false without
+// writing more noise.
+func TestNoticePostToolUnconfiguredOnceIsIdempotent(t *testing.T) {
+	tmp := t.TempDir()
+	marker := filepath.Join(tmp, "ogham", "post-tool-unconfigured-notice")
+
+	var first, second bytes.Buffer
+	gotFirst := noticePostToolUnconfiguredOnce(marker, &first)
+	gotSecond := noticePostToolUnconfiguredOnce(marker, &second)
+
+	if !gotFirst {
+		t.Error("first call should return true (notice was emitted)")
+	}
+	if gotSecond {
+		t.Error("second call should return false (marker exists, notice suppressed)")
+	}
+	if first.Len() == 0 {
+		t.Error("first call should write diagnostic to writer")
+	}
+	if second.Len() != 0 {
+		t.Errorf("second call should write nothing; got %q", second.String())
+	}
+	if _, err := os.Stat(marker); err != nil {
+		t.Errorf("marker file should exist after first call; stat err: %v", err)
+	}
+}
+
+// TestNoticePostToolUnconfiguredOnceWritesUsefulDiagnostic: the stderr
+// output must mention both remediation paths (install + auth login) so a
+// confused user has a clear next step.
+func TestNoticePostToolUnconfiguredOnceWritesUsefulDiagnostic(t *testing.T) {
+	tmp := t.TempDir()
+	marker := filepath.Join(tmp, "ogham", "notice")
+
+	var buf bytes.Buffer
+	noticePostToolUnconfiguredOnce(marker, &buf)
+
+	out := buf.String()
+	wantSubstrings := []string{
+		"ogham hooks install",
+		"ogham auth login",
+		"exit 0",
+	}
+	for _, s := range wantSubstrings {
+		if !strings.Contains(out, s) {
+			t.Errorf("notice output missing %q; got: %s", s, out)
+		}
+	}
+}
+
+// TestNoticePostToolUnconfiguredOnceHandlesEmptyMarker: when UserCacheDir
+// errors and we have no marker path, the function still emits the notice
+// (best-effort diagnostic) and returns true.
+func TestNoticePostToolUnconfiguredOnceHandlesEmptyMarker(t *testing.T) {
+	var buf bytes.Buffer
+	got := noticePostToolUnconfiguredOnce("", &buf)
+	if !got {
+		t.Error("empty marker path should still emit the notice (returns true)")
+	}
+	if buf.Len() == 0 {
+		t.Error("notice should still write to writer when marker path is empty")
 	}
 }
