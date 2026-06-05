@@ -6,7 +6,7 @@ repo](https://github.com/ogham-mcp/ogham-mcp).
 
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), loosely.
 
-## v0.8.0 (unreleased)
+## v0.8.0 (2026-06-05)
 
 ### Added
 
