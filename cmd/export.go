@@ -39,17 +39,17 @@ UX) -- pass --format markdown for the human-readable variant.`,
 		ctx, cancelT := context.WithTimeout(ctx, 120*time.Second)
 		defer cancelT()
 
-		client, err := connectSidecar(ctx)
+		client, err := connectSidecarWithProfile(ctx, exportProfile)
 		if err != nil {
 			return err
 		}
 		defer func() { _ = client.Close() }()
 
+		// export_profile(format) -- the server picks the profile from its
+		// active-profile resolver, which honours OGHAM_PROFILE. The
+		// --profile flag is wired through connectSidecarWithProfile above.
 		toolArgs := map[string]any{
 			"format": exportFormat,
-		}
-		if exportProfile != "" {
-			toolArgs["profile"] = exportProfile
 		}
 
 		result, err := client.CallTool(ctx, "export_profile", toolArgs)

@@ -20,6 +20,20 @@ import (
 // whose Python sidecar works today works with the Go CLI too, and any
 // TOML fields (once populated) override pre-existing .env values.
 func connectSidecar(ctx context.Context) (*sidecar.Client, error) {
+	return connectSidecarWithProfile(ctx, "")
+}
+
+// connectSidecarWithProfile is connectSidecar with an optional one-shot
+// profile override. When profile is non-empty, OGHAM_PROFILE and
+// DEFAULT_PROFILE are appended to the spawned subprocess env so the
+// sidecar's _active_profile resolves to that value for this invocation
+// without touching the user's ~/.ogham/active_profile sentinel.
+//
+// Used by commands that take a --profile flag (export, import) — the
+// MCP tools themselves do not accept a profile argument, so the only way
+// to target a non-active profile is to override the sidecar's view of
+// "active" at spawn time.
+func connectSidecarWithProfile(ctx context.Context, profile string) (*sidecar.Client, error) {
 	cfg, err := native.Load(native.DefaultPath())
 	if err != nil {
 		return nil, err
@@ -27,6 +41,9 @@ func connectSidecar(ctx context.Context) (*sidecar.Client, error) {
 
 	env := native.LoadEnvFiles()
 	env = append(env, cfg.SidecarEnv()...)
+	if profile = strings.TrimSpace(profile); profile != "" {
+		env = append(env, "OGHAM_PROFILE="+profile, "DEFAULT_PROFILE="+profile)
+	}
 
 	client := sidecar.New(sidecar.Options{
 		Impl: &mcp.Implementation{Name: "ogham-cli", Version: Version},

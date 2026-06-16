@@ -6,6 +6,12 @@ that is not yet native.
 Dedup runs server-side with the configured similarity threshold --
 pass 0 to disable or a value between 0 and 1 to override.
 
+Accepts either the raw export payload (a JSON object with a top-level
+"memories" array) or the wrapped envelope produced by 'ogham export'
+(a JSON object whose "data" field holds the inner JSON as a string).
+The wrapper is unwrapped automatically so 'ogham export | ogham import'
+round-trips.
+
 Usage:
   ogham import <file.json> [flags]
 
