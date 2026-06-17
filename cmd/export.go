@@ -27,11 +27,18 @@ port lives behind the same blocker as import (entity extractor).
 
 Output goes to stdout by default; pass --output path/to/file.json to
 write directly to disk instead. JSON is the default format (per rc4
-UX) -- pass --format markdown for the human-readable variant.
+UX) -- pass --format markdown for the human-readable variant, or
+--format okf for an Open Knowledge Format v0.1 bundle directory.
 
 The written file is the raw export payload, not the MCP envelope, so
 'ogham export -o backup.json && ogham import backup.json' round-trips
 cleanly.
+
+For --format okf, the sidecar writes a bundle DIRECTORY to its current
+working directory and returns the path. We print that path. The -o
+flag is honoured for the path string (useful for scripting), but the
+bundle itself lives where the sidecar put it. Use 'ogham import <path>'
+to round-trip.
 
 --profile is honoured by spawning the sidecar with OGHAM_PROFILE set
 for the duration of this command; the user's active profile sentinel
@@ -41,8 +48,8 @@ file is untouched.`,
 		// Sidecar-only; notify the user unless they opted out.
 		noteSidecarFallback("export")
 
-		if exportFormat != "json" && exportFormat != "markdown" {
-			return fmt.Errorf("--format must be 'json' or 'markdown', got %q", exportFormat)
+		if exportFormat != "json" && exportFormat != "markdown" && exportFormat != "okf" {
+			return fmt.Errorf("--format must be 'json', 'markdown', or 'okf', got %q", exportFormat)
 		}
 
 		ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
@@ -89,7 +96,7 @@ file is untouched.`,
 
 func init() {
 	exportCmd.Flags().StringVar(&exportProfile, "profile", "", "Profile to export (defaults to active)")
-	exportCmd.Flags().StringVar(&exportFormat, "format", "json", "Output format: json or markdown")
+	exportCmd.Flags().StringVar(&exportFormat, "format", "json", "Output format: json, markdown, or okf (bundle directory)")
 	exportCmd.Flags().StringVarP(&exportOutput, "output", "o", "", "Write to this file instead of stdout")
 	rootCmd.AddCommand(exportCmd)
 }
