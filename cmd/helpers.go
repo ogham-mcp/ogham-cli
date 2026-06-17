@@ -20,6 +20,19 @@ import (
 // whose Python sidecar works today works with the Go CLI too, and any
 // TOML fields (once populated) override pre-existing .env values.
 func connectSidecar(ctx context.Context) (*sidecar.Client, error) {
+	return connectSidecarWithProfile(ctx, "")
+}
+
+// connectSidecarWithProfile is like connectSidecar but appends an
+// OGHAM_PROFILE override so the spawned sidecar resolves operations
+// against the supplied profile instead of the user's active one.
+// Empty profile = no override = behaves like connectSidecar.
+//
+// Python's get_active_profile() checks OGHAM_PROFILE first
+// (see tools/memory.py:get_active_profile), so an env append is enough
+// to scope a single sidecar session without the user touching their
+// sentinel file.
+func connectSidecarWithProfile(ctx context.Context, profile string) (*sidecar.Client, error) {
 	cfg, err := native.Load(native.DefaultPath())
 	if err != nil {
 		return nil, err
@@ -27,6 +40,9 @@ func connectSidecar(ctx context.Context) (*sidecar.Client, error) {
 
 	env := native.LoadEnvFiles()
 	env = append(env, cfg.SidecarEnv()...)
+	if profile != "" {
+		env = append(env, "OGHAM_PROFILE="+profile)
+	}
 
 	client := sidecar.New(sidecar.Options{
 		Impl: &mcp.Implementation{Name: "ogham-cli", Version: Version},
@@ -37,6 +53,65 @@ func connectSidecar(ctx context.Context) (*sidecar.Client, error) {
 			"If Python ogham needs SUPABASE_URL etc., those must be in ~/.ogham/config.env or ./.env in your cwd.", err)
 	}
 	return client, nil
+}
+
+// buildImportToolArgs constructs the MCP tool args for import_memories_tool.
+//
+// The Python tool signature is import_memories_tool(data: str, dedup_threshold: float),
+// where data is a JSON string -- not a parsed object. Sending a map[string]any here
+// fails FastMCP's Pydantic validation before the function body runs.
+//
+// Legacy-shape tolerance: if jsonBytes is the MCP envelope written by a pre-fix
+// `ogham export -o file.json` (top-level keys: status, profile, format, data), we
+// unwrap and forward the inner data string so old backups still import cleanly.
+// Files written by export_memories directly (top-level "memories" key) pass through.
+//
+// Pure function; no I/O. Tested in isolation by helpers_test.go.
+func buildImportToolArgs(jsonBytes []byte, dedup float64) (map[string]any, error) {
+	var probe map[string]any
+	if err := json.Unmarshal(jsonBytes, &probe); err != nil {
+		return nil, fmt.Errorf("not valid JSON: %w", err)
+	}
+	payload := string(jsonBytes)
+	if status, ok := probe["status"].(string); ok && status == "exported" {
+		if inner, ok := probe["data"].(string); ok {
+			payload = inner
+		}
+	}
+	return map[string]any{
+		"data":            payload,
+		"dedup_threshold": dedup,
+	}, nil
+}
+
+// unwrapExportPayload pulls the inner export string out of the MCP envelope
+// returned by export_profile. The Python tool returns
+// {"status":"exported","profile":"...","format":"...","data":"<string>"} where
+// data is the actual export -- a JSON string for format=json or a markdown
+// document for format=markdown. We unwrap unconditionally so the file on disk
+// is round-trippable through `ogham import`.
+//
+// Pure function; no I/O.
+func unwrapExportPayload(payload any) (string, error) {
+	m, ok := payload.(map[string]any)
+	if !ok {
+		return "", fmt.Errorf("export_profile returned unexpected shape %T (want map[string]any)", payload)
+	}
+	data, ok := m["data"].(string)
+	if !ok {
+		return "", fmt.Errorf("export_profile envelope missing string data field; got keys %v", mapKeys(m))
+	}
+	return data, nil
+}
+
+// mapKeys returns the keys of m sorted, for stable error messages.
+func mapKeys(m map[string]any) []string {
+	out := make([]string, 0, len(m))
+	for k := range m {
+		out = append(out, k)
+	}
+	// Don't bother sorting -- error messages are diagnostic, not asserted on.
+	return out
 }
 
 // splitCSV parses a comma-separated flag value. Whitespace trimmed, empties dropped.

@@ -6,6 +6,10 @@ that is not yet native.
 Dedup runs server-side with the configured similarity threshold --
 pass 0 to disable or a value between 0 and 1 to override.
 
+--profile is honoured by spawning the sidecar with OGHAM_PROFILE set
+for the duration of this command; the user's active profile sentinel
+file is untouched.
+
 Usage:
   ogham import <file.json> [flags]
 
