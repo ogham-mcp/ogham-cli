@@ -2,7 +2,6 @@ package cmd
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"os"
 	"os/signal"
@@ -28,35 +27,47 @@ port lives behind the same blocker as import (entity extractor).
 
 Output goes to stdout by default; pass --output path/to/file.json to
 write directly to disk instead. JSON is the default format (per rc4
-UX) -- pass --format markdown for the human-readable variant.`,
+UX) -- pass --format markdown for the human-readable variant.
+
+The written file is the raw export payload, not the MCP envelope, so
+'ogham export -o backup.json && ogham import backup.json' round-trips
+cleanly.
+
+--profile is honoured by spawning the sidecar with OGHAM_PROFILE set
+for the duration of this command; the user's active profile sentinel
+file is untouched.`,
 	Args: cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		// Sidecar-only; notify the user unless they opted out.
 		noteSidecarFallback("export")
+
+		if exportFormat != "json" && exportFormat != "markdown" {
+			return fmt.Errorf("--format must be 'json' or 'markdown', got %q", exportFormat)
+		}
 
 		ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 		defer cancel()
 		ctx, cancelT := context.WithTimeout(ctx, 120*time.Second)
 		defer cancelT()
 
-		client, err := connectSidecar(ctx)
+		client, err := connectSidecarWithProfile(ctx, exportProfile)
 		if err != nil {
 			return err
 		}
 		defer func() { _ = client.Close() }()
 
-		toolArgs := map[string]any{
+		result, err := client.CallTool(ctx, "export_profile", map[string]any{
 			"format": exportFormat,
-		}
-		if exportProfile != "" {
-			toolArgs["profile"] = exportProfile
-		}
-
-		result, err := client.CallTool(ctx, "export_profile", toolArgs)
+		})
 		if err != nil {
 			return fmt.Errorf("export_profile: %w", err)
 		}
 		payload, err := toolResultJSON(result)
+		if err != nil {
+			return err
+		}
+
+		body, err := unwrapExportPayload(payload)
 		if err != nil {
 			return err
 		}
@@ -71,17 +82,8 @@ UX) -- pass --format markdown for the human-readable variant.`,
 			out = f
 		}
 
-		// Markdown comes back as a string; JSON comes back as a structured
-		// value. Honour the user's format request regardless of shape.
-		if exportFormat == "markdown" {
-			if s, ok := payload.(string); ok {
-				_, err := fmt.Fprintln(out, s)
-				return err
-			}
-		}
-		enc := json.NewEncoder(out)
-		enc.SetIndent("", "  ")
-		return enc.Encode(payload)
+		_, err = fmt.Fprintln(out, body)
+		return err
 	},
 }
 

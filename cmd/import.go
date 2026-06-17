@@ -2,7 +2,6 @@ package cmd
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"io"
 	"os"
@@ -27,7 +26,11 @@ because bulk import exercises the entity extractor + auto-link path
 that is not yet native.
 
 Dedup runs server-side with the configured similarity threshold --
-pass 0 to disable or a value between 0 and 1 to override.`,
+pass 0 to disable or a value between 0 and 1 to override.
+
+--profile is honoured by spawning the sidecar with OGHAM_PROFILE set
+for the duration of this command; the user's active profile sentinel
+file is untouched.`,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		noteSidecarFallback("import")
@@ -48,9 +51,9 @@ pass 0 to disable or a value between 0 and 1 to override.`,
 			data = buf
 		}
 
-		var payload any
-		if err := json.Unmarshal(data, &payload); err != nil {
-			return fmt.Errorf("parse %s as JSON: %w", path, err)
+		toolArgs, err := buildImportToolArgs(data, importDedup)
+		if err != nil {
+			return fmt.Errorf("parse %s: %w", path, err)
 		}
 
 		ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
@@ -58,19 +61,11 @@ pass 0 to disable or a value between 0 and 1 to override.`,
 		ctx, cancelT := context.WithTimeout(ctx, 600*time.Second)
 		defer cancelT()
 
-		client, err := connectSidecar(ctx)
+		client, err := connectSidecarWithProfile(ctx, importProfile)
 		if err != nil {
 			return err
 		}
 		defer func() { _ = client.Close() }()
-
-		toolArgs := map[string]any{
-			"data":            payload,
-			"dedup_threshold": importDedup,
-		}
-		if importProfile != "" {
-			toolArgs["profile"] = importProfile
-		}
 
 		result, err := client.CallTool(ctx, "import_memories_tool", toolArgs)
 		if err != nil {

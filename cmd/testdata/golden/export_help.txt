@@ -7,6 +7,14 @@ Output goes to stdout by default; pass --output path/to/file.json to
 write directly to disk instead. JSON is the default format (per rc4
 UX) -- pass --format markdown for the human-readable variant.
 
+The written file is the raw export payload, not the MCP envelope, so
+'ogham export -o backup.json && ogham import backup.json' round-trips
+cleanly.
+
+--profile is honoured by spawning the sidecar with OGHAM_PROFILE set
+for the duration of this command; the user's active profile sentinel
+file is untouched.
+
 Usage:
   ogham export [flags]
 
