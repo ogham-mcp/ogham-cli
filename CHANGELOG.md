@@ -6,6 +6,51 @@ repo](https://github.com/ogham-mcp/ogham-mcp).
 
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), loosely.
 
+## v0.9.1 (2026-06-17)
+
+Sidecar-routed `ogham export` / `ogham import` now round-trips. Three
+drifts were stacked under the user-visible "import doesn't work" report
+in issue #20 -- only the wire-shape one was on the surface; the other
+two would have bitten the moment that one was fixed.
+
+### Fixed
+
+- **`ogham import` wire shape (#20).** The Python tool signature is
+  `import_memories_tool(data: str, ...)`. The CLI was constructing
+  `data` as a parsed `map[string]any`, which FastMCP's Pydantic
+  validator rejected before the tool body ran. We now send the JSON
+  payload as a string, matching the contract.
+
+- **`ogham export -o file.json` wrote the MCP envelope, not the export.**
+  The on-disk file was `{"status","profile","format","data":"<json>"}`
+  instead of the actual export payload. Even with the wire-shape fix,
+  re-importing would silently no-op (`json.loads` finds no top-level
+  `memories` key, returns `imported=0`). Export now writes the inner
+  payload directly, so `ogham export -o backup.json && ogham import
+  backup.json` round-trips cleanly.
+
+- **`--profile` flag was phantom on both commands.** Neither Python tool
+  accepts a `profile` argument -- they hardcode `get_active_profile()`
+  internally. `--profile work` was silently dropped, leaving the call
+  to hit whatever was active. `--profile` is now plumbed through the
+  sidecar via `OGHAM_PROFILE=<name>` env override (Python's
+  `get_active_profile()` honours that env var first), so the user's
+  active-profile sentinel file is never touched.
+
+### Compatibility
+
+- Pre-fix `ogham export -o file.json` outputs (envelope shape) are
+  auto-detected and unwrapped by `ogham import`, so existing backups
+  on disk still work without manual editing.
+
+### Tests
+
+- 8 new unit tests covering the regression, legacy envelope tolerance,
+  passthrough, and validation paths.
+- Live end-to-end smoke against Supabase + Gemini sidecar: 3 memories
+  round-tripped intact (`imported=3, skipped=0`), active profile
+  preserved.
+
 ## v0.9.0 (2026-06-05)
 
 Hooks no longer need a gateway. `PostToolUse` runs entirely in Go
