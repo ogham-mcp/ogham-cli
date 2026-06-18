@@ -6,6 +6,39 @@ repo](https://github.com/ogham-mcp/ogham-mcp).
 
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), loosely.
 
+## v0.10.0 (2026-06-18)
+
+Open Knowledge Format (OKF) v0.1 export passthrough. With the matching
+Python `ogham-mcp` v0.15.0 sidecar, `ogham export --format okf` now
+produces an OKF v0.1 conformant bundle directory that round-trips
+through `ogham import` and is portable to any other OKF-speaking tool.
+
+### Added
+
+- **`om export --format okf`** -- new value on the `--format` allowlist.
+  The sidecar (Python `ogham-mcp` v0.15.0 or newer) writes a bundle
+  directory (markdown documents with YAML frontmatter, per the
+  [Google Cloud OKF v0.1 spec](https://github.com/GoogleCloudPlatform/knowledge-catalog/blob/main/okf/SPEC.md))
+  to its current working directory and returns the path. We print that
+  path. The `-o` flag still works for capturing the path string to a
+  file (useful for scripting), but the bundle itself lives where the
+  sidecar put it.
+
+  Existing `--format json` and `--format markdown` behaviour is
+  unchanged.
+
+### Compatibility
+
+- **Requires `ogham-mcp` v0.15.0 or newer** for `--format okf`. Older
+  sidecars reject the value at the tool boundary. `json` and `markdown`
+  still work against any supported sidecar.
+
+### Out of scope (v0.11)
+
+- Native OKF *import* from `om import` requires the Go CLI to detect
+  directory arguments and forward the path rather than `ReadFile`-ing.
+  Until then, round-trip via `ogham import` on the Python CLI.
+
 ## v0.9.1 (2026-06-17)
 
 Sidecar-routed `ogham export` / `ogham import` now round-trips. Three
