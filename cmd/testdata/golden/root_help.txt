@@ -29,6 +29,7 @@ Available Commands:
   import-agent-zero Import memories from an Agent Zero FAISS pickle file
   init              Interactive wizard: configure backend, embedder, profile; write config files; register MCP clients
   inscribe          Commit prepared content as a memory (explicit verb; replaces the legacy PreCompact hook)
+  join              Walk the entity graph along a predicate path from a start entity
   lifecycle         Memory lifecycle stage management
   list              List recent memories
   plugin            Emit host-specific plugin manifests (OpenClaw, Agent Zero, ...)
@@ -38,6 +39,7 @@ Available Commands:
   serve             Start MCP server over stdio (native tools by default)
   stats             Summarise the active profile: total, top sources, top tags
   store             Store a memory in the active profile
+  triple            Store a typed (subject, predicate, object) edge in the entity graph
   version           Print the binary's version + build info
 
 Flags:
