@@ -157,9 +157,10 @@ func buildPICTFixture(row map[string]string) pictFixture {
 		// Mix categories so multiple prefix kinds appear. GtTwenty
 		// saturates the 20-cap with 25 letter-only CamelCase ids.
 		n := 3
-		if count == "FiveToTwenty" {
+		switch count {
+		case "FiveToTwenty":
 			n = 6
-		} else if count == "GtTwenty" {
+		case "GtTwenty":
 			n = 25
 		}
 		for i := 0; i < n; i++ {
@@ -198,9 +199,10 @@ func noneFixture(uni string) string {
 func camelCaseBlock(uni, punc, count string) string {
 	var ids []string
 	n := 1
-	if count == "FiveToTwenty" {
+	switch count {
+	case "FiveToTwenty":
 		n = 6
-	} else if count == "GtTwenty" {
+	case "GtTwenty":
 		n = 25
 	}
 	base := []string{
@@ -232,9 +234,10 @@ func camelCaseBlock(uni, punc, count string) string {
 func filePathBlock(uni, punc, count string) string {
 	var paths []string
 	n := 1
-	if count == "FiveToTwenty" {
+	switch count {
+	case "FiveToTwenty":
 		n = 7
-	} else if count == "GtTwenty" {
+	case "GtTwenty":
 		n = 25
 	}
 	for i := 0; i < n; i++ {
@@ -259,9 +262,10 @@ func errorTypeBlock(uni, punc, count string) string {
 		"ConnectionError", "TimeoutException", "NullPointerException",
 	}
 	n := 1
-	if count == "FiveToTwenty" {
+	switch count {
+	case "FiveToTwenty":
 		n = 5
-	} else if count == "GtTwenty" {
+	case "GtTwenty":
 		n = len(errs)
 	}
 	joined := strings.Join(errs[:n], " ")

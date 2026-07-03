@@ -16,11 +16,10 @@ import (
 // the Ogham-defined RPC functions. Parallel to the pgx path -- same
 // result shapes, different transport.
 type supabaseClient struct {
-	baseURL    string
-	apiKey     string
-	keyKind    SupabaseKeyKind
-	http       *http.Client
-	authScheme string // "Bearer" by default -- only Basic is ever needed for edge cases
+	baseURL string
+	apiKey  string
+	keyKind SupabaseKeyKind
+	http    *http.Client
 }
 
 func newSupabaseClient(cfg *Config) (*supabaseClient, error) {

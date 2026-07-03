@@ -50,7 +50,7 @@ func connectSidecarWithProfile(ctx context.Context, profile string) (*sidecar.Cl
 	})
 	if err := client.Connect(ctx); err != nil {
 		return nil, fmt.Errorf("sidecar connect failed: %w\nCheck OGHAM_SIDECAR_CMD or confirm `uv run ogham serve` works in your shell. "+
-			"If Python ogham needs SUPABASE_URL etc., those must be in ~/.ogham/config.env or ./.env in your cwd.", err)
+			"If Python ogham needs SUPABASE_URL etc., those must be in ~/.ogham/config.env or ./.env in your cwd", err)
 	}
 	return client, nil
 }

@@ -50,17 +50,15 @@ func TestTopN_FewerThanN(t *testing.T) {
 // GET, and HEAD paths must echo a Content-Range header driven by the
 // Prefer: count=exact request.
 type statsFixture struct {
-	total          int64
-	untagged       int64
-	emptyTags      int64
-	withTTL        int64
-	expiring       int64
-	decay          int64
-	rows           []map[string]any
-	relationships  []map[string]string
-	expectProfile  string
-	relationshipsT *testing.T // fail if relationships are fetched when unexpected
-	skipRels       bool
+	total         int64
+	untagged      int64
+	emptyTags     int64
+	withTTL       int64
+	expiring      int64
+	decay         int64
+	rows          []map[string]any
+	relationships []map[string]string
+	skipRels      bool
 }
 
 func newStatsFixtureHandler(t *testing.T, fx statsFixture) http.HandlerFunc {

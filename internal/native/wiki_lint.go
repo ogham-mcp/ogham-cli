@@ -572,12 +572,9 @@ func lintStaleSummariesSupabase(ctx context.Context, client *supabaseClient, pro
 	if err := json.Unmarshal(raw, &rows); err != nil {
 		return LintCategory{}, fmt.Errorf("lint_wiki stale_summaries parse: %w (body: %s)", err, truncateForError(raw))
 	}
-	for _, r := range rows {
-		// Strip nil stale_reason for cleanliness; mirror Python which
-		// uses `r.get("stale_reason")` (preserves nil) -- but the JSON
-		// already has it, so just pass through.
-		cat.Sample = append(cat.Sample, r)
-	}
+	// Mirror Python which uses `r.get("stale_reason")` (preserves nil) --
+	// the JSON already has it, so just pass through.
+	cat.Sample = append(cat.Sample, rows...)
 	return cat, nil
 }
 
