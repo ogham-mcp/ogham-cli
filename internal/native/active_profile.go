@@ -82,7 +82,7 @@ func SwitchProfile(profile string) error {
 	}
 
 	dest := SentinelPath()
-	if err := os.MkdirAll(filepath.Dir(dest), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(dest), 0o750); err != nil {
 		return fmt.Errorf("active_profile: mkdir: %w", err)
 	}
 

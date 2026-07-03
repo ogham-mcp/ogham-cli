@@ -122,7 +122,8 @@ func Open(cacheDir string, maxSize int) (*EmbeddingCache, error) {
 		}
 		cacheDir = filepath.Join(home, ".cache", "ogham")
 	}
-	if err := os.MkdirAll(cacheDir, 0o755); err != nil {
+	// #nosec G703 -- cacheDir is operator config (OGHAM_CACHE_DIR / $HOME/.cache/ogham), not user input
+	if err := os.MkdirAll(cacheDir, 0o750); err != nil {
 		return nil, fmt.Errorf("embedding cache: create %s: %w", cacheDir, err)
 	}
 	path := filepath.Join(cacheDir, dbFileName)

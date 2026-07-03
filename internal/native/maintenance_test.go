@@ -61,9 +61,10 @@ func TestMask(t *testing.T) {
 	if strings.Contains(m.Database.SupabaseKey, "1234567890") {
 		t.Errorf("supabase key not masked: %q", m.Database.SupabaseKey)
 	}
-	if strings.Contains(m.Embedding.APIKey, "V89d4") {
-		// "V89d4" are the last 4 of the test key; they SHOULD appear
-		// because masking shows last-4. Invert the check.
+	// "89d4" is the last 4 of the test key; maskSecret keeps the last 4,
+	// so they SHOULD appear.
+	if !strings.Contains(m.Embedding.APIKey, "89d4") {
+		t.Errorf("embedding key should expose last 4: %q", m.Embedding.APIKey)
 	}
 	if !strings.HasPrefix(m.Embedding.APIKey, "AIza") {
 		t.Errorf("embedding key should expose first 4: %q", m.Embedding.APIKey)
