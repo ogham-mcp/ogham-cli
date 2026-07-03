@@ -6,6 +6,48 @@ repo](https://github.com/ogham-mcp/ogham-mcp).
 
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), loosely.
 
+## v0.11.0 (2026-07-03)
+
+Native typed-edge context graph verbs. `ogham triple` and `ogham join`
+bring the upstream `ogham-mcp` v0.16 typed-edge graph to the Go CLI as
+native, direct-to-Postgres commands (via pgx) -- no gateway round-trip --
+each with a `--sidecar` fallback to the matching Python MCP tool.
+
+### Added
+
+- **`ogham triple <subject> <predicate> <object>`** -- store a typed edge
+  in the entity graph (mirrors the `store_triple` MCP tool). Subject and
+  object may be a canonical entity name or an alias; the predicate must be
+  one of the 16 v1 vocabulary terms (`DEPENDS_ON`, `OWNS`, `ASSIGNED_TO`,
+  `DECIDED`, `MENTIONS`, `BLOCKS`, `PART_OF`, `SUPPORTS`, `EVOLVED_INTO`,
+  `RELATED_TO`, and their inverses). Writes are supersession-aware: a new
+  edge for an existing `(subject, predicate, object, profile)` stamps the
+  prior edge's `valid_to` and points its `superseded_by` at the new row.
+  Flags: `--profile`, `--fact-id` (source-memory UUID), `--metadata` (JSON).
+
+- **`ogham join <start-entity>`** -- breadth-first traversal along a
+  predicate path (mirrors `query_join`). Flags: `--path` (comma-separated
+  predicate path, required), `--hop-limit` (required, must be >= the path
+  length), `--direction` (`outgoing` | `incoming`, default `outgoing`),
+  `--profile`. Reads only current edges (`valid_to IS NULL`), terminates
+  cleanly on cycles via a visited set, and returns entities in BFS
+  traversal order plus the edges walked and their source-memory citations.
+  An unresolvable start entity or a dead-end hop is a legitimate empty
+  result (`{"entities":[],"edges":[],"citations":[]}`), not an error.
+
+Both verbs run natively against the Postgres backend by default (JSON
+output; `--text` for human-readable) and route through the Python sidecar
+with `--sidecar` / `--python`.
+
+### Compatibility
+
+- **Requires a Postgres database carrying the entity-graph schema shipped
+  by `ogham-mcp` v0.16** (the `entity_edges`, `entity_edge_predicates`,
+  and `entity_aliases` tables). Against an older database the verbs report
+  the missing relation.
+- `--sidecar` requires `ogham-mcp` v0.16 or newer (which exposes the
+  `store_triple` / `query_join` MCP tools).
+
 ## v0.10.0 (2026-06-18)
 
 Open Knowledge Format (OKF) v0.1 export passthrough. With the matching
