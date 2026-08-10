@@ -10,6 +10,8 @@ import (
 	"os/signal"
 	"path/filepath"
 	"regexp"
+	"sort"
+	"strings"
 	"syscall"
 	"time"
 
@@ -66,6 +68,107 @@ const defaultPostToolMatcher = "Write|Edit"
 //	/path/to/.venv/bin/ogham hooks recall
 //	/path/to/.venv/bin/ogham hooks inscribe
 var oghamGoHookCommandRegex = regexp.MustCompile(`(?:^|/)(ogham-cli|ogham)\s+hooks\s+run\s+`)
+
+// oghamPythonHookCommandRegex matches hook commands owned by the Python
+// ogham-mcp package: the two-token `ogham hooks <verb>` form, as opposed
+// to the Go binary's three-token `ogham hooks run <verb>`.
+//
+// The verbs are enumerated rather than excluding "run" with a negative
+// lookahead, which Go's RE2 does not support. Listing them is also
+// stricter: an unrelated `sometool hooks deploy` will not match.
+//
+// We never delete what this matches without --replace-python (#7: do not
+// clobber another tool's config). We do report it (#30: a user running
+// both gets two hooks per event, the Python one unscoped, writing to the
+// same store).
+var oghamPythonHookCommandRegex = regexp.MustCompile(
+	`(?:^|/)(ogham-cli|ogham)\s+hooks\s+(session-start|post-tool|inscribe|recall)\b`)
+
+// pythonHookEntry is one detected Python-owned hook, for reporting.
+type pythonHookEntry struct {
+	Event   string
+	Command string
+}
+
+// detectPythonHooks returns every Python-owned hook command in settings,
+// sorted by event for stable output. Read-only.
+func detectPythonHooks(settings map[string]any) []pythonHookEntry {
+	var found []pythonHookEntry
+	forEachHookCommand(settings, func(event, command string) {
+		if oghamPythonHookCommandRegex.MatchString(command) {
+			found = append(found, pythonHookEntry{Event: event, Command: command})
+		}
+	})
+	sort.Slice(found, func(i, j int) bool {
+		if found[i].Event != found[j].Event {
+			return found[i].Event < found[j].Event
+		}
+		return found[i].Command < found[j].Command
+	})
+	return found
+}
+
+// forEachHookCommand walks settings["hooks"] and calls fn for every
+// inner hook command string. Shared by the Go and Python scanners so
+// they cannot disagree about the config shape.
+func forEachHookCommand(settings map[string]any, fn func(event, command string)) {
+	hooks, ok := settings["hooks"].(map[string]any)
+	if !ok {
+		return
+	}
+	for event, eventHooksRaw := range hooks {
+		eventHooks, ok := eventHooksRaw.([]any)
+		if !ok {
+			continue
+		}
+		for _, entry := range eventHooks {
+			entryMap, ok := entry.(map[string]any)
+			if !ok {
+				continue
+			}
+			inner, ok := entryMap["hooks"].([]any)
+			if !ok {
+				continue
+			}
+			for _, h := range inner {
+				hMap, ok := h.(map[string]any)
+				if !ok {
+					continue
+				}
+				if cmd, ok := hMap["command"].(string); ok {
+					fn(event, cmd)
+				}
+			}
+		}
+	}
+}
+
+// prunePythonHooks strips Python-owned hook entries. Only ever called
+// behind --replace-python: deleting another tool's configuration is not
+// something an install should do on its own initiative.
+func prunePythonHooks(settings map[string]any) int {
+	return pruneHooksMatching(settings, oghamPythonHookCommandRegex)
+}
+
+// formatPythonHookWarning renders the coexistence notice, or "" when
+// there is nothing to report. Kept separate from the install path so
+// its content is testable without touching the filesystem.
+func formatPythonHookWarning(found []pythonHookEntry, settingsPath string) string {
+	if len(found) == 0 {
+		return ""
+	}
+	var b strings.Builder
+	fmt.Fprintf(&b, "\nogham: found %d existing ogham-mcp (Python) hook entr%s in %s:\n",
+		len(found), plural(len(found), "y", "ies"), settingsPath)
+	for _, f := range found {
+		fmt.Fprintf(&b, "    %-14s %s\n", f.Event, f.Command)
+	}
+	b.WriteString("  Both installs now fire on every event and write to the same store,\n")
+	b.WriteString("  so you will get duplicate memories. The Python PostToolUse hook is\n")
+	b.WriteString("  also unscoped (matcher \"\"), so it captures every tool call.\n")
+	b.WriteString("  Remove those entries, or re-run: ogham hooks install --replace-python\n")
+	return b.String()
+}
 
 // oghamBinaryPath returns the absolute path of the running ogham binary,
 // for use when writing hook commands into settings.json. Resolution order:
@@ -196,8 +299,17 @@ func noticePostToolUnconfiguredOnce(markerPath string, w io.Writer) bool {
 // fresh entries) and as the core of `hooks uninstall`.
 //
 // Leaves Python `ogham hooks <verb>` entries untouched -- those are owned
-// by ogham-mcp, not by us.
+// by ogham-mcp, not by us. See detectPythonHooks / prunePythonHooks for
+// the opt-in path that does remove them (#30).
 func pruneOghamGoHooks(settings map[string]any) int {
+	return pruneHooksMatching(settings, oghamGoHookCommandRegex)
+}
+
+// pruneHooksMatching is the shared filter behind pruneOghamGoHooks and
+// prunePythonHooks: strip every inner hook whose command matches re,
+// dropping matcher blocks and events left empty. Returns the number of
+// inner hook commands removed. Mutates settings in place.
+func pruneHooksMatching(settings map[string]any, re *regexp.Regexp) int {
 	hooks, ok := settings["hooks"].(map[string]any)
 	if !ok {
 		return 0
@@ -228,7 +340,7 @@ func pruneOghamGoHooks(settings map[string]any) int {
 					continue
 				}
 				cmd, _ := hm["command"].(string)
-				if oghamGoHookCommandRegex.MatchString(cmd) {
+				if re.MatchString(cmd) {
 					removed++
 					continue
 				}
@@ -701,13 +813,25 @@ func runGatewayPostTool(ctx context.Context, input map[string]any, profile strin
 var hooksInstallCmd = &cobra.Command{
 	Use:   "install",
 	Short: "Detect AI client and install hooks configuration",
+	Long: `Detect the AI client and install ogham's lifecycle hooks.
+
+Idempotent: re-running replaces this binary's own hook entries rather
+than stacking duplicates.
+
+If the Python ogham-mcp package has also installed hooks into the same
+settings.json, both sets fire on every event and write to the same
+store -- and the Python PostToolUse hook is unscoped, so it captures
+every tool call. install reports that but will not delete another
+tool's configuration on its own. Pass --replace-python to remove the
+Python entries as part of the install.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
+		replacePython, _ := cmd.Flags().GetBool("replace-python")
 		client := detectClient()
 		fmt.Printf("Detected client: %s\n", client)
 
 		switch client {
 		case "claude-code":
-			return installClaudeCodeHooks()
+			return installClaudeCodeHooks(replacePython)
 		case "kiro":
 			printKiroInstructions()
 		default:
@@ -774,6 +898,8 @@ func init() {
 	hooksRunCmd.Flags().String("profile", "work", "Memory profile")
 	hooksRunCmd.Flags().Bool("gateway", false, "Force gateway path even when native backend is configured")
 	hooksCmd.AddCommand(hooksRunCmd)
+	hooksInstallCmd.Flags().Bool("replace-python", false,
+		"also remove ogham-mcp (Python) hook entries from settings.json")
 	hooksCmd.AddCommand(hooksInstallCmd)
 	hooksCmd.AddCommand(hooksUninstallCmd)
 	hooksCmd.AddCommand(hooksStatusCmd)
@@ -833,7 +959,7 @@ func detectClient() string {
 // Hook commands embed the absolute path of the running binary
 // (oghamBinaryPath), so they execute correctly regardless of binary name
 // or $PATH state -- the load-bearing fix for #7 findings #1 and #2.
-func installClaudeCodeHooks() error {
+func installClaudeCodeHooks(replacePython bool) error {
 	settings, _ := readClaudeSettings()
 	if settings == nil {
 		settings = make(map[string]any)
@@ -842,6 +968,16 @@ func installClaudeCodeHooks() error {
 	// Pre-pass: remove any Go-owned ogham hook entries before we add the
 	// fresh ones. Leaves Python `ogham hooks <verb>` entries alone.
 	removed := pruneOghamGoHooks(settings)
+
+	// #30: a Python ogham-mcp install in the same settings.json means two
+	// hooks fire per event into one store, and the Python PostToolUse is
+	// unscoped. Detect before we write, so the notice can name what was
+	// found; only remove on explicit opt-in.
+	pythonFound := detectPythonHooks(settings)
+	pythonRemoved := 0
+	if replacePython && len(pythonFound) > 0 {
+		pythonRemoved = prunePythonHooks(settings)
+	}
 
 	hooks, ok := settings["hooks"].(map[string]any)
 	if !ok {
@@ -880,6 +1016,12 @@ func installClaudeCodeHooks() error {
 		fmt.Printf("  Cleaned %d stale ogham hook entr%s from previous install.\n",
 			removed, plural(removed, "y", "ies"))
 	}
+	if pythonRemoved > 0 {
+		fmt.Printf("  Removed %d ogham-mcp (Python) hook entr%s (--replace-python).\n",
+			pythonRemoved, plural(pythonRemoved, "y", "ies"))
+	} else if msg := formatPythonHookWarning(pythonFound, path); msg != "" {
+		fmt.Fprint(os.Stderr, msg)
+	}
 	return nil
 }
 
@@ -895,8 +1037,23 @@ func uninstallClaudeCodeHooks() error {
 	}
 
 	removed := pruneOghamGoHooks(settings)
+
+	// #30: leaving without a word would imply hooks are gone. If a Python
+	// install is still wired up, say so -- otherwise the user concludes
+	// they have uninstalled ogham and keeps getting captures.
+	pythonLeft := detectPythonHooks(settings)
+
 	if removed == 0 {
-		fmt.Println("No ogham hook entries found in settings.json -- nothing to remove.")
+		fmt.Println("No Go ogham hook entries found in settings.json -- nothing to remove.")
+		if len(pythonLeft) > 0 {
+			fmt.Fprintf(os.Stderr,
+				"\nogham: %d ogham-mcp (Python) hook entr%s remain and are still active:\n",
+				len(pythonLeft), plural(len(pythonLeft), "y", "ies"))
+			for _, f := range pythonLeft {
+				fmt.Fprintf(os.Stderr, "    %-14s %s\n", f.Event, f.Command)
+			}
+			fmt.Fprintln(os.Stderr, "  Remove them by hand to stop capturing entirely.")
+		}
 		return nil
 	}
 

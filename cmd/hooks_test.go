@@ -389,3 +389,108 @@ func TestPostToolMatcherIsPropagatedEverywhere(t *testing.T) {
 		t.Errorf("hooks install would write a Bash-capturing matcher: %q", matcher)
 	}
 }
+
+// --- #30: coexistence with a Python ogham-mcp install -----------------
+//
+// oghamGoHookCommandRegex deliberately skips the Python two-token
+// `ogham hooks <verb>` form so install/uninstall never clobber another
+// tool's config (#7). The gap that produced #30 is that "don't delete
+// it" was implemented as "don't mention it": install appended its
+// entries beside the Python ones and said nothing, leaving both hooks
+// firing -- the Python one with matcher "" -- into the same store.
+
+func pythonHookSettings() map[string]any {
+	mk := func(cmd string) []any {
+		return []any{map[string]any{
+			"matcher": "",
+			"hooks":   []any{map[string]any{"type": "command", "command": cmd}},
+		}}
+	}
+	return map[string]any{"hooks": map[string]any{
+		"PostToolUse":  mk("/venv/bin/ogham hooks inscribe"),
+		"SessionStart": mk("/venv/bin/ogham hooks recall"),
+	}}
+}
+
+func TestDetectPythonHooksFindsTwoTokenForm(t *testing.T) {
+	found := detectPythonHooks(pythonHookSettings())
+	if len(found) != 2 {
+		t.Fatalf("detectPythonHooks found %d entries, want 2: %+v", len(found), found)
+	}
+	events := map[string]string{}
+	for _, f := range found {
+		events[f.Event] = f.Command
+	}
+	if got := events["PostToolUse"]; got != "/venv/bin/ogham hooks inscribe" {
+		t.Errorf("PostToolUse command = %q", got)
+	}
+	if got := events["SessionStart"]; got != "/venv/bin/ogham hooks recall" {
+		t.Errorf("SessionStart command = %q", got)
+	}
+}
+
+// TestDetectPythonHooksIgnoresGoAndUnrelated is the discrimination test:
+// the Go three-token form and unrelated hooks must not be reported as
+// Python, or install would warn about its own entries every run.
+func TestDetectPythonHooksIgnoresGoAndUnrelated(t *testing.T) {
+	settings := map[string]any{"hooks": map[string]any{
+		"PostToolUse": []any{
+			map[string]any{"matcher": "Write|Edit", "hooks": []any{
+				map[string]any{"type": "command", "command": "/usr/local/bin/ogham hooks run post-tool"}}},
+			map[string]any{"matcher": "", "hooks": []any{
+				map[string]any{"type": "command", "command": "echo hello"}}},
+		},
+		"Stop": []any{map[string]any{"hooks": []any{
+			map[string]any{"type": "command", "command": "/opt/other-tool hooks inscribe"}}}},
+	}}
+	if found := detectPythonHooks(settings); len(found) != 0 {
+		t.Errorf("detectPythonHooks reported %d false positives: %+v", len(found), found)
+	}
+}
+
+// TestPrunePythonHooksIsOptIn asserts the strip removes only Python
+// entries and leaves everything else -- it is destructive to another
+// tool's config, so it must be exact.
+func TestPrunePythonHooksIsOptIn(t *testing.T) {
+	settings := pythonHookSettings()
+	hooks := settings["hooks"].(map[string]any)
+	hooks["Stop"] = []any{map[string]any{"hooks": []any{
+		map[string]any{"type": "command", "command": "echo keep-me"}}}}
+
+	removed := prunePythonHooks(settings)
+	if removed != 2 {
+		t.Errorf("prunePythonHooks removed %d, want 2", removed)
+	}
+	if n := len(detectPythonHooks(settings)); n != 0 {
+		t.Errorf("%d Python entries survived the prune", n)
+	}
+	if _, ok := hooks["Stop"]; !ok {
+		t.Error("unrelated Stop hook was removed")
+	}
+}
+
+// TestFormatPythonHookWarningNamesEventsAndFile pins that the notice is
+// actionable: it must name each event, the offending command, and the
+// opt-in flag. A warning that says only "conflict detected" would leave
+// the user in the same place.
+func TestFormatPythonHookWarningNamesEventsAndFile(t *testing.T) {
+	msg := formatPythonHookWarning(detectPythonHooks(pythonHookSettings()), "/home/k/.claude/settings.json")
+	for _, want := range []string{
+		"PostToolUse", "SessionStart",
+		"/venv/bin/ogham hooks inscribe",
+		"/home/k/.claude/settings.json",
+		"--replace-python",
+	} {
+		if !strings.Contains(msg, want) {
+			t.Errorf("warning missing %q:\n%s", want, msg)
+		}
+	}
+}
+
+// TestFormatPythonHookWarningEmptyWhenClean guards against nagging a
+// user who has no Python install.
+func TestFormatPythonHookWarningEmptyWhenClean(t *testing.T) {
+	if msg := formatPythonHookWarning(nil, "/x"); msg != "" {
+		t.Errorf("expected no warning for a clean config, got:\n%s", msg)
+	}
+}
