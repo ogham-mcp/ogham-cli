@@ -6,6 +6,32 @@ repo](https://github.com/ogham-mcp/ogham-mcp).
 
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), loosely.
 
+## v0.12.1 (2026-08-10)
+
+### Fixed
+
+- **`install.sh` now verifies the download against the release's
+  `checksums.txt`** before extracting or installing. The release has
+  published checksums since v0.4.0 and the installer never checked
+  them -- while ad-hoc codesigning the binary and stripping
+  `com.apple.quarantine`, i.e. removing the OS integrity check without
+  substituting one of its own.
+
+  A mismatch aborts with expected-vs-actual and installs nothing.
+  Verification is fail-closed: no `shasum`/`sha256sum` on the box is an
+  error, not a silent skip. `--skip-checksum` is the explicit opt-out.
+
+  Worth knowing why "the archive extracted fine" was never sufficient:
+  `tar` exits 0 on a `.tar.gz` with garbage appended after the gzip
+  stream and yields a byte-identical payload. Extraction success does
+  not imply the bytes are the published ones.
+
+### Added
+
+- **`BASE_URL`** in `install.sh` for mirrors and air-gapped artifact
+  stores holding the same `<asset>` + `checksums.txt` layout. Defaults
+  to GitHub releases.
+
 ## v0.12.0 (2026-08-10)
 
 PostToolUse hook correctness. Six defects in the native post-tool path,
