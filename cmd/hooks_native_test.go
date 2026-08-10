@@ -9,25 +9,66 @@ import (
 	"testing"
 )
 
-// TestBuildPostToolContentBash covers the Bash branch -- target is
-// the command string itself; content includes the command + truncated
-// response.
+// TestBuildPostToolContentBash covers the Bash branch. Content is the
+// command and nothing else -- see
+// TestBuildPostToolContentBashNeverIncludesOutput for why.
 func TestBuildPostToolContentBash(t *testing.T) {
 	input := map[string]any{"command": "git commit -m 'fix'"}
-	content, target := buildPostToolContent("Bash", input, "[main abc1234] fix")
-	if !strings.Contains(content, "Bash: git commit") {
-		t.Errorf("content missing Bash prefix + command, got %q", content)
-	}
-	if !strings.Contains(content, "[main abc1234]") {
-		t.Errorf("content missing response, got %q", content)
+	content, target := buildPostToolContent("Bash", input, toolOutcome{Known: true, Failed: false})
+	if content != "Bash: git commit -m 'fix'" {
+		t.Errorf("content = %q, want the bare command", content)
 	}
 	if target != "git commit -m 'fix'" {
 		t.Errorf("target = %q, want full command", target)
 	}
 }
 
+// TestBuildPostToolContentBashNeverIncludesOutput is the regression
+// test for #26 finding 1. The previous implementation appended up to
+// 2000 chars of raw tool response to the memory. Storing command
+// output is the defect TBU-231 item 2 forbids: memories should carry
+// the command and a derived outcome, never the payload.
+func TestBuildPostToolContentBashNeverIncludesOutput(t *testing.T) {
+	input := map[string]any{"command": "cat /etc/hosts"}
+	for _, oc := range []toolOutcome{
+		{Known: true, Failed: false},
+		{Known: true, Failed: true},
+		{Known: false},
+	} {
+		content, _ := buildPostToolContent("Bash", input, oc)
+		if strings.Contains(content, "127.0.0.1") || strings.Contains(content, "stdout") {
+			t.Errorf("outcome %+v leaked output into content: %q", oc, content)
+		}
+		if !strings.Contains(content, "cat /etc/hosts") {
+			t.Errorf("outcome %+v lost the command: %q", oc, content)
+		}
+	}
+}
+
+// TestBuildPostToolContentBashMarksFailure covers #26 finding 3: the
+// derived outcome has to be visible in the memory, since the raw
+// output no longer is.
+func TestBuildPostToolContentBashMarksFailure(t *testing.T) {
+	input := map[string]any{"command": "go build ./..."}
+
+	failed, _ := buildPostToolContent("Bash", input, toolOutcome{Known: true, Failed: true})
+	if !strings.Contains(failed, "failed") {
+		t.Errorf("failed command not marked, got %q", failed)
+	}
+
+	ok, _ := buildPostToolContent("Bash", input, toolOutcome{Known: true, Failed: false})
+	if strings.Contains(ok, "failed") {
+		t.Errorf("successful command marked as failed, got %q", ok)
+	}
+
+	unknown, _ := buildPostToolContent("Bash", input, toolOutcome{Known: false})
+	if strings.Contains(unknown, "failed") {
+		t.Errorf("unknown outcome must not claim failure, got %q", unknown)
+	}
+}
+
 func TestBuildPostToolContentBashEmptyCommand(t *testing.T) {
-	content, target := buildPostToolContent("Bash", map[string]any{}, "")
+	content, target := buildPostToolContent("Bash", map[string]any{}, toolOutcome{})
 	if content != "" || target != "" {
 		t.Errorf("empty Bash should produce empty content/target, got %q/%q", content, target)
 	}
@@ -35,7 +76,7 @@ func TestBuildPostToolContentBashEmptyCommand(t *testing.T) {
 
 func TestBuildPostToolContentEdit(t *testing.T) {
 	input := map[string]any{"file_path": "/repo/foo.go"}
-	content, target := buildPostToolContent("Edit", input, "")
+	content, target := buildPostToolContent("Edit", input, toolOutcome{})
 	if !strings.HasPrefix(content, "Edit: ") {
 		t.Errorf("content = %q, want 'Edit: ...' prefix", content)
 	}
@@ -46,7 +87,7 @@ func TestBuildPostToolContentEdit(t *testing.T) {
 
 func TestBuildPostToolContentWrite(t *testing.T) {
 	input := map[string]any{"file_path": "/repo/new.go"}
-	content, target := buildPostToolContent("Write", input, "")
+	content, target := buildPostToolContent("Write", input, toolOutcome{})
 	if !strings.HasPrefix(content, "Write: ") {
 		t.Errorf("content = %q, want 'Write: ...' prefix", content)
 	}
@@ -56,47 +97,79 @@ func TestBuildPostToolContentWrite(t *testing.T) {
 }
 
 func TestBuildPostToolContentUnknownTool(t *testing.T) {
-	content, target := buildPostToolContent("Unknown", map[string]any{}, "")
+	content, target := buildPostToolContent("Unknown", map[string]any{}, toolOutcome{})
 	if content != "" || target != "" {
 		t.Errorf("unknown tool should produce empty content/target, got %q/%q", content, target)
 	}
 }
 
-// TestReadToolResponseTriesMultipleFieldNames documents the Claude
-// Code field-name drift across versions: tool_response, response,
-// tool_output, output. First non-empty wins.
-func TestReadToolResponseTriesMultipleFieldNames(t *testing.T) {
+// TestReadToolOutcomeReadsIsErrorFromObject covers #26 findings 2 + 3.
+// Claude Code sends a Bash tool_response as an object carrying
+// is_error; the previous readToolResponse type-asserted to string, so
+// the object fell through and no outcome was ever read.
+func TestReadToolOutcomeReadsIsErrorFromObject(t *testing.T) {
 	cases := []struct {
 		name  string
 		input map[string]any
-		want  string
+		want  toolOutcome
 	}{
-		{"tool_response", map[string]any{"tool_response": "A"}, "A"},
-		{"response", map[string]any{"response": "B"}, "B"},
-		{"tool_output", map[string]any{"tool_output": "C"}, "C"},
-		{"output", map[string]any{"output": "D"}, "D"},
-		{"none", map[string]any{}, ""},
 		{
-			"first wins",
-			map[string]any{"tool_response": "first", "response": "second"},
-			"first",
+			"failure",
+			map[string]any{"tool_response": map[string]any{
+				"stdout": "", "stderr": "boom", "is_error": true,
+			}},
+			toolOutcome{Known: true, Failed: true},
 		},
+		{
+			"success",
+			map[string]any{"tool_response": map[string]any{
+				"stdout": "ok", "stderr": "", "is_error": false,
+			}},
+			toolOutcome{Known: true, Failed: false},
+		},
+		{
+			"camelCase variant",
+			map[string]any{"tool_response": map[string]any{"isError": true}},
+			toolOutcome{Known: true, Failed: true},
+		},
+		{
+			"field-name drift: response",
+			map[string]any{"response": map[string]any{"is_error": true}},
+			toolOutcome{Known: true, Failed: true},
+		},
+		{
+			"object without is_error",
+			map[string]any{"tool_response": map[string]any{"stdout": "hi"}},
+			toolOutcome{Known: false},
+		},
+		{"absent", map[string]any{}, toolOutcome{Known: false}},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			got := readToolResponse(tc.input)
+			got := readToolOutcome(tc.input)
 			if got != tc.want {
-				t.Errorf("readToolResponse(%v) = %q, want %q", tc.input, got, tc.want)
+				t.Errorf("readToolOutcome(%v) = %+v, want %+v", tc.input, got, tc.want)
 			}
 		})
 	}
 }
 
-func TestReadToolResponseTruncates(t *testing.T) {
-	large := strings.Repeat("x", 3000)
-	out := readToolResponse(map[string]any{"tool_response": large})
-	if len(out) != 2000 {
-		t.Errorf("expected truncation to 2000 chars, got %d", len(out))
+// TestReadToolOutcomeNeverInfersFailureFromText is TBU-231 defect 2 in
+// regression form. The Python hook matched `\b\w*(?:Error|Exception)\b`
+// against the stringified response and hit the envelope's own
+// `is_error` field name, classifying every success as an error. Outcome
+// must come from a structured field or not at all -- never from
+// pattern-matching the payload.
+func TestReadToolOutcomeNeverInfersFailureFromText(t *testing.T) {
+	for _, text := range []string{
+		"{'stdout': '', 'stderr': '', 'is_error': False}",
+		"ValueError: something went wrong",
+		"error: pathspec 'nope' did not match",
+	} {
+		got := readToolOutcome(map[string]any{"tool_response": text})
+		if got.Known || got.Failed {
+			t.Errorf("string response %q produced %+v, want an unknown outcome", text, got)
+		}
 	}
 }
 
@@ -107,6 +180,7 @@ func TestReadToolResponseTruncates(t *testing.T) {
 func TestRunNativePostToolQueuesBashEvent(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("OGHAM_OUTBOX_DIR", tmp)
+	t.Setenv("OGHAM_DEDUPE_DIR", t.TempDir())
 
 	input := map[string]any{
 		"tool_name":  "Bash",
@@ -178,6 +252,7 @@ func TestRunNativePostToolQueuesBashEvent(t *testing.T) {
 func TestRunNativePostToolSkipsAlwaysSkipTool(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("OGHAM_OUTBOX_DIR", tmp)
+	t.Setenv("OGHAM_DEDUPE_DIR", t.TempDir())
 
 	input := map[string]any{
 		"tool_name":  "Read",
@@ -199,6 +274,7 @@ func TestRunNativePostToolSkipsAlwaysSkipTool(t *testing.T) {
 func TestRunNativePostToolMasksSecretsInBashCommand(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("OGHAM_OUTBOX_DIR", tmp)
+	t.Setenv("OGHAM_DEDUPE_DIR", t.TempDir())
 
 	input := map[string]any{
 		"tool_name":  "Bash",
@@ -220,5 +296,142 @@ func TestRunNativePostToolMasksSecretsInBashCommand(t *testing.T) {
 	}
 	if !strings.Contains(string(data), "MASKED") {
 		t.Errorf("no mask substitution applied: %s", data)
+	}
+}
+
+// --- End-to-end regressions for #26 findings 1-4 ---------------------
+
+// TestRunNativePostToolNeverQueuesRawOutput drives the whole path with
+// the object-shaped tool_response Claude Code actually sends for Bash,
+// and asserts no fragment of stdout or stderr reaches the outbox file.
+// Finding 1 was latent behind finding 2's type assertion; this covers
+// both, so teaching readToolOutcome to parse objects cannot re-arm it.
+func TestRunNativePostToolNeverQueuesRawOutput(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("OGHAM_OUTBOX_DIR", tmp)
+	t.Setenv("OGHAM_DEDUPE_DIR", t.TempDir())
+
+	input := map[string]any{
+		"tool_name":  "Bash",
+		"session_id": "session-raw",
+		"tool_input": map[string]any{"command": "cat /etc/hosts"},
+		"tool_response": map[string]any{
+			"stdout":   "127.0.0.1 localhost\nSUPER-SECRET-LINE\n",
+			"stderr":   "a warning on stderr",
+			"is_error": false,
+		},
+	}
+	if err := runNativePostTool(context.Background(), nil, input, "work"); err != nil {
+		t.Fatalf("runNativePostTool: %v", err)
+	}
+
+	files, _ := filepath.Glob(filepath.Join(tmp, "*.jsonl"))
+	if len(files) != 1 {
+		t.Fatalf("expected 1 queued file, got %d", len(files))
+	}
+	data, _ := os.ReadFile(files[0])
+	for _, leak := range []string{"127.0.0.1", "SUPER-SECRET-LINE", "a warning on stderr", "stdout"} {
+		if strings.Contains(string(data), leak) {
+			t.Errorf("raw output %q reached the outbox: %s", leak, data)
+		}
+	}
+	if !strings.Contains(string(data), "cat /etc/hosts") {
+		t.Errorf("command lost from queued record: %s", data)
+	}
+}
+
+// TestRunNativePostToolRecordsFailureOutcome covers finding 3
+// end-to-end: is_error must survive into the queued record, since the
+// output it was previously inferred from is gone.
+func TestRunNativePostToolRecordsFailureOutcome(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("OGHAM_OUTBOX_DIR", tmp)
+	t.Setenv("OGHAM_DEDUPE_DIR", t.TempDir())
+
+	input := map[string]any{
+		"tool_name":  "Bash",
+		"session_id": "session-fail",
+		"tool_input": map[string]any{"command": "go build ./..."},
+		"tool_response": map[string]any{
+			"stdout": "", "stderr": "undefined: foo", "is_error": true,
+		},
+	}
+	if err := runNativePostTool(context.Background(), nil, input, "work"); err != nil {
+		t.Fatalf("runNativePostTool: %v", err)
+	}
+	files, _ := filepath.Glob(filepath.Join(tmp, "*.jsonl"))
+	if len(files) != 1 {
+		t.Fatalf("expected 1 queued file, got %d", len(files))
+	}
+	data, _ := os.ReadFile(files[0])
+	var rec struct {
+		Content string   `json:"content"`
+		Tags    []string `json:"tags"`
+	}
+	if err := json.Unmarshal(data, &rec); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if strings.Contains(string(data), "undefined: foo") {
+		t.Errorf("stderr leaked into the record: %s", data)
+	}
+	if !strings.Contains(rec.Content, "failed") {
+		t.Errorf("content does not record the failure: %q", rec.Content)
+	}
+	hasOutcome := false
+	for _, tag := range rec.Tags {
+		if tag == "outcome:error" {
+			hasOutcome = true
+		}
+	}
+	if !hasOutcome {
+		t.Errorf("missing outcome:error tag, got %v", rec.Tags)
+	}
+}
+
+// TestRunNativePostToolDedupesAcrossProcesses is finding 4 at the hook
+// boundary. Each call models a separate `ogham hooks run post-tool`
+// process; only the first should queue a record.
+func TestRunNativePostToolDedupesAcrossProcesses(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("OGHAM_OUTBOX_DIR", tmp)
+	t.Setenv("OGHAM_DEDUPE_DIR", t.TempDir())
+
+	input := map[string]any{
+		"tool_name":  "Edit",
+		"session_id": "session-dupe",
+		"tool_input": map[string]any{"file_path": "/repo/MEMORY.md"},
+	}
+	for i := 0; i < 3; i++ {
+		if err := runNativePostTool(context.Background(), nil, input, "work"); err != nil {
+			t.Fatalf("call %d: %v", i, err)
+		}
+	}
+	files, _ := filepath.Glob(filepath.Join(tmp, "*.jsonl"))
+	if len(files) != 1 {
+		t.Errorf("expected 1 queued file after 3 identical events, got %d", len(files))
+	}
+}
+
+// TestRunNativePostToolDistinctTargetsBothQueue guards the dedupe wiring
+// against over-suppression -- different files in one session must both
+// be captured.
+func TestRunNativePostToolDistinctTargetsBothQueue(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("OGHAM_OUTBOX_DIR", tmp)
+	t.Setenv("OGHAM_DEDUPE_DIR", t.TempDir())
+
+	for _, path := range []string{"/repo/a.go", "/repo/b.go"} {
+		input := map[string]any{
+			"tool_name":  "Edit",
+			"session_id": "session-distinct",
+			"tool_input": map[string]any{"file_path": path},
+		}
+		if err := runNativePostTool(context.Background(), nil, input, "work"); err != nil {
+			t.Fatalf("%s: %v", path, err)
+		}
+	}
+	files, _ := filepath.Glob(filepath.Join(tmp, "*.jsonl"))
+	if len(files) != 2 {
+		t.Errorf("expected 2 queued files for 2 distinct targets, got %d", len(files))
 	}
 }

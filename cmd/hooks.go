@@ -382,19 +382,28 @@ func runNativePostTool(ctx context.Context, _ *native.Config, input map[string]a
 	toolInput, _ := input["tool_input"].(map[string]any)
 	cwd := getField(input, "cwd", "")
 	sessionID := getField(input, "session_id", "")
-	toolResponse := readToolResponse(input)
+	outcome := readToolOutcome(input)
 
-	content, target := buildPostToolContent(toolName, toolInput, toolResponse)
+	content, target := buildPostToolContent(toolName, toolInput, outcome)
 	if content == "" {
 		return nil
 	}
 	content = filters.MaskSecrets(content)
 
-	if filters.DefaultDeduper.IsDuplicate(sessionID, toolName, target) {
-		return nil
+	// Dedup state has to live on disk: this process handles exactly one
+	// hook event and then exits (#26 finding 4). A failure to resolve
+	// the directory is not fatal -- capture the event rather than drop
+	// it.
+	if dedupeDir, dirErr := filters.DefaultDedupeDir(); dirErr == nil {
+		if filters.NewDeduperAt(dedupeDir, time.Now).IsDuplicate(sessionID, toolName, target) {
+			return nil
+		}
 	}
 
 	tags := []string{"type:action", "tool:" + toolName}
+	if outcome.Known && outcome.Failed {
+		tags = append(tags, "outcome:error")
+	}
 	if sessionID != "" {
 		tags = append(tags, "session:"+sessionID)
 	}
@@ -463,43 +472,80 @@ func drainOutbox(ctx context.Context, cfg *native.Config, profile string) error 
 	return err
 }
 
-// readToolResponse pulls the tool-output text out of the hook input,
-// trying the various field names Claude Code has used over time.
-// Mirrors the equivalent dispatch in src/ogham/hooks.py post_tool.
-// Truncated to 2000 chars to match the Python truncation cap.
-func readToolResponse(input map[string]any) string {
+// toolOutcome is everything we derive from a tool's response: did it
+// fail, and do we know. Deliberately not the response text -- see
+// readToolOutcome.
+type toolOutcome struct {
+	// Known is false when the payload carried no structured outcome
+	// field. Callers must not treat that as success or as failure.
+	Known bool
+	// Failed mirrors the payload's is_error. Meaningless unless Known.
+	Failed bool
+}
+
+// readToolOutcome derives the outcome of a tool call from the hook
+// input, trying the field names Claude Code has used over time.
+//
+// Two rules, both learned from TBU-231:
+//
+//  1. Outcome comes from the response, never the request. The Python
+//     hook read `tool_input.get("exit_code")`, but a Bash tool_input is
+//     {command, description, timeout} -- there is no exit code in it,
+//     so its success guard was inert and every command looked like a
+//     failure.
+//  2. Outcome comes from a structured field or not at all. Python
+//     stringified the response and pattern-matched
+//     `\b\w*(?:Error|Exception)\b` over it, which matched the
+//     envelope's own `is_error` key and classified every success as an
+//     error. A string response therefore yields Known=false here --
+//     an unknown outcome, not a guessed one.
+//
+// The response body is read for is_error and then discarded. It is
+// never returned, so it cannot reach memory content (#26 finding 1).
+func readToolOutcome(input map[string]any) toolOutcome {
 	for _, k := range []string{"tool_response", "response", "tool_output", "output"} {
-		if v, ok := input[k]; ok {
-			if s, ok := v.(string); ok {
-				return truncateResponse(s, 2000)
+		v, ok := input[k]
+		if !ok {
+			continue
+		}
+		obj, ok := v.(map[string]any)
+		if !ok {
+			// String / scalar response: no structured outcome to read,
+			// and we will not infer one from its text.
+			continue
+		}
+		for _, field := range []string{"is_error", "isError"} {
+			if b, ok := obj[field].(bool); ok {
+				return toolOutcome{Known: true, Failed: b}
 			}
 		}
 	}
-	return ""
-}
-
-func truncateResponse(s string, max int) string {
-	if len(s) <= max {
-		return s
-	}
-	return s[:max]
+	return toolOutcome{}
 }
 
 // buildPostToolContent produces a short, human-readable memory string
-// + a dedup target for one PostToolUse event. The shape mirrors what
-// Python's _extract_memory_content emits today, but the v0.9 port is
-// deliberately minimal -- richer extraction (diff summarisation,
-// gh-action classification, etc.) lands incrementally in v0.10+.
-func buildPostToolContent(toolName string, toolInput map[string]any, toolResponse string) (content, target string) {
+// + a dedup target for one PostToolUse event.
+//
+// Content is the command or path plus a derived outcome, and never the
+// tool's output. The v0.9 shape appended up to 2000 chars of raw
+// response to Bash memories, which is the Go instance of TBU-231's
+// "store the command, not the payload" (#26 finding 1). Output is
+// high-volume, near-zero-recall, and the most likely place for
+// secrets to survive masking.
+//
+// Richer extraction (diff summarisation, gh-action classification)
+// remains unported.
+func buildPostToolContent(toolName string, toolInput map[string]any, outcome toolOutcome) (content, target string) {
 	switch toolName {
 	case "Bash":
 		cmd := getField(toolInput, "command", "")
 		if cmd == "" {
 			return "", ""
 		}
-		content = "Bash: " + cmd
-		if toolResponse != "" {
-			content += "\n" + toolResponse
+		if outcome.Known && outcome.Failed {
+			content = "Bash (failed): " + cmd
+		} else {
+			content = "Bash: " + cmd
 		}
 		target = cmd
 	case "Edit":
