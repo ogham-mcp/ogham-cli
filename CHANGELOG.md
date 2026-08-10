@@ -6,12 +6,12 @@ repo](https://github.com/ogham-mcp/ogham-mcp).
 
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), loosely.
 
-## Unreleased
+## v0.12.0 (2026-08-10)
 
-PostToolUse hook correctness. Five defects in the native post-tool path,
+PostToolUse hook correctness. Six defects in the native post-tool path,
 found by auditing it against the Python hook's root cause (upstream
 TBU-231 / TBU-206 / TBU-232), plus a scope change to what gets captured
-by default. Tracked as #26.
+by default. Tracked as #26 and #30.
 
 ### Changed
 
@@ -59,6 +59,15 @@ by default. Tracked as #26.
   are unaffected. Python parity on the entities corpus drops from 96.9%
   to 89.7% against a 75% floor; all 16 newly-dropped tags are junk and no
   real name in the corpus is lost.
+
+- **`hooks install` now reports a Python `ogham-mcp` installation in the
+  same `settings.json`** instead of silently appending beside it. Both
+  sets fire on every event and write to the same store, and the Python
+  `PostToolUse` entry is unscoped (`matcher: ""`), so it re-introduces
+  the noise the scoping above removes. New `--replace-python` flag
+  removes the Python entries as part of the install. `hooks uninstall`
+  likewise now reports Python entries left behind, rather than printing
+  "nothing to remove" while captures continue.
 
 ### Notes
 
