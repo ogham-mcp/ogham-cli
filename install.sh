@@ -6,28 +6,38 @@
 #   curl -sSL https://raw.githubusercontent.com/ogham-mcp/ogham-cli/main/install.sh | bash
 #   curl -sSL https://raw.githubusercontent.com/ogham-mcp/ogham-cli/main/install.sh | bash -s -- --version v0.7.0
 #   INSTALL_DIR=/usr/local/bin curl -sSL https://.../install.sh | bash
+#   BASE_URL=https://mirror.example/ogham/v0.12.0 bash install.sh
 #
 # What it does:
 #   1. Detects platform (darwin / linux / windows) and arch (amd64 / arm64)
 #   2. Downloads the matching release tarball/zip from GitHub
-#   3. Extracts the binary into $INSTALL_DIR (default ~/.local/bin)
-#   4. On macOS: ad-hoc codesigns + removes com.apple.quarantine so Gatekeeper
+#   3. Verifies its SHA-256 against the release's checksums.txt
+#   4. Extracts the binary into $INSTALL_DIR (default ~/.local/bin)
+#   5. On macOS: ad-hoc codesigns + removes com.apple.quarantine so Gatekeeper
 #      stops blocking the unnotarized binary
-#   5. Prints `ogham --version` so the install is self-verifying
+#   6. Prints `ogham --version` so the install is self-verifying
 #
 # No `gh` CLI required -- uses plain curl against github.com release assets.
 
 set -euo pipefail
 
 REPO="ogham-mcp/ogham-cli"
+# BASE_URL lets an operator point the installer at a mirror or an
+# air-gapped artifact store holding the same asset + checksums.txt
+# layout. Defaults to GitHub releases. Also what the negative-path
+# checksum test drives against a local file:// tree.
+BASE_URL="${BASE_URL:-}"
 INSTALL_DIR="${INSTALL_DIR:-$HOME/.local/bin}"
 VERSION="${VERSION:-latest}"
 FORCE="${FORCE:-0}"
+SKIP_CHECKSUM="${SKIP_CHECKSUM:-0}"
 
 # --version <tag> overrides the default of "latest". Useful for pinning a
 # specific release in CI or when you need to roll back.
 # --force overrides the PATH-collision check (see below) so an upgrade
 # over an existing install always proceeds without a prompt.
+# --skip-checksum bypasses SHA-256 verification. Escape hatch for an
+# environment with no sha256 tool; not something to reach for casually.
 while [ $# -gt 0 ]; do
   case "$1" in
     --version)
@@ -50,8 +60,12 @@ while [ $# -gt 0 ]; do
       FORCE=1
       shift
       ;;
+    --skip-checksum)
+      SKIP_CHECKSUM=1
+      shift
+      ;;
     -h|--help)
-      sed -n '2,18p' "$0"
+      sed -n '2,20p' "$0"
       exit 0
       ;;
     *)
@@ -112,11 +126,17 @@ fi
 
 # GitHub redirects /releases/latest/download/<asset> to the actual latest
 # tag's asset. For pinned versions the path is /releases/download/<tag>/<asset>.
-if [ "$VERSION" = "latest" ]; then
+if [ -n "$BASE_URL" ]; then
+  DOWNLOAD_URL="${BASE_URL%/}/${ASSET_NAME}"
+  CHECKSUM_URL="${BASE_URL%/}/checksums.txt"
+  TAG_LABEL="${VERSION} (from ${BASE_URL})"
+elif [ "$VERSION" = "latest" ]; then
   DOWNLOAD_URL="https://github.com/${REPO}/releases/latest/download/${ASSET_NAME}"
+  CHECKSUM_URL="https://github.com/${REPO}/releases/latest/download/checksums.txt"
   TAG_LABEL="latest"
 else
   DOWNLOAD_URL="https://github.com/${REPO}/releases/download/${VERSION}/${ASSET_NAME}"
+  CHECKSUM_URL="https://github.com/${REPO}/releases/download/${VERSION}/checksums.txt"
   TAG_LABEL="$VERSION"
 fi
 
@@ -135,6 +155,50 @@ echo "==> Downloading ${ASSET_NAME}..."
 # -L follows redirects, -f makes curl exit non-zero on HTTP errors so a
 # 404 doesn't silently produce a broken tarball.
 curl -fsSL -o "${TMPDIR}/${ASSET_NAME}" "$DOWNLOAD_URL"
+
+# Verify the download against the release's published checksums.txt
+# BEFORE extracting or installing. This script ad-hoc codesigns the
+# binary and strips com.apple.quarantine on macOS -- it removes the OS
+# safety net, so it owes the user an integrity check of its own.
+#
+# GoReleaser publishes checksums.txt next to the archives, listing
+# "<sha256>  <asset-name>" per line. We grep our line out and hand it to
+# the platform's checker with cwd set to TMPDIR, since the manifest
+# names files without a path.
+if [ "$SKIP_CHECKSUM" = "1" ]; then
+  echo "==> Skipping checksum verification (--skip-checksum)."
+else
+  if command -v shasum >/dev/null 2>&1; then
+    SHA_CMD="shasum -a 256"
+  elif command -v sha256sum >/dev/null 2>&1; then
+    SHA_CMD="sha256sum"
+  else
+    echo "No sha256 tool found (looked for shasum, sha256sum)." >&2
+    echo "Install one, or re-run with --skip-checksum to bypass verification." >&2
+    exit 1
+  fi
+
+  echo "==> Verifying checksum..."
+  if ! curl -fsSL -o "${TMPDIR}/checksums.txt" "$CHECKSUM_URL"; then
+    echo "Could not download checksums.txt from ${CHECKSUM_URL}." >&2
+    echo "Re-run with --skip-checksum to install without verification." >&2
+    exit 1
+  fi
+
+  if ! grep -F "  ${ASSET_NAME}" "${TMPDIR}/checksums.txt" > "${TMPDIR}/expected.sha256"; then
+    echo "checksums.txt has no entry for ${ASSET_NAME}." >&2
+    exit 1
+  fi
+
+  if ! ( cd "$TMPDIR" && $SHA_CMD -c expected.sha256 >/dev/null 2>&1 ); then
+    echo "CHECKSUM MISMATCH for ${ASSET_NAME}." >&2
+    echo "  expected: $(cut -d' ' -f1 < "${TMPDIR}/expected.sha256")" >&2
+    echo "  actual:   $(cd "$TMPDIR" && $SHA_CMD "$ASSET_NAME" | cut -d' ' -f1)" >&2
+    echo "The download does not match the published release. Not installing." >&2
+    exit 1
+  fi
+  echo "    OK ($(cut -d' ' -f1 < "${TMPDIR}/expected.sha256" | cut -c1-16)...)"
+fi
 
 echo "==> Extracting..."
 if [ "$OS" = "windows" ]; then
