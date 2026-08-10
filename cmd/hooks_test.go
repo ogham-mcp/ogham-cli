@@ -345,3 +345,47 @@ func TestNoticePostToolUnconfiguredOnceHandlesEmptyMarker(t *testing.T) {
 		t.Error("notice should still write to writer when marker path is empty")
 	}
 }
+
+// TestDefaultPostToolMatcherExcludesBash pins the scope decision, not
+// just the constant. Every other matcher assertion in this package
+// compares against defaultPostToolMatcher itself, so all of them would
+// keep passing if the value silently regained Bash.
+//
+// Bash was dropped from the default in #26 step 3, on measurement
+// rather than taste. On the reference store, hook:post-tool was 9,580
+// of 11,957 rows (80%) with tool:Bash the dominant tag, and only 104
+// rows -- 1.1% -- had ever been recalled; sampling those showed raw
+// stdout captures rather than anything worth keeping. Write and Edit
+// carry a durable target (a file path) and stay.
+//
+// Re-adding Bash means re-running that measurement, not editing this
+// test.
+func TestDefaultPostToolMatcherExcludesBash(t *testing.T) {
+	if strings.Contains(defaultPostToolMatcher, "Bash") {
+		t.Errorf("defaultPostToolMatcher = %q; Bash must not be captured by default (#26 step 3)",
+			defaultPostToolMatcher)
+	}
+	for _, want := range []string{"Write", "Edit"} {
+		if !strings.Contains(defaultPostToolMatcher, want) {
+			t.Errorf("defaultPostToolMatcher = %q; missing %q -- write-class tools must still be captured",
+				defaultPostToolMatcher, want)
+		}
+	}
+	if defaultPostToolMatcher == "" {
+		t.Error("empty matcher fires on every tool call (pre-v0.8 noise)")
+	}
+}
+
+// TestPostToolMatcherIsPropagatedEverywhere guards the two emitters
+// that write a matcher into a user's config -- `hooks install` and the
+// Claude Code plugin manifest -- against drifting apart.
+func TestPostToolMatcherIsPropagatedEverywhere(t *testing.T) {
+	hooks := buildOghamHookSet("", "/usr/local/bin/ogham")
+	pt, ok := hooks["PostToolUse"]
+	if !ok {
+		t.Fatal("PostToolUse missing from hook set")
+	}
+	if matcher, _ := pt["matcher"].(string); strings.Contains(matcher, "Bash") {
+		t.Errorf("hooks install would write a Bash-capturing matcher: %q", matcher)
+	}
+}

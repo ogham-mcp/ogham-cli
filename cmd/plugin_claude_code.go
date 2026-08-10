@@ -27,7 +27,7 @@ const claudePluginRoot = "${CLAUDE_PLUGIN_ROOT}"
 type claudeCodeHookEvent struct {
 	Event   string // SessionStart / PostToolUse / PreCompact / PostCompact
 	Verb    string // session-start / post-tool / inscribe / recall
-	Matcher string // "" / "Write|Edit|Bash" / "manual|auto"
+	Matcher string // "" / "Write|Edit" / "manual|auto"
 }
 
 // claudeCodeHookEvents returns the ordered hook events the scaffold
@@ -36,7 +36,7 @@ type claudeCodeHookEvent struct {
 //
 // Matcher choices:
 //   - SessionStart "": fires on every session start (only signal).
-//   - PostToolUse "Write|Edit|Bash": only write-class tools reach the
+//   - PostToolUse "Write|Edit": only write-class tools reach the
 //     gateway, matching the #10 scoped-matcher decision.
 //   - PreCompact / PostCompact "manual|auto": Claude Code distinguishes
 //     manual `/compact` invocations from automatic ones. Using both

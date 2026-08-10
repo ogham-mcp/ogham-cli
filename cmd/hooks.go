@@ -26,12 +26,27 @@ import (
 // session-context build. Mirrors the council perf-seat 30s figure.
 const drainDeadline = 30 * time.Second
 
-// defaultPostToolMatcher scopes PostToolUse to write-class tools so the
-// gateway post-tool hook fires only on calls that produce content worth
-// capturing (Write / Edit / Bash). Pre-v0.8 the matcher was "" which fires
-// on every tool call -- read-class tools (Read, Grep, Glob) produce noise
-// the gateway's smart filter then discards anyway. See #10.
-const defaultPostToolMatcher = "Write|Edit|Bash"
+// defaultPostToolMatcher scopes PostToolUse to write-class tools, so the
+// hook fires only on calls that produce content worth capturing.
+//
+// Pre-v0.8 the matcher was "", which fires on every tool call -- read-class
+// tools (Read, Grep, Glob) produce noise the filter then discards anyway.
+// See #10.
+//
+// Bash was dropped in #26 step 3, on measurement rather than taste. On the
+// reference store, hook:post-tool was 9,580 of 11,957 rows (80%) with
+// tool:Bash the dominant tag at 7,819, and only 104 of those rows -- 1.1%
+// -- had ever been recalled. Sampling the recalled ones showed raw stdout
+// captures, not anything worth keeping: a nonzero access_count means the
+// row matched a similarity query, not that it was useful.
+//
+// Write and Edit stay because they carry a durable target. "Edit:
+// /repo/foo.go" is a fact about the project that stays true and is worth
+// recalling; "Bash: cd x && ls" is a keystroke.
+//
+// TestDefaultPostToolMatcherExcludesBash pins this. Re-adding Bash means
+// re-running the measurement, not editing the test.
+const defaultPostToolMatcher = "Write|Edit"
 
 // oghamGoHookCommandRegex matches hook commands owned by THIS Go binary.
 // The verb shape `hooks run <verb>` distinguishes the Go CLI's three-token
@@ -102,7 +117,7 @@ func oghamHookCommandFor(binPath, verb string) string {
 // fixtures but no longer affects the output.
 //
 // PostToolUse uses defaultPostToolMatcher rather than "" so the hook
-// only fires on write-class tools (Write / Edit / Bash).
+// only fires on write-class tools (Write / Edit).
 //
 // #11: PreCompact -> inscribe is NOT in the default scaffold from v0.8
 // onwards. The legacy native inscribe writes a metadata-only stub on
