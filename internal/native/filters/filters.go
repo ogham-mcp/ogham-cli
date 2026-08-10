@@ -3,10 +3,12 @@
 // natively in Go before they reach the memory store. Replaces the
 // Railway-shutdown-stranded gateway pass-through path.
 //
-// All three primitives are pure (or close to it): Classify and
-// MaskSecrets take input + return output with no side effects;
-// IsDuplicate is a method on a Deduper struct so tests can inject
-// their own clock + state.
+// Classify and MaskSecrets are pure: input in, output out, no side
+// effects. IsDuplicate is not -- it reads and writes marker files
+// under a directory the caller supplies, because the hook runs as a
+// fresh process per tool call and in-process state cannot survive
+// that (#26 finding 4). It is a method on a Deduper so tests can
+// inject their own clock and directory.
 //
 // Regex patterns are compiled once at package init from the
 // hooks_config.yaml embedded by internal/native/shared. A

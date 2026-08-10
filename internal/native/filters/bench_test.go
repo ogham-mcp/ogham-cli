@@ -3,6 +3,7 @@ package filters
 import (
 	"strings"
 	"testing"
+	"time"
 )
 
 // BenchmarkClassify -- target: O(1), backed by map lookup. Should
@@ -45,9 +46,13 @@ func BenchmarkMaskSecretsLongInput(b *testing.B) {
 	}
 }
 
-// BenchmarkIsDuplicateNew -- first-hit path (mostly map insert).
+// BenchmarkIsDuplicateNew -- first-hit path. Since #26 finding 4 this
+// is a marker-file create plus a prune sweep, not a map insert, so the
+// number is I/O-bound and much larger than the old in-memory figure.
+// It is still the cold path: one create per distinct (session, tool,
+// target), against a directory bounded by PruneThreshold.
 func BenchmarkIsDuplicateNew(b *testing.B) {
-	d := NewDeduper()
+	d := NewDeduperAt(b.TempDir(), time.Now)
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		_ = d.IsDuplicate("session", "Bash", string(rune(i%1024)))
