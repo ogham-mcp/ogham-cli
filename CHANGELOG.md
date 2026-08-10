@@ -6,6 +6,66 @@ repo](https://github.com/ogham-mcp/ogham-mcp).
 
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), loosely.
 
+## Unreleased
+
+PostToolUse hook correctness. Five defects in the native post-tool path,
+found by auditing it against the Python hook's root cause (upstream
+TBU-231 / TBU-206 / TBU-232), plus a scope change to what gets captured
+by default. Tracked as #26.
+
+### Changed
+
+- **BREAKING (capture scope): `hooks install` no longer captures Bash.**
+  `defaultPostToolMatcher` is now `Write|Edit`, was `Write|Edit|Bash`.
+  Decided on measurement: on the reference store, `hook:post-tool` was
+  9,580 of 11,957 memories (80%) with `tool:Bash` the dominant tag at
+  7,819, and only 104 of those rows -- 1.1% -- had ever been recalled.
+  Sampling the recalled ones showed raw stdout captures rather than
+  anything worth keeping. Write and Edit carry a durable target (a file
+  path) and are unaffected.
+
+  Existing installs keep their current matcher until they re-run
+  `ogham hooks install`, or edit `settings.json` by hand.
+
+- **PostToolUse memories no longer contain tool output.** Content is now
+  the command or path plus a derived outcome. Bash memories previously
+  appended up to 2000 chars of raw response.
+
+- **Failed commands are recorded as such** -- `Bash (failed): <cmd>` plus
+  an `outcome:error` tag, read from the response's `is_error`. Nothing
+  previously read an outcome at all, so a failing command was
+  indistinguishable from a successful one.
+
+### Fixed
+
+- **Duplicate suppression now works.** `filters.Deduper` kept state in a
+  process-global map, but the hook runs as a fresh process per tool call,
+  so the map was always empty and no duplicate was ever suppressed. State
+  moved to on-disk markers under `OGHAM_DEDUPE_DIR` (default
+  `<cache>/ogham/dedupe`), claimed with `O_CREATE|O_EXCL` so the check is
+  atomic across processes.
+
+- **Outcome is read from the response, not the request, and only from a
+  structured field.** A string-shaped response now yields an unknown
+  outcome rather than a guessed one, so the upstream failure mode -- a
+  regex matching the payload envelope's own `is_error` key and marking
+  every success as an error -- cannot occur here.
+
+- **Junk `person:` entity tags.** `hasContextWordBefore` had been
+  implemented and tested since v0.7 but was never called, so any
+  capitalised bigram became a person -- `person:SECURITY DEFINER`,
+  `person:Native PostToolUse`. `addPersonNames` now requires a licensing
+  context word for bigrams that are not plain Titlecase. Ordinary names
+  are unaffected. Python parity on the entities corpus drops from 96.9%
+  to 89.7% against a 75% floor; all 16 newly-dropped tags are junk and no
+  real name in the corpus is lost.
+
+### Notes
+
+- This stops the generator; it does not clean up rows already stored.
+- Whether `Write`/`Edit` capture earns its keep is still unmeasured --
+  the Bash decision above is the template for revisiting it.
+
 ## v0.11.0 (2026-07-03)
 
 Native typed-edge context graph verbs. `ogham triple` and `ogham join`
