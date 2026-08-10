@@ -36,8 +36,9 @@ const filePathCap = 5
 
 // personContextWindow is the number of tokens before a candidate bigram
 // the classifier scans for a licensing context word ("by", "from", ...).
-// Required only when the multi-lang stopword filter lets a suspicious
-// bigram through and a language's denylist hasn't been populated yet.
+// Required by rule 4 of addPersonNames whenever a bigram is not plain
+// Titlecase -- the case the multi-lang stopword filter lets through and
+// a language's denylist hasn't been populated for.
 const personContextWindow = 3
 
 // Regexes mirror src/ogham/extraction.py:
@@ -246,10 +247,25 @@ func personGateFor(lang string) *personGate {
 //  3. Denylist: reject known tech-term bigrams from the language's
 //     person_name_denylist (Docker, Postgres, Next, CLI, MCP, ...).
 //     Handles both unigram and joined-bigram forms.
+//  4. Context gate: a bigram is accepted unconditionally only when both
+//     tokens are Titlecase. If either carries interior uppercase --
+//     ALL-CAPS ("SECURITY DEFINER") or CamelCase ("Native PostToolUse",
+//     "VoyageEmbedder MistralEmbedder") -- it additionally needs a
+//     licensing context word within personContextWindow preceding
+//     tokens. See hasContextWordBefore.
 //
-// Matches Python extract_entities() within the corpus the multilang
-// stopwords covers. Where Python emits a false positive (Mistral Day,
-// Clerk Organizations) we mirror the emission -- parity wins.
+// Rules 1-3 match Python extract_entities() within the corpus the
+// multilang stopwords covers. Rule 4 is a deliberate Go-side
+// divergence: it is the contextual-cue mitigation TBU-232 asks for,
+// wired in ahead of the Python change (ogham-cli#26 finding 5).
+//
+// Effect on the parity corpus: entities shared-subset exact-match falls
+// from 96.9% to 89.7% against a 75% floor. All 16 newly-dropped tags
+// are junk -- class names, error types and product pairs such as
+// person:EmbeddingCache EmbeddingCache, person:ValueError Embedding and
+// person:Mistral Day. No real name in the corpus is lost. When Python
+// lands the equivalent gate, regenerate testdata/parity/parity.json and
+// the rate should climb back.
 func addPersonNames(content, lang string, out map[string]struct{}) {
 	gate := personGateFor(lang)
 	words := strings.Fields(content)
@@ -282,6 +298,13 @@ func addPersonNames(content, lang string, out map[string]struct{}) {
 		}
 		if _, bad := gate.Denylist[l1+" "+l2]; bad {
 			continue
+		}
+
+		// Rule 4: context gate for non-Titlecase bigrams.
+		if !isTitlecaseNameToken(w1) || !isTitlecaseNameToken(w2) {
+			if !hasContextWordBefore(words, i, gate.ContextWords) {
+				continue
+			}
 		}
 
 		out["person:"+w1+" "+w2] = struct{}{}
@@ -331,11 +354,32 @@ func firstLetterAfter(w string, i int) bool {
 	return false
 }
 
+// isTitlecaseNameToken reports whether w has the shape a person-name
+// token actually takes: uppercase initial, no interior uppercase.
+// "Kevin" and "Tanaka" qualify; "SECURITY", "PostToolUse" and "FastMCP"
+// do not. Used by rule 4 to decide which bigrams need a licensing
+// context word. Assumes isLikelyPersonNamePart already passed, so the
+// token is non-empty and all letters.
+func isTitlecaseNameToken(w string) bool {
+	runes := []rune(w)
+	if len(runes) == 0 {
+		return false
+	}
+	if !unicode.IsUpper(runes[0]) {
+		return false
+	}
+	for _, r := range runes[1:] {
+		if unicode.IsUpper(r) {
+			return false
+		}
+	}
+	return true
+}
+
 // hasContextWordBefore walks the personContextWindow tokens preceding
-// idx and reports whether any is a context word in contextSet. Kept
-// available for callers that want a stricter gate than the main
-// classifier -- e.g. the Python-parity tight mode -- even though the
-// default flow no longer requires context.
+// idx and reports whether any is a context word in contextSet. Rule 4
+// of addPersonNames calls this for bigrams that aren't plain Titlecase;
+// it is also reachable directly by callers wanting a stricter gate.
 func hasContextWordBefore(words []string, idx int, contextSet map[string]struct{}) bool {
 	start := idx - personContextWindow
 	if start < 0 {
