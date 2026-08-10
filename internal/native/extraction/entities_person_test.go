@@ -199,9 +199,63 @@ func TestPersonTightening_NonEnglishLocaleMixesEnglishContext(t *testing.T) {
 	}
 }
 
-// TestHasContextWordBefore_Direct exercises the helper explicitly --
-// it's still reachable for strict-mode callers even though the default
-// classifier stopped depending on it.
+// --- Rule 4: context gate for non-Titlecase bigrams (TBU-232) --------
+//
+// A real person-name token is Titlecase: uppercase initial, no interior
+// uppercase. ALL-CAPS ("SECURITY DEFINER") and CamelCase
+// ("Native PostToolUse") bigrams pass rules 1-3 whenever the denylist
+// hasn't been populated for those specific terms, which is how
+// person:SECURITY DEFINER reached the entity graph. Those now require a
+// context word within personContextWindow tokens; Titlecase pairs do
+// not, so "Kevin Burns, Owen Fletcher and Luis Ramirez agreed." is
+// unaffected.
+
+// TestPersonContextGate_RejectsAllCapsBigramWithoutContext pins the
+// headline TBU-232 repro: an all-caps technical bigram with no
+// licensing cue must not become a person.
+func TestPersonContextGate_RejectsAllCapsBigramWithoutContext(t *testing.T) {
+	content := "Migration 037 revokes EXECUTE on SECURITY DEFINER functions"
+	got := Entities(content)
+	for _, g := range got {
+		if g == "person:SECURITY DEFINER" {
+			t.Errorf("unexpected person:SECURITY DEFINER in %v", got)
+		}
+	}
+}
+
+// TestPersonContextGate_RejectsCamelCaseBigramWithoutContext covers the
+// hook-captured command strings that produced person:Native PostToolUse
+// and person:PostToolUse Defects (ogham-cli#26 finding 5).
+func TestPersonContextGate_RejectsCamelCaseBigramWithoutContext(t *testing.T) {
+	content := "Bash: gh issue create --title Native PostToolUse Defects"
+	got := Entities(content)
+	for _, g := range got {
+		if strings.HasPrefix(g, "person:") {
+			t.Errorf("unexpected person tag %q in %v", g, got)
+		}
+	}
+}
+
+// TestPersonContextGate_AcceptsNonTitlecaseNameWithContext asserts the
+// gate is a context requirement, not an outright ban: a real name with
+// interior capitals still tags when a cue word precedes it.
+func TestPersonContextGate_AcceptsNonTitlecaseNameWithContext(t *testing.T) {
+	content := "The migration was reviewed by DeShawn McArthur last week."
+	got := Entities(content)
+	found := false
+	for _, g := range got {
+		if g == "person:DeShawn McArthur" {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("expected person:DeShawn McArthur in %v", got)
+	}
+}
+
+// TestHasContextWordBefore_Direct exercises the helper explicitly, at
+// the unit level. Rule 4 of addPersonNames is its production caller;
+// these cases pin the window arithmetic independently of that path.
 func TestHasContextWordBefore_Direct(t *testing.T) {
 	ctx := map[string]struct{}{
 		"by":   {},
