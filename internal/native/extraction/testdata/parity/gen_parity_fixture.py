@@ -33,7 +33,7 @@ from __future__ import annotations
 import json
 import os
 import sys
-from datetime import datetime
+from datetime import datetime, timedelta
 
 # Allow running from ogham-cli without installing ogham-mcp: prepend the
 # sibling sharedmemory repo's src/ to sys.path.
@@ -44,11 +44,57 @@ _OGHAM_SRC = os.path.abspath(
 if os.path.isdir(_OGHAM_SRC) and _OGHAM_SRC not in sys.path:
     sys.path.insert(0, _OGHAM_SRC)
 
+import ogham.extraction as _ogham_extraction  # noqa: E402
 from ogham.extraction import (  # noqa: E402
     compute_importance,
     extract_dates,
     extract_entities,
 )
+
+def _pin_relative_date_clock(reference: "datetime") -> None:
+    """Make relative-date extraction resolve against `reference`, not today.
+
+    Python's `extract_dates(content)` takes no reference date -- it resolves
+    "yesterday" / "next Tuesday" through a module-level parsedatetime
+    Calendar that defaults to the real clock. The Go side, by contrast,
+    takes one explicitly (`DatesAtForLang(content, ref, lang)`) and resolves
+    against the fixture's `reference_date`.
+
+    So before this pin, the fixture's `reference_date` field was a claim
+    rather than a constraint: it recorded 2026-04-21 while the dates beside
+    it were resolved against whatever day the generator happened to run.
+    That only looked correct on 2026-04-21 itself, and it is why this
+    fixture was never regenerated in the four months that followed --
+    regenerating on any other day silently broke the dates comparison for
+    every relative-date record. Measured on 2026-08-17: 6 of 97 records
+    flipped, dropping dates parity from 100% to 93.8%.
+
+    Patching the Calendar's bound `parse` is deliberate over changing
+    Python's signature: it keeps the fix in the repo that owns this
+    generator, and needs no coordinated release.
+    """
+    calendar = _ogham_extraction._PDT_CAL
+    original_parse = calendar.parse
+    source_time = reference.timetuple()
+
+    def parse_at_reference(datetime_string, sourceTime=None, version=None):  # noqa: N803
+        return original_parse(datetime_string, source_time)
+
+    calendar.parse = parse_at_reference
+
+
+def _assert_clock_is_pinned(reference: "datetime") -> None:
+    """Fail loudly if the pin stops working, rather than silently baking
+    today's date into the fixture again."""
+    got = extract_dates("Let's talk again tomorrow about the pitch deck.")
+    expected = [(reference + timedelta(days=1)).strftime("%Y-%m-%d")]
+    if got != expected:
+        raise SystemExit(
+            "reference-date pin is not in effect: 'tomorrow' resolved to "
+            f"{got}, expected {expected}. Refusing to write a fixture whose "
+            "reference_date field would be a lie -- see _pin_relative_date_clock."
+        )
+
 
 # v0.5 shared entity prefixes between Go and Python. Anything outside
 # this set is Python-only (event:/activity:/emotion:/relationship:/
@@ -225,6 +271,9 @@ def shared_entities(raw: list[str]) -> list[str]:
 def main() -> int:
     out_path = os.path.join(_HERE, "parity.json")
     records = []
+    _pin_relative_date_clock(REFERENCE_DATE)
+    _assert_clock_is_pinned(REFERENCE_DATE)
+
     for i, item in enumerate(CORPUS):
         content = item["content"]
         tags = item.get("tags") or []

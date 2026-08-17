@@ -24,7 +24,7 @@ import (
 //
 // Baselines (locked 2026-04-21 against the 97-record corpus):
 //
-//   entities (shared subset)  exact-match rate >= 75%
+//   entities (shared subset)  exact-match rate >= 80%
 //   dates                     exact-match rate >= 70%  (relative dates
 //                                                      slip between
 //                                                      parsedatetime
@@ -37,6 +37,25 @@ import (
 // Tighten these when we improve Go extraction to match Python more
 // closely (v0.6 scope: event:/activity:/emotion:/relationship:/
 // quantity:/preference: prefixes).
+//
+// REGENERATED 2026-08-17 (TBU-243). The fixture had not been touched
+// since it was written on 2026-04-21, so the gate had spent four months
+// comparing current Go against a long-superseded Python -- it was
+// measuring accumulated drift, not disagreement, and had fallen to 76.3%
+// against a 75% floor with 1.3 points of headroom.
+//
+// It could not have been regenerated before now: gen_parity_fixture.py
+// stamped a `reference_date` into the JSON but never applied it, because
+// Python's extract_dates() takes no reference date and resolves relative
+// phrases against the real clock. Regenerating on any day but 2026-04-21
+// therefore broke 6 of 97 records and dropped dates parity to 93.8%. The
+// generator now pins parsedatetime's clock and refuses to write a fixture
+// if the pin stops working.
+//
+// Entities floor raised 75% -> 80%; actual is 85.6%. The remaining 15
+// python-only tags are all person: -- 3 junk that Go correctly suppresses
+// and 12 real names in subject position that Go now misses. Expect this
+// rate to RISE when that is addressed, at which point tighten again.
 
 type parityRecord struct {
 	Index                int      `json:"index"`
@@ -152,7 +171,7 @@ func TestParity_Entities_Shared(t *testing.T) {
 	rate := float64(exactMatches) / float64(total)
 	t.Logf("entities shared-subset exact-match rate: %.1f%% (%d/%d) -- go-only tags: %d, python-only tags: %d",
 		rate*100, exactMatches, total, goOnlyCounts, pyOnlyCounts)
-	if rate < 0.75 {
+	if rate < 0.80 {
 		t.Errorf("entity parity rate %.1f%% below locked 75%% baseline", rate*100)
 	}
 }
