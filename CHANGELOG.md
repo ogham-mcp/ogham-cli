@@ -6,7 +6,28 @@ repo](https://github.com/ogham-mcp/ogham-mcp).
 
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), loosely.
 
-## v0.13.0 (2026-08-17)
+## v0.13.1 (2026-08-17)
+
+> v0.13.0 was tagged and never published. Its release run built all five
+> platform binaries and then failed at the changelog step during a
+> GitHub partial outage, when the compare API returned 404 for every
+> repository. The tag is left in place as a record; v0.13.1 is the first
+> published release of this work.
+
+### Fixed (release tooling)
+
+- **The release changelog is generated from the local git history
+  instead of the GitHub compare API.** `changelog.use: github` put a
+  live third-party call on the release critical path, and an outage
+  demonstrated it can fail a release after every binary has already
+  built. `release.yml` already checks out with `fetch-depth: 0`, so the
+  history is present. Verified with `GITHUB_TOKEN` emptied. (#40)
+
+- **`go.mod` / `go.sum` committed in their tidied form.** GoReleaser
+  runs `go mod tidy` as a before-hook, so every prior release built
+  against a manifest the repo did not have committed. Six directly
+  imported dependencies had been recorded as indirect. (#40)
+
 
 ### Security
 
