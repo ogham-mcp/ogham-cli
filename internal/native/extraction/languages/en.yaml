@@ -672,6 +672,14 @@ person_name_denylist:
 # Bigrams are matched by joining both tokens with a single space and
 # lowercasing; the denylist above hits unigrams, while this list catches
 # the compound false-positives we've seen in the parity corpus.
+# Generic prepositions from person_name_context_words that only license
+# a name at distance 1. See PersonNameWeakContextWords (#33).
+person_name_weak_context_words:
+  - by
+  - from
+  - with
+  - to
+
 person_name_context_words:
   - by
   - from

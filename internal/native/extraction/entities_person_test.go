@@ -282,3 +282,154 @@ func TestHasContextWordBefore_Direct(t *testing.T) {
 		})
 	}
 }
+
+// --- #33: all-caps shape rejection + weak-cue distance ----------------
+//
+// Rule 4 shipped in #27 leaned entirely on the cue list, and the cue
+// list is 85% generic prepositions (by/to/from/with) by match volume.
+// In technical prose one of those is routinely within 3 tokens, so
+// `person:SECURITY DEFINER` -- the tag #27's commit message named --
+// came straight back via "Grant EXECUTE to SECURITY DEFINER".
+//
+// Two independent gates now:
+//   Rule 3b -- an all-caps bigram is never a name, whatever precedes it.
+//   Rule 4  -- generic cues only license a bigram at distance 1.
+//
+// These cases are deliberately NOT drawn from testdata/parity: that
+// corpus holds exactly 3 all-caps bigrams (ON CONFLICT / CONFLICT DO /
+// DO NOTHING), all already killed at Rule 2, so it is structurally
+// blind to this defect. Asserting on a corpus rate is what let #27 ship
+// believing it was fixed.
+
+func personTags(content string) []string {
+	var out []string
+	for _, e := range Entities(content) {
+		if strings.HasPrefix(e, "person:") {
+			out = append(out, e)
+		}
+	}
+	return out
+}
+
+// TestAllCapsBigramIsNeverAPerson pins Rule 3b: shape alone rejects,
+// regardless of any cue word in the window.
+func TestAllCapsBigramIsNeverAPerson(t *testing.T) {
+	cases := []struct{ name, content string }{
+		{"cue 'to'", "Grant EXECUTE to SECURITY DEFINER functions in the migration."},
+		{"cue 'by'", "The wrangler.jsonc is unset by default. THE BUILD BELONGS IN VERSION CONTROL."},
+		{"cue 'from'", "Wrangler detects tool versions from the REPOSITORY ROOT regardless of subdir."},
+		{"cue 'with'", "Deployed with STATIC ASSETS enabled on the account."},
+		{"strong cue 'said'", "The reviewer said SECURITY DEFINER was the culprit."},
+		{"no cue", "Nothing precedes it. SECURITY DEFINER appears alone."},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := personTags(tc.content); len(got) != 0 {
+				t.Errorf("all-caps bigram produced %v", got)
+			}
+		})
+	}
+}
+
+// TestGenericCueOnlyLicensesAtDistanceOne pins Rule 4's weak-cue
+// tightening for the CamelCase route, which Rule 3b does not cover.
+func TestGenericCueOnlyLicensesAtDistanceOne(t *testing.T) {
+	// "from" three tokens back -- a drive-by preposition, not a byline.
+	far := "Wrangler reads config from the deploy step. Native PostToolUse Defects remain."
+	if got := personTags(far); len(got) != 0 {
+		t.Errorf("distant generic cue licensed %v", got)
+	}
+	// "from" immediately before -- a genuine attribution.
+	near := "Feedback came from John Doe on Friday."
+	if got := personTags(near); len(got) != 1 || got[0] != "person:John Doe" {
+		t.Errorf("adjacent generic cue should license the name, got %v", got)
+	}
+}
+
+// TestStrongCuesStillWorkAtFullWindow asserts the tightening is aimed
+// at the generic prepositions only -- verb and role cues keep the
+// 3-token window.
+func TestStrongCuesStillWorkAtFullWindow(t *testing.T) {
+	// "met" at distance 3 from the bigram.
+	content := "We met briefly last week Hiroshi Tanaka at the conference."
+	found := false
+	for _, g := range personTags(content) {
+		if g == "person:Hiroshi Tanaka" {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("strong cue at distance 3 should still license, got %v", personTags(content))
+	}
+}
+
+// TestIssue33DoesNotRegressGenuineNames is the control set. Every one
+// of these passes today and must keep passing -- the Titlecase
+// exemption is load-bearing.
+func TestIssue33DoesNotRegressGenuineNames(t *testing.T) {
+	cases := []struct{ content, want string }{
+		{"Change authored by Kevin Burns for the release.", "person:Kevin Burns"},
+		{"Feedback came from John Doe on Friday.", "person:John Doe"},
+		{"The bug was filed by user Alice Smith during the session.", "person:Alice Smith"},
+		{"Kevin Burns, Owen Fletcher and Luis Ramirez agreed.", "person:Kevin Burns"},
+		{"The migration was reviewed by DeShawn McArthur last week.", "person:DeShawn McArthur"},
+	}
+	for _, tc := range cases {
+		found := false
+		for _, g := range personTags(tc.content) {
+			if g == tc.want {
+				found = true
+			}
+		}
+		if !found {
+			t.Errorf("lost %q from %q -- got %v", tc.want, tc.content, personTags(tc.content))
+		}
+	}
+}
+
+// TestWeakContextWordsAreASubsetOfContextWords guards a silent-failure
+// mode in the YAML: hasLicensingCueBefore only consults WeakContext for
+// tokens that already matched ContextWords, so a weak entry that is not
+// also a context word is dead config -- it neither licenses nor
+// restricts anything, and nothing would fail.
+func TestWeakContextWordsAreASubsetOfContextWords(t *testing.T) {
+	gate := personGateFor("en")
+	if len(gate.WeakContext) == 0 {
+		t.Fatal("en has no weak context words -- the #33 tightening is not loaded")
+	}
+	for w := range gate.WeakContext {
+		if _, ok := gate.ContextWords[w]; !ok {
+			t.Errorf("weak cue %q is not in person_name_context_words -- dead config", w)
+		}
+	}
+}
+
+// TestParityCorpusCannotSeeAllCapsBigrams documents why the corpus is
+// not evidence for this rule, and fails if that ever stops being true
+// so the comment cannot rot into a false claim.
+//
+// #27 shipped Rule 4 on a parity measurement and believed the all-caps
+// case was fixed. It was not: the corpus holds 3 all-caps bigrams, all
+// killed earlier at Rule 2, so the rate could not move either way. The
+// #33 fix likewise moves it 0.0%. Judge person-name changes on the
+// explicit fixtures above, never on the parity rate.
+func TestParityCorpusCannotSeeAllCapsBigrams(t *testing.T) {
+	fx := loadParityFixture(t)
+	var reaching []string
+	for _, r := range fx.Records {
+		words := strings.Fields(r.Content)
+		for i := 0; i < len(words)-1; i++ {
+			w1, w2 := stripPersonPunct(words[i]), stripPersonPunct(words[i+1])
+			// Only count pairs that would actually reach the new rule.
+			if isLikelyPersonNamePart(w1) && isLikelyPersonNamePart(w2) &&
+				isAllCapsToken(w1) && isAllCapsToken(w2) {
+				reaching = append(reaching, w1+" "+w2)
+			}
+		}
+	}
+	if len(reaching) != 0 {
+		t.Errorf("parity corpus now contains %d all-caps bigrams reaching Rule 3b (%v) -- "+
+			"it is no longer blind to this defect, so update the comment above and "+
+			"consider whether the parity rate is now meaningful here", len(reaching), reaching)
+	}
+}

@@ -29,10 +29,10 @@ jobs:
         go: ['1.26']
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
       - name: Set up Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
         with:
           go-version: ${{ matrix.go }}
           cache: true
@@ -54,3 +54,21 @@ jobs:
         # additional internal/native/ package lands its coverage retrofit
         # (task #141), add it to COVER_STRICT_PKGS in the Makefile.
         run: make cover
+
+  # TBU-234. Separate job on purpose: it needs neither Go nor the OS
+  # matrix, and running it twice would just double the API calls.
+  action-pins:
+    name: action pins match their comments
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - name: Verify every pinned action resolves to the version it claims
+        # On a SHA-pinned action the trailing comment is the only
+        # human-readable record of what executes. TBU-187 found 2 of 11
+        # comments in the Python repo were false, one written by
+        # Dependabot itself. This fails the build rather than trusting it.
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: ./scripts/verify-action-pins.sh
