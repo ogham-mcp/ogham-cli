@@ -171,13 +171,11 @@
       ],
       "python_entities_full": [
         "entity:ValueError",
-        "error:ValueError",
-        "person:ValueError Embedding"
+        "error:ValueError"
       ],
       "python_entities_shared": [
         "entity:ValueError",
-        "error:ValueError",
-        "person:ValueError Embedding"
+        "error:ValueError"
       ],
       "python_dates": [],
       "python_importance": 0.4
@@ -280,13 +278,11 @@
       ],
       "python_entities_full": [
         "entity:IntegrityError",
-        "error:IntegrityError",
-        "person:Mixing IntegrityError"
+        "error:IntegrityError"
       ],
       "python_entities_shared": [
         "entity:IntegrityError",
-        "error:IntegrityError",
-        "person:Mixing IntegrityError"
+        "error:IntegrityError"
       ],
       "python_dates": [],
       "python_importance": 0.4
@@ -434,17 +430,11 @@
       "tags": [],
       "python_entities_full": [
         "entity:BillingWorker",
-        "entity:DashboardAPI",
-        "person:Caddy DashboardAPI",
-        "person:DashboardAPI Gateway",
-        "person:Gateway BillingWorker"
+        "entity:DashboardAPI"
       ],
       "python_entities_shared": [
         "entity:BillingWorker",
-        "entity:DashboardAPI",
-        "person:Caddy DashboardAPI",
-        "person:DashboardAPI Gateway",
-        "person:Gateway BillingWorker"
+        "entity:DashboardAPI"
       ],
       "python_dates": [],
       "python_importance": 0.2
@@ -459,11 +449,7 @@
         "entity:MistralEmbedder",
         "entity:OllamaEmbedder",
         "entity:OpenAIEmbedder",
-        "entity:VoyageEmbedder",
-        "person:GeminiEmbedder OllamaEmbedder",
-        "person:OllamaEmbedder OpenAIEmbedder",
-        "person:OpenAIEmbedder VoyageEmbedder",
-        "person:VoyageEmbedder MistralEmbedder"
+        "entity:VoyageEmbedder"
       ],
       "python_entities_shared": [
         "entity:CachedEmbedder",
@@ -471,11 +457,7 @@
         "entity:MistralEmbedder",
         "entity:OllamaEmbedder",
         "entity:OpenAIEmbedder",
-        "entity:VoyageEmbedder",
-        "person:GeminiEmbedder OllamaEmbedder",
-        "person:OllamaEmbedder OpenAIEmbedder",
-        "person:OpenAIEmbedder VoyageEmbedder",
-        "person:VoyageEmbedder MistralEmbedder"
+        "entity:VoyageEmbedder"
       ],
       "python_dates": [],
       "python_importance": 0.2
@@ -484,12 +466,8 @@
       "index": 30,
       "content": "Supabase RPC hybrid_search_memories takes query_text, query_embedding, match_count, filter_profile arguments.",
       "tags": [],
-      "python_entities_full": [
-        "person:Supabase RPC"
-      ],
-      "python_entities_shared": [
-        "person:Supabase RPC"
-      ],
+      "python_entities_full": [],
+      "python_entities_shared": [],
       "python_dates": [],
       "python_importance": 0.2
     },
@@ -516,16 +494,12 @@
       "python_entities_full": [
         "entity:ByteRover",
         "entity:OpenClaw",
-        "entity:SupermemoryAI",
-        "person:ByteRover Cognee",
-        "person:OpenClaw ByteRover"
+        "entity:SupermemoryAI"
       ],
       "python_entities_shared": [
         "entity:ByteRover",
         "entity:OpenClaw",
-        "entity:SupermemoryAI",
-        "person:ByteRover Cognee",
-        "person:OpenClaw ByteRover"
+        "entity:SupermemoryAI"
       ],
       "python_dates": [],
       "python_importance": 0.2
@@ -800,9 +774,7 @@
       "index": 54,
       "content": "Lisa's team offsite on 2026-06-15 is a fun event; we're blocking the week before for prep.",
       "tags": [],
-      "python_entities_full": [
-        "event:wedding"
-      ],
+      "python_entities_full": [],
       "python_entities_shared": [],
       "python_dates": [
         "2026-06-15"
@@ -1055,12 +1027,10 @@
       "content": "EmbeddingCache EmbeddingCache EmbeddingCache EmbeddingCache -- make sure dedup works.",
       "tags": [],
       "python_entities_full": [
-        "entity:EmbeddingCache",
-        "person:EmbeddingCache EmbeddingCache"
+        "entity:EmbeddingCache"
       ],
       "python_entities_shared": [
-        "entity:EmbeddingCache",
-        "person:EmbeddingCache EmbeddingCache"
+        "entity:EmbeddingCache"
       ],
       "python_dates": [],
       "python_importance": 0.2
@@ -1150,10 +1120,7 @@
       "index": 79,
       "content": "Eleanor Whitfield-Morgan (two-word hyphenated last name) reviewed the BEAM harness design.",
       "tags": [],
-      "python_entities_full": [
-        "location:Parker",
-        "location:US"
-      ],
+      "python_entities_full": [],
       "python_entities_shared": [],
       "python_dates": [],
       "python_importance": 0.4
@@ -1163,12 +1130,10 @@
       "content": "Peterson Lee is a common misreading of two distinct people in the Contoso EMEA org.",
       "tags": [],
       "python_entities_full": [
-        "entity:McDonald",
-        "person:Contoso EMEA"
+        "person:Peterson Lee"
       ],
       "python_entities_shared": [
-        "entity:McDonald",
-        "person:Contoso EMEA"
+        "person:Peterson Lee"
       ],
       "python_dates": [],
       "python_importance": 0.2
@@ -1226,20 +1191,14 @@
         "entity:NeonPool",
         "entity:SupabaseBackend",
         "entity:ValkeyClient",
-        "entity:VoyageEmbedder",
-        "person:NeonPool VoyageEmbedder",
-        "person:ValkeyClient NeonPool",
-        "person:VoyageEmbedder SupabaseBackend"
+        "entity:VoyageEmbedder"
       ],
       "python_entities_shared": [
         "entity:FastAPIApp",
         "entity:NeonPool",
         "entity:SupabaseBackend",
         "entity:ValkeyClient",
-        "entity:VoyageEmbedder",
-        "person:NeonPool VoyageEmbedder",
-        "person:ValkeyClient NeonPool",
-        "person:VoyageEmbedder SupabaseBackend"
+        "entity:VoyageEmbedder"
       ],
       "python_dates": [],
       "python_importance": 0.2
@@ -1312,17 +1271,11 @@
       ],
       "python_entities_full": [
         "entity:OpenAI",
-        "entity:WithContext",
-        "person:Mistral Day",
-        "person:OpenAI Voyage",
-        "person:Voyage Mistral"
+        "entity:WithContext"
       ],
       "python_entities_shared": [
         "entity:OpenAI",
-        "entity:WithContext",
-        "person:Mistral Day",
-        "person:OpenAI Voyage",
-        "person:Voyage Mistral"
+        "entity:WithContext"
       ],
       "python_dates": [],
       "python_importance": 0.2
