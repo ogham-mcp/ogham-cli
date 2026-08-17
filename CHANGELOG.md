@@ -6,6 +6,46 @@ repo](https://github.com/ogham-mcp/ogham-mcp).
 
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), loosely.
 
+## Unreleased
+
+### Security
+
+- **All GitHub Actions pinned to commit SHAs** — `actions/checkout`,
+  `actions/setup-go` and `goreleaser/goreleaser-action` across both
+  workflows, with `goreleaser` itself pinned to `~> v2.17` instead of
+  resolving `latest`. Adds `scripts/verify-action-pins.sh` and an
+  `action-pins` CI job that fails when a version comment does not match
+  the SHA it annotates, so a pin cannot silently drift from its label.
+  This repo publishes the release binaries, so a compromised floating
+  tag would reach users directly. (TBU-234)
+
+  Landed in `1a59638` rather than in a commit of its own: it was
+  committed locally before the #33 branch was cut, so the squash merge
+  folded both together. Noted here because the commit title mentions
+  only the extraction fix.
+
+### Fixed
+
+- **All-caps bigrams no longer become `person:` entities.** The v0.12.0
+  context gate leaned entirely on `person_name_context_words`, and 85%
+  of that list's matches come from the generic prepositions
+  `by`/`to`/`from`/`with` — so `Grant EXECUTE to SECURITY DEFINER`
+  reproduced `person:SECURITY DEFINER`, the exact tag v0.12.0 set out to
+  remove. Two gates now: an all-caps pair is rejected on shape before
+  any cue is consulted, and the generic prepositions license a candidate
+  only when immediately adjacent. Verb and role cues (`met`, `said`,
+  `author`, `cc`) keep the full three-token window, so genuine bylines
+  are unaffected. (#33, TBU-242)
+
+### Notes
+
+- The parity corpus cannot see the defect above — it holds three
+  all-caps bigrams, all rejected earlier by the stopword filter — so the
+  fix moves the entities parity rate by 0.0%. Person-name changes should
+  be judged on the explicit fixtures in `entities_person_test.go`, never
+  on the corpus rate. `TestParityCorpusCannotSeeAllCapsBigrams` fails if
+  the corpus ever gains one.
+
 ## v0.12.1 (2026-08-10)
 
 ### Fixed
