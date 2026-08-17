@@ -4,9 +4,9 @@
 #
 # Usage:
 #   curl -sSL https://raw.githubusercontent.com/ogham-mcp/ogham-cli/main/install.sh | bash
-#   curl -sSL https://raw.githubusercontent.com/ogham-mcp/ogham-cli/main/install.sh | bash -s -- --version v0.7.0
+#   curl -sSL https://raw.githubusercontent.com/ogham-mcp/ogham-cli/main/install.sh | bash -s -- --version v0.13.1
 #   INSTALL_DIR=/usr/local/bin curl -sSL https://.../install.sh | bash
-#   BASE_URL=https://mirror.example/ogham/v0.12.0 bash install.sh
+#   BASE_URL=https://mirror.example/ogham/v0.13.1 bash install.sh
 #
 # What it does:
 #   1. Detects platform (darwin / linux / windows) and arch (amd64 / arm64)
