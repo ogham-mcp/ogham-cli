@@ -6,7 +6,7 @@ repo](https://github.com/ogham-mcp/ogham-mcp).
 
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), loosely.
 
-## Unreleased
+## v0.13.0 (2026-08-17)
 
 ### Security
 
@@ -37,6 +37,22 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), loosely.
   `author`, `cc`) keep the full three-token window, so genuine bylines
   are unaffected. (#33, TBU-242)
 
+- **Every `person:` candidate now requires a licensing cue.** Titlecase
+  pairs were previously exempt, so that a bare name list would still
+  tag. Measured against a live store that exemption was the largest
+  single source of junk in the entity graph: `person` was 74.6% of all
+  entities (4,140 of 5,549), a third of those were ungated Titlecase
+  pairs, and a random sample of 30 contained no people at all —
+  `Durable Objects`, `REST API`, `GitHub Actions`, `Neural Graph`.
+  Titlecase is not a discriminator: `Kevin Burns` and `Durable Objects`
+  are the same shape. (#34, TBU-242)
+
+  **Behaviour change.** An uncued name list —
+  `"Kevin Burns, Owen Fletcher and Luis Ramirez agreed."` — no longer
+  produces `person:` tags. Names carrying any cue (`by`, `from`, `user`,
+  `met`, `cc`, `author`, …) are unaffected. Existing rows are untouched;
+  this changes extraction going forward only.
+
 ### Notes
 
 - The parity corpus cannot see the defect above — it holds three
@@ -45,6 +61,11 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), loosely.
   be judged on the explicit fixtures in `entities_person_test.go`, never
   on the corpus rate. `TestParityCorpusCannotSeeAllCapsBigrams` fails if
   the corpus ever gains one.
+
+- The entities parity rate now sits at **76.3% against a 75% floor**.
+  The fixture has not been regenerated since 2026-04-21, so the gate
+  compares current Go against a four-month-old Python and understates
+  real agreement. Resolve before the next extraction change — TBU-243.
 
 ## v0.12.1 (2026-08-10)
 
