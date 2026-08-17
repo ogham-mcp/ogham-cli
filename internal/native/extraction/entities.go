@@ -188,6 +188,7 @@ type personGate struct {
 	Lang         string
 	Denylist     map[string]struct{} // lowercased unigrams AND multi-word bigrams
 	ContextWords map[string]struct{} // lowercased preceding-context words
+	WeakContext  map[string]struct{} // subset licensing only at distance 1
 }
 
 var (
@@ -214,6 +215,10 @@ func personGateFor(lang string) *personGate {
 		Lang:         lang,
 		Denylist:     make(map[string]struct{}, len(rules.PersonNameDenylist)*2),
 		ContextWords: make(map[string]struct{}, len(rules.PersonNameContextWords)),
+		WeakContext:  make(map[string]struct{}, len(rules.PersonNameWeakContextWords)),
+	}
+	for _, w := range rules.PersonNameWeakContextWords {
+		g.WeakContext[strings.ToLower(strings.TrimSpace(w))] = struct{}{}
 	}
 	for _, d := range rules.PersonNameDenylist {
 		g.Denylist[strings.ToLower(strings.TrimSpace(d))] = struct{}{}
@@ -227,6 +232,9 @@ func personGateFor(lang string) *personGate {
 		enRules := resolveRules("en")
 		for _, c := range enRules.PersonNameContextWords {
 			g.ContextWords[strings.ToLower(strings.TrimSpace(c))] = struct{}{}
+		}
+		for _, w := range enRules.PersonNameWeakContextWords {
+			g.WeakContext[strings.ToLower(strings.TrimSpace(w))] = struct{}{}
 		}
 		for _, d := range enRules.PersonNameDenylist {
 			g.Denylist[strings.ToLower(strings.TrimSpace(d))] = struct{}{}
@@ -300,9 +308,18 @@ func addPersonNames(content, lang string, out map[string]struct{}) {
 			continue
 		}
 
+		// Rule 3b: an all-caps bigram is never a name -- acronym pair,
+		// SQL/config keyword, or emphasis. Rejected on shape before the
+		// context gate, so no cue word can license it (#33). This is the
+		// gate that "SECURITY DEFINER" needed: Rule 4 alone let it back
+		// in via "Grant EXECUTE to SECURITY DEFINER".
+		if isAllCapsToken(w1) && isAllCapsToken(w2) {
+			continue
+		}
+
 		// Rule 4: context gate for non-Titlecase bigrams.
 		if !isTitlecaseNameToken(w1) || !isTitlecaseNameToken(w2) {
-			if !hasContextWordBefore(words, i, gate.ContextWords) {
+			if !hasLicensingCueBefore(words, i, gate) {
 				continue
 			}
 		}
@@ -374,6 +391,48 @@ func isTitlecaseNameToken(w string) bool {
 		}
 	}
 	return true
+}
+
+// isAllCapsToken reports whether w is two or more letters with no
+// lowercase -- "SECURITY", "BUILD", "ROOT". Assumes
+// isLikelyPersonNamePart already passed, so the token is all letters.
+func isAllCapsToken(w string) bool {
+	n := 0
+	for _, r := range w {
+		if unicode.IsLower(r) {
+			return false
+		}
+		n++
+	}
+	return n > 1
+}
+
+// hasLicensingCueBefore is Rule 4's gate. Strong cues (verbs and role
+// nouns -- met, said, wrote, author, cc) license anywhere in the
+// personContextWindow. Weak cues (generic prepositions -- by, to, from,
+// with) license only at distance 1.
+//
+// The split exists because the two behave nothing alike in prose. "met
+// ... Hiroshi Tanaka" is an attribution wherever "met" sits in the
+// window; "unset by default. THE BUILD BELONGS" is a preposition that
+// happens to be nearby. Before #33 both counted equally, and the weak
+// four supplied 85% of all cue matches on the parity corpus.
+func hasLicensingCueBefore(words []string, idx int, gate *personGate) bool {
+	start := idx - personContextWindow
+	if start < 0 {
+		start = 0
+	}
+	for j := start; j < idx; j++ {
+		token := strings.ToLower(stripPersonPunct(words[j]))
+		if _, ok := gate.ContextWords[token]; !ok {
+			continue
+		}
+		if _, weak := gate.WeakContext[token]; weak && j != idx-1 {
+			continue // generic preposition, too far away to be a byline
+		}
+		return true
+	}
+	return false
 }
 
 // hasContextWordBefore walks the personContextWindow tokens preceding
