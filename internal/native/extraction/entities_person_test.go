@@ -141,8 +141,9 @@ func TestPersonTightening_AcceptNames(t *testing.T) {
 			want:    []string{"person:Hiroshi Tanaka"},
 		},
 		{
+			// #34: every bigram needs a cue now, so the list is cued.
 			name:    "name list with multiple",
-			content: "Kevin Burns, Owen Fletcher and Luis Ramirez agreed.",
+			content: "Signed by Kevin Burns, cc Owen Fletcher and with Luis Ramirez.",
 			want: []string{
 				"person:Kevin Burns",
 				"person:Owen Fletcher",
@@ -350,8 +351,12 @@ func TestGenericCueOnlyLicensesAtDistanceOne(t *testing.T) {
 // at the generic prepositions only -- verb and role cues keep the
 // 3-token window.
 func TestStrongCuesStillWorkAtFullWindow(t *testing.T) {
-	// "met" at distance 3 from the bigram.
-	content := "We met briefly last week Hiroshi Tanaka at the conference."
+	// "met" at exactly distance 3: met(0) briefly(1) last(2) Hiroshi(3).
+	// The earlier version of this test put "met" at distance 4 and passed
+	// only because Titlecase was exempt from Rule 4 -- it was not
+	// exercising the cue path at all. #34 removed that exemption and
+	// exposed it.
+	content := "met briefly last Hiroshi Tanaka spoke at the conference."
 	found := false
 	for _, g := range personTags(content) {
 		if g == "person:Hiroshi Tanaka" {
@@ -371,7 +376,6 @@ func TestIssue33DoesNotRegressGenuineNames(t *testing.T) {
 		{"Change authored by Kevin Burns for the release.", "person:Kevin Burns"},
 		{"Feedback came from John Doe on Friday.", "person:John Doe"},
 		{"The bug was filed by user Alice Smith during the session.", "person:Alice Smith"},
-		{"Kevin Burns, Owen Fletcher and Luis Ramirez agreed.", "person:Kevin Burns"},
 		{"The migration was reviewed by DeShawn McArthur last week.", "person:DeShawn McArthur"},
 	}
 	for _, tc := range cases {
@@ -431,5 +435,76 @@ func TestParityCorpusCannotSeeAllCapsBigrams(t *testing.T) {
 		t.Errorf("parity corpus now contains %d all-caps bigrams reaching Rule 3b (%v) -- "+
 			"it is no longer blind to this defect, so update the comment above and "+
 			"consider whether the parity rate is now meaningful here", len(reaching), reaching)
+	}
+}
+
+// --- #34: Titlecase pairs need a cue too ------------------------------
+//
+// Rule 4 originally exempted Titlecase bigrams so a bare name list would
+// still tag. Measured against the live store, that exemption is the
+// single largest source of junk in the graph:
+//
+//   person is 74.6% of all entities (4,140 of 5,549)
+//   of those, 32.0% (1,325) are Titlecase pairs, entirely ungated
+//   a random sample of 30 person entities contained ZERO people
+//
+// Durable Objects, REST API, GitHub Actions, Claude Code, Neural Graph.
+// A denylist cannot scale to 1,325 distinct product names drawn from the
+// whole software vocabulary, so the exemption goes: every bigram now
+// needs a licensing cue.
+
+// TestTitlecaseProductNamesNeedACue is the #34 case plus the classes the
+// live-store sample showed.
+func TestTitlecaseProductNamesNeedACue(t *testing.T) {
+	for _, content := range []string{
+		"The dashboard offers Workers Builds instead of the older pipeline.",
+		"We store state in Durable Objects for the coordinator.",
+		"The Neural Graph layer sits above the vector index.",
+		"Attention Patterns explain the retrieval behaviour.",
+		"Coordinator Lambda fans out to the workers.",
+	} {
+		if got := personTags(content); len(got) != 0 {
+			t.Errorf("uncued Titlecase pair produced %v\n  in: %s", got, content)
+		}
+	}
+}
+
+// TestCuedNamesSurviveTheExemptionRemoval is the control that matters:
+// dropping the exemption must not cost a genuine, cued name.
+func TestCuedNamesSurviveTheExemptionRemoval(t *testing.T) {
+	cases := []struct{ content, want string }{
+		{"Change authored by Kevin Burns for the release.", "person:Kevin Burns"},
+		{"Feedback came from John Doe on Friday.", "person:John Doe"},
+		{"The bug was filed by user Alice Smith during the session.", "person:Alice Smith"},
+		{"We met Hiroshi Tanaka yesterday at the conference.", "person:Hiroshi Tanaka"},
+		{"The migration was reviewed by DeShawn McArthur last week.", "person:DeShawn McArthur"},
+		{"Maya Martins is a contributor, cc Owen Fletcher on the thread.", "person:Owen Fletcher"},
+	}
+	for _, tc := range cases {
+		found := false
+		for _, g := range personTags(tc.content) {
+			if g == tc.want {
+				found = true
+			}
+		}
+		if !found {
+			t.Errorf("lost %q from %q -- got %v", tc.want, tc.content, personTags(tc.content))
+		}
+	}
+}
+
+// TestUncuedNameListIsADeliberateLoss records what this change costs, so
+// it is a decision on the record rather than a deleted assertion.
+//
+// A bare list of names with no attribution verb or preposition no longer
+// tags. That is accepted: the same shape is indistinguishable from
+// "Durable Objects" or "Terraform Registry", and the live store showed
+// the product-name reading is overwhelmingly the more common one. If a
+// future gazetteer or NER pass makes uncued names recoverable, this test
+// is the marker for what to restore.
+func TestUncuedNameListIsADeliberateLoss(t *testing.T) {
+	content := "Kevin Burns, Owen Fletcher and Luis Ramirez agreed."
+	if got := personTags(content); len(got) != 0 {
+		t.Errorf("expected the uncued name list to stop tagging (see #34); got %v", got)
 	}
 }
