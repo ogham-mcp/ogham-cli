@@ -167,7 +167,7 @@ curl -sSL https://raw.githubusercontent.com/ogham-mcp/ogham-cli/main/install.sh 
 Pin a specific release or change the install dir:
 
 ```bash
-curl -sSL https://raw.githubusercontent.com/ogham-mcp/ogham-cli/main/install.sh | bash -s -- --version v0.7.1
+curl -sSL https://raw.githubusercontent.com/ogham-mcp/ogham-cli/main/install.sh | bash -s -- --version v0.13.1
 INSTALL_DIR=/usr/local/bin curl -sSL https://raw.githubusercontent.com/ogham-mcp/ogham-cli/main/install.sh | bash
 ```
 
