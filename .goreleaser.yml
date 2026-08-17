@@ -81,7 +81,21 @@ checksum:
 # conventional-commit prefixes (feat:, fix:, docs:, chore:, etc.).
 changelog:
   sort: asc
-  use: github
+  # Read the log from the local clone, not the GitHub compare API.
+  #
+  # `use: github` calls GET /repos/:owner/:repo/compare/:base...:head at
+  # the changelog step, which put a live network dependency on the
+  # release critical path. On 2026-08-17 that endpoint returned 404 for
+  # every repository -- including large public ones, and including
+  # v0.12.0...v0.12.1, a comparison that had succeeded during its own
+  # release -- so v0.13.0 failed twice AFTER building all five platform
+  # binaries successfully.
+  #
+  # `use: git` needs full history, which release.yml already provides
+  # via fetch-depth: 0 on checkout. This repo publishes the release
+  # binaries, so the fewer third-party calls between a green tag and
+  # published artifacts, the better.
+  use: git
   groups:
     - title: Features
       regexp: '^.*?feat(\(.+\))??!?:.+$'
