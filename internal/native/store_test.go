@@ -226,7 +226,9 @@ func TestStore_DryRun_FullPipeline(t *testing.T) {
 
 	// Content with a date phrase that extraction.DatesAt should pick up,
 	// and a person name + file path for entity extraction.
-	content := "On 2026-03-10 Kevin Burns decided to port extraction.go to Go."
+	// #34: every person bigram needs a licensing cue, so "by" precedes
+	// the name. filePathRe needs a separator, hence the full path.
+	content := "On 2026-03-10 a change by Kevin Burns ported /repo/internal/extraction.go to Go."
 
 	res, err := Store(context.Background(), cfg, content, StoreOptions{
 		Tags:   []string{"type:decision"},

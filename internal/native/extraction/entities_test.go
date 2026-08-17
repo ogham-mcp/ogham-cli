@@ -41,12 +41,13 @@ func TestEntities_EachType(t *testing.T) {
 			want:    []string{"person:Kevin Burns"},
 		},
 		{
+			// Intent here is the punctuation strip ("Burns," -> "Burns"),
+			// so the names carry cues -- since #34 every bigram needs one.
 			name:    "Person name with trailing punctuation",
-			content: "Kevin Burns, Owen Fletcher and Luis Ramirez agreed.",
+			content: "Reviewed by Kevin Burns, then by Owen Fletcher.",
 			want: []string{
 				"person:Kevin Burns",
 				"person:Owen Fletcher",
-				"person:Luis Ramirez",
 			},
 		},
 	}

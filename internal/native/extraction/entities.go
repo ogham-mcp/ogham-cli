@@ -317,11 +317,25 @@ func addPersonNames(content, lang string, out map[string]struct{}) {
 			continue
 		}
 
-		// Rule 4: context gate for non-Titlecase bigrams.
-		if !isTitlecaseNameToken(w1) || !isTitlecaseNameToken(w2) {
-			if !hasLicensingCueBefore(words, i, gate) {
-				continue
-			}
+		// Rule 4: every candidate needs a licensing cue.
+		//
+		// Titlecase pairs were exempt until #34, so that a bare name list
+		// ("Kevin Burns, Owen Fletcher and Luis Ramirez agreed.") would
+		// still tag. Measured against the live store that exemption was
+		// the largest single source of junk in the graph: person was
+		// 74.6% of all entities (4,140 of 5,549), 32% of those were
+		// ungated Titlecase pairs, and a random sample of 30 contained no
+		// people at all -- Durable Objects, REST API, GitHub Actions,
+		// Neural Graph, Coordinator Lambda.
+		//
+		// Titlecase is simply not a discriminator: "Kevin Burns" and
+		// "Durable Objects" are the same shape, and in this corpus the
+		// product reading is far more common. A denylist cannot scale to
+		// 1,325 distinct product names, so the cue requirement is now
+		// universal and uncued names are a deliberate loss -- see
+		// TestUncuedNameListIsADeliberateLoss.
+		if !hasLicensingCueBefore(words, i, gate) {
+			continue
 		}
 
 		out["person:"+w1+" "+w2] = struct{}{}
@@ -369,28 +383,6 @@ func firstLetterAfter(w string, i int) bool {
 		return unicode.IsLetter(r)
 	}
 	return false
-}
-
-// isTitlecaseNameToken reports whether w has the shape a person-name
-// token actually takes: uppercase initial, no interior uppercase.
-// "Kevin" and "Tanaka" qualify; "SECURITY", "PostToolUse" and "FastMCP"
-// do not. Used by rule 4 to decide which bigrams need a licensing
-// context word. Assumes isLikelyPersonNamePart already passed, so the
-// token is non-empty and all letters.
-func isTitlecaseNameToken(w string) bool {
-	runes := []rune(w)
-	if len(runes) == 0 {
-		return false
-	}
-	if !unicode.IsUpper(runes[0]) {
-		return false
-	}
-	for _, r := range runes[1:] {
-		if unicode.IsUpper(r) {
-			return false
-		}
-	}
-	return true
 }
 
 // isAllCapsToken reports whether w is two or more letters with no
