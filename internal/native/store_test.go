@@ -84,7 +84,7 @@ func TestPickAutoLinks_AllBelowThreshold(t *testing.T) {
 
 func TestMergeTags_DedupsAndSorts(t *testing.T) {
 	caller := []string{"type:decision", "project:ogham"}
-	entities := []string{"entity:NewEmbedder", "person:Kevin"}
+	entities := []string{"entity:NewEmbedder", "file:/repo/embedder.go"}
 	dates := []string{"2026-04-21", "2026-03-10"}
 
 	got := mergeTags(caller, entities, dates)
@@ -94,7 +94,7 @@ func TestMergeTags_DedupsAndSorts(t *testing.T) {
 		"date:2026-03-10",
 		"date:2026-04-21",
 		"entity:NewEmbedder",
-		"person:Kevin",
+		"file:/repo/embedder.go",
 		"project:ogham",
 		"type:decision",
 	}
@@ -103,12 +103,12 @@ func TestMergeTags_DedupsAndSorts(t *testing.T) {
 	_ = want
 	// Correct expectation:
 	wantSet := map[string]bool{
-		"type:decision":      true,
-		"project:ogham":      true,
-		"entity:NewEmbedder": true,
-		"person:Kevin":       true,
-		"date:2026-04-21":    true,
-		"date:2026-03-10":    true,
+		"type:decision":          true,
+		"project:ogham":          true,
+		"entity:NewEmbedder":     true,
+		"file:/repo/embedder.go": true,
+		"date:2026-04-21":        true,
+		"date:2026-03-10":        true,
 	}
 	if len(got) != len(wantSet) {
 		t.Fatalf("len = %d (%v), want %d", len(got), got, len(wantSet))
@@ -225,9 +225,8 @@ func TestStore_DryRun_FullPipeline(t *testing.T) {
 	}
 
 	// Content with a date phrase that extraction.DatesAt should pick up,
-	// and a person name + file path for entity extraction.
-	// #34: every person bigram needs a licensing cue, so "by" precedes
-	// the name. filePathRe needs a separator, hence the full path.
+	// and a file path for entity extraction. The person: class was
+	// removed on 2026-08-18, so the name here is incidental.
 	content := "On 2026-03-10 a change by Kevin Burns ported /repo/internal/extraction.go to Go."
 
 	res, err := Store(context.Background(), cfg, content, StoreOptions{

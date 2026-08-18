@@ -53,7 +53,6 @@ func TestEntities_PICT(t *testing.T) {
 			}
 
 			uni := row["UnicodeClass"]
-			stop := row["StopwordPresence"]
 			count := row["FinalEntityCount"]
 
 			if count == "GtTwenty" {
@@ -95,15 +94,14 @@ func TestEntities_PICT(t *testing.T) {
 					t.Errorf("ErrorType + %s produced no error: tags: %v", uni, got)
 				}
 			case "PersonName":
-				wantPerson := stop == "Absent" && uni == "ASCII"
-				if wantPerson && prefixCounts["person"] == 0 {
-					t.Errorf("PersonName/Absent/ASCII produced no person: tags: %v", got)
-				}
-				if stop == "Present" && prefixCounts["person"] > 0 {
-					t.Errorf("PersonName/Present should NOT produce person: tags (stopword filter), got: %v", got)
-				}
-				if uni == "NonLatin" && prefixCounts["person"] > 0 {
-					t.Errorf("non-latin person name leaked through ASCII-only heuristic: %v", got)
+				// The person: class was removed on 2026-08-18. The
+				// dimension is kept in the PICT model deliberately: it
+				// still generates name-shaped content across every
+				// stopword / unicode / punctuation combination, which is
+				// the broadest available assertion that nothing
+				// reintroduces the tag by accident.
+				if prefixCounts["person"] > 0 {
+					t.Errorf("person: tag emitted for name-shaped content; the class was removed: %v", got)
 				}
 			case "Multiple":
 				// Multiple means "two or more categories together". Two

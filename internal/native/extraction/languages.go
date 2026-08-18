@@ -107,34 +107,6 @@ type LanguageRules struct {
 	// Each entry: { pattern: regex, normalised: weekly|daily|... }.
 	// Regex is anchored at word boundaries by the recurrence matcher.
 	RecurrencePatterns []RecurrencePattern `yaml:"recurrence_patterns"`
-
-	// --- Person-name regex tightening (v0.7) ---------------------------
-	// PersonNameDenylist is the set of Capitalised bigrams / unigrams
-	// that SHOULD NOT be tagged as person: even if they pass the basic
-	// shape check. Case-insensitive match at lookup site.
-	PersonNameDenylist []string `yaml:"person_name_denylist"`
-
-	// PersonNameContextWords is the set of preceding-context tokens that
-	// license a standalone Capitalised bigram (e.g. "by Kevin Burns",
-	// "from John Doe"). Without a matching context word in the 3-token
-	// window before the candidate, the candidate is rejected. English-
-	// seed: by/from/user/person/with/met/said/told/asked.
-	PersonNameContextWords []string `yaml:"person_name_context_words"`
-
-	// PersonNameWeakContextWords is the subset of PersonNameContextWords
-	// that are generic prepositions -- they appear constantly in ordinary
-	// prose and carry no person signal on their own. Measured on the
-	// parity corpus, by/to/from/with accounted for 85% of ALL cue matches
-	// (108 of 127), which is what let #33's junk tags through: "unset by
-	// default. THE BUILD BELONGS..." satisfied Rule 4 as readily as a
-	// genuine byline.
-	//
-	// These license a candidate only at distance 1 -- immediately before
-	// the bigram, as in "by Kevin Burns" or "spoke to Kevin Burns" --
-	// rather than anywhere in the personContextWindow. Anything listed
-	// here should also appear in PersonNameContextWords; entries not in
-	// that list are ignored.
-	PersonNameWeakContextWords []string `yaml:"person_name_weak_context_words"`
 }
 
 // RecurrencePattern is one entry in a language's recurrence_patterns

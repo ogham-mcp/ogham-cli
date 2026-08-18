@@ -24,7 +24,7 @@ import (
 //
 // Baselines (locked 2026-04-21 against the 97-record corpus):
 //
-//   entities (shared subset)  exact-match rate >= 80%
+//   entities (shared subset)  exact-match rate >= 95%
 //   dates                     exact-match rate >= 70%  (relative dates
 //                                                      slip between
 //                                                      parsedatetime
@@ -39,23 +39,22 @@ import (
 // quantity:/preference: prefixes).
 //
 // REGENERATED 2026-08-17 (TBU-243). The fixture had not been touched
-// since it was written on 2026-04-21, so the gate had spent four months
-// comparing current Go against a long-superseded Python -- it was
-// measuring accumulated drift, not disagreement, and had fallen to 76.3%
-// against a 75% floor with 1.3 points of headroom.
+// since it was written on 2026-04-21, and could not have been: the
+// generator stamped a `reference_date` it never applied, because
+// Python's extract_dates() resolves relative phrases against the real
+// clock. It now pins parsedatetime's clock and refuses to write a
+// fixture if the pin stops working.
 //
-// It could not have been regenerated before now: gen_parity_fixture.py
-// stamped a `reference_date` into the JSON but never applied it, because
-// Python's extract_dates() takes no reference date and resolves relative
-// phrases against the real clock. Regenerating on any day but 2026-04-21
-// therefore broke 6 of 97 records and dropped dates parity to 93.8%. The
-// generator now pins parsedatetime's clock and refuses to write a fixture
-// if the pin stops working.
+// NARROWED 2026-08-18. person: was removed from the Go extractor
+// (ogham-cli#44, #45) and dropped from SHARED_PREFIXES here. It was the
+// only category with no unambiguous syntactic marker, and -- measured
+// on this corpus -- the ONLY prefix on which the two implementations
+// disagreed at all. With it gone the remaining three match 97/97 with
+// zero tags on either side, so the entities floor is 95%.
 //
-// Entities floor raised 75% -> 80%; actual is 85.6%. The remaining 15
-// python-only tags are all person: -- 3 junk that Go correctly suppresses
-// and 12 real names in subject position that Go now misses. Expect this
-// rate to RISE when that is addressed, at which point tighten again.
+// Python still emits person:, so this narrowing hides a known,
+// deliberate divergence rather than drift. If Python drops the class
+// too, widen SHARED_PREFIXES back and the comparison costs nothing.
 
 type parityRecord struct {
 	Index                int      `json:"index"`
@@ -171,7 +170,7 @@ func TestParity_Entities_Shared(t *testing.T) {
 	rate := float64(exactMatches) / float64(total)
 	t.Logf("entities shared-subset exact-match rate: %.1f%% (%d/%d) -- go-only tags: %d, python-only tags: %d",
 		rate*100, exactMatches, total, goOnlyCounts, pyOnlyCounts)
-	if rate < 0.80 {
+	if rate < 0.95 {
 		t.Errorf("entity parity rate %.1f%% below locked 75%% baseline", rate*100)
 	}
 }

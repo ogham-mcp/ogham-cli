@@ -35,21 +35,6 @@ func TestEntities_EachType(t *testing.T) {
 			content: "RuntimeException thrown during pool warmup.",
 			want:    []string{"error:RuntimeException"},
 		},
-		{
-			name:    "Person name",
-			content: "Spoke with Kevin Burns about the release.",
-			want:    []string{"person:Kevin Burns"},
-		},
-		{
-			// Intent here is the punctuation strip ("Burns," -> "Burns"),
-			// so the names carry cues -- since #34 every bigram needs one.
-			name:    "Person name with trailing punctuation",
-			content: "Reviewed by Kevin Burns, then by Owen Fletcher.",
-			want: []string{
-				"person:Kevin Burns",
-				"person:Owen Fletcher",
-			},
-		},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -66,9 +51,6 @@ func TestEntities_EachType(t *testing.T) {
 		})
 	}
 }
-
-// TestEntities_StopwordFilter verifies that "The Company" and "Of Course"
-// do NOT emit person: tags -- parity with Python's stopword check.
 func TestEntities_StopwordFilter(t *testing.T) {
 	content := "The Company is Of Course fine. But She Said something."
 	got := Entities(content)
