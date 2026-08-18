@@ -6,6 +6,62 @@ repo](https://github.com/ogham-mcp/ogham-mcp).
 
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), loosely.
 
+## v0.13.2 (2026-08-18)
+
+### Security
+
+- **`golang.org/x/text` bumped v0.34.0 → v0.39.0** for
+  [GO-2026-5970](https://pkg.go.dev/vuln/GO-2026-5970), an infinite loop
+  on invalid input. It was **reachable**, not merely present: govulncheck
+  traced `native.Audit` → `pgx.Connect` → `norm.Form.Properties`. The
+  scan now reports no vulnerabilities in any class.
+
+### Changed
+
+- **`person:` entity extraction removed.** It was the only one of the
+  four categories with no unambiguous syntactic marker — `entity:` has
+  CamelCase, `file:` has path separators, `error:` has the
+  Error/Exception suffix, and a person name has Title Case, which it
+  shares with every product noun phrase. On hook-captured prose the
+  classifier produced 4,140 person entities with no people in a random
+  sample of 30; the rule strict enough to prevent that dropped real
+  names in subject position on hand-written prose. The two genres have
+  opposite base rates, so no single threshold is right for both.
+
+  Existing rows are untouched — this changes what is stored from here
+  on. Nothing consumed `person:` for ranking. (#44, #45)
+
+- **Parity fixture regenerated and the entities floor raised to 95%.**
+  The fixture had never been regenerated since 2026-04-21 and could not
+  have been: the generator stamped a `reference_date` it never applied.
+  It now pins parsedatetime's clock and refuses to write a fixture if
+  the pin stops working. With `person:` gone the remaining three
+  prefixes match **97/97 with zero tags on either side**. (TBU-243)
+
+- **All eight direct dependencies updated** — `pgx/v5` 5.9.2 → 5.10.0,
+  `modelcontextprotocol/go-sdk` 1.4.1 → 1.7.0, `modernc.org/sqlite`
+  1.49.1 → 1.56.0, `templ` 0.3.1001 → 0.3.1020, `jsonschema` 0.13.0 →
+  0.14.0, `testcontainers-go` (and its postgres module) 0.42.0 → 0.44.0,
+  `golang.org/x/sync` 0.20.0 → 0.22.0.
+
+- **Pre-commit hooks bumped** — `golangci-lint` v2.1.6 → v2.12.2,
+  `pre-commit-hooks` v5.0.0 → v6.0.0, `gitleaks` v8.21.2 → v8.30.1.
+
+### Fixed
+
+- **Coverage gaps in `internal/native/cache`.** `Default` and
+  `ResetDefault` were exported with no test at all, and `dayIndexToName`
+  was at 55.6%. They had been masked by the well-covered person
+  classifier; removing it took the shared `strict-pkgs` figure to 89.8%
+  and failed CI. Covered rather than lowering the threshold: 91.9%.
+
+### Notes
+
+- **`pre-commit` is not installed on the primary build machine**, so the
+  `govulncheck` hook this config has declared since May has never run.
+  That is how GO-2026-5970 reached a release branch. Installing it
+  (`pre-commit install`) is the fix; the hook itself was correct.
+
 ## v0.13.1 (2026-08-17)
 
 > v0.13.0 was tagged and never published. Its release run built all five
