@@ -36,13 +36,13 @@ type HooksConfig struct {
 		Architecture []string `yaml:"architecture"`
 		Annotations  []string `yaml:"annotations"`
 	} `yaml:"signals"`
-	NoiseCommands     []string `yaml:"noise_commands"`
-	AlwaysSkipTools   []string `yaml:"always_skip_tools"`
+	NoiseCommands      []string `yaml:"noise_commands"`
+	AlwaysSkipTools    []string `yaml:"always_skip_tools"`
 	ResponseGatedTools []string `yaml:"response_gated_tools"`
-	RoutineTools      []string `yaml:"routine_tools"`
-	GitSignal         []string `yaml:"git_signal"`
-	GitNoise          []string `yaml:"git_noise"`
-	Secrets           struct {
+	RoutineTools       []string `yaml:"routine_tools"`
+	GitSignal          []string `yaml:"git_signal"`
+	GitNoise           []string `yaml:"git_noise"`
+	Secrets            struct {
 		BareTokens []BareToken `yaml:"bare_tokens"`
 		EnvKeys    []string    `yaml:"env_keys"`
 	} `yaml:"secrets"`

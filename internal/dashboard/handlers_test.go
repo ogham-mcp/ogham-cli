@@ -472,8 +472,8 @@ func TestHtmlEscape(t *testing.T) {
 	// Defensive: the inline error banner skips templ, so the escaper
 	// has to handle the common HTML-injection characters itself.
 	cases := map[string]string{
-		"hello":                 "hello",
-		"<script>x</script>":    "&lt;script&gt;x&lt;/script&gt;",
+		"hello":                  "hello",
+		"<script>x</script>":     "&lt;script&gt;x&lt;/script&gt;",
 		`a & b "quoted" < stuff`: `a &amp; b &quot;quoted&quot; &lt; stuff`,
 	}
 	for in, want := range cases {
