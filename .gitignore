@@ -33,4 +33,9 @@ internal/dashboard/_build/bun.lock
 
 # Local-only progress / tracking notes (never commit)
 docs/tracking*.md
+# Internal scope / planning packages. Working material addressed to the
+# dev fleet, referencing Linear tickets and internal process -- not
+# documentation for users of a public repo. One was published by
+# accident in 0ef9320 via `git add -A`; this stops the next one.
+docs/scope/
 docs/release-v*.md
