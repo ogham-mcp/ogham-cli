@@ -501,5 +501,3 @@ in_markers:
 recurrence_patterns: []
 
 # --- Person-name tightening (v0.7) ---
-person_name_denylist: []
-person_name_context_words: []

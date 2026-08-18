@@ -3,8 +3,7 @@
   "shared_entity_prefixes": [
     "entity:",
     "file:",
-    "error:",
-    "person:"
+    "error:"
   ],
   "count": 97,
   "records": [
@@ -103,9 +102,7 @@
       "python_entities_full": [
         "person:Decision Geminis"
       ],
-      "python_entities_shared": [
-        "person:Decision Geminis"
-      ],
+      "python_entities_shared": [],
       "python_dates": [],
       "python_importance": 0.4
     },
@@ -525,9 +522,7 @@
         "event:voyage",
         "person:Kevin Burns"
       ],
-      "python_entities_shared": [
-        "person:Kevin Burns"
-      ],
+      "python_entities_shared": [],
       "python_dates": [
         "2026-04-21"
       ],
@@ -541,9 +536,7 @@
         "activity:tested",
         "person:Emma Carter"
       ],
-      "python_entities_shared": [
-        "person:Emma Carter"
-      ],
+      "python_entities_shared": [],
       "python_dates": [],
       "python_importance": 0.2
     },
@@ -557,8 +550,7 @@
         "person:Max Fischer"
       ],
       "python_entities_shared": [
-        "entity:YouTube",
-        "person:Max Fischer"
+        "entity:YouTube"
       ],
       "python_dates": [],
       "python_importance": 0.2
@@ -570,9 +562,7 @@
       "python_entities_full": [
         "person:Maya Martins"
       ],
-      "python_entities_shared": [
-        "person:Maya Martins"
-      ],
+      "python_entities_shared": [],
       "python_dates": [],
       "python_importance": 0.2
     },
@@ -583,9 +573,7 @@
       "python_entities_full": [
         "person:Peter Müller"
       ],
-      "python_entities_shared": [
-        "person:Peter Müller"
-      ],
+      "python_entities_shared": [],
       "python_dates": [],
       "python_importance": 0.2
     },
@@ -597,10 +585,7 @@
         "person:Clerk Organizations",
         "person:Rachel Green"
       ],
-      "python_entities_shared": [
-        "person:Clerk Organizations",
-        "person:Rachel Green"
-      ],
+      "python_entities_shared": [],
       "python_dates": [],
       "python_importance": 0.2
     },
@@ -652,9 +637,7 @@
       "python_entities_full": [
         "person:Yesterday Kevin"
       ],
-      "python_entities_shared": [
-        "person:Yesterday Kevin"
-      ],
+      "python_entities_shared": [],
       "python_dates": [
         "2026-04-20"
       ],
@@ -818,8 +801,7 @@
         "person:Anna Marchetti"
       ],
       "python_entities_shared": [
-        "entity:ClerkOrganization",
-        "person:Anna Marchetti"
+        "entity:ClerkOrganization"
       ],
       "python_dates": [
         "2026-04-20"
@@ -923,8 +905,7 @@
       ],
       "python_entities_shared": [
         "file:internal/native/extraction/entities.go",
-        "file:src/ogham/extraction.py",
-        "person:Kevin Burns"
+        "file:src/ogham/extraction.py"
       ],
       "python_dates": [
         "2026-03-10"
@@ -957,8 +938,7 @@
         "person:Nora Svensson"
       ],
       "python_entities_shared": [
-        "entity:GeminiEmbedder",
-        "person:Nora Svensson"
+        "entity:GeminiEmbedder"
       ],
       "python_dates": [
         "2026-04-21"
@@ -1057,8 +1037,7 @@
         "person:Kevin Burns"
       ],
       "python_entities_shared": [
-        "entity:EmbeddingCache",
-        "person:Kevin Burns"
+        "entity:EmbeddingCache"
       ],
       "python_dates": [],
       "python_importance": 0.5
@@ -1132,9 +1111,7 @@
       "python_entities_full": [
         "person:Peterson Lee"
       ],
-      "python_entities_shared": [
-        "person:Peterson Lee"
-      ],
+      "python_entities_shared": [],
       "python_dates": [],
       "python_importance": 0.2
     },
@@ -1145,9 +1122,7 @@
       "python_entities_full": [
         "person:Alan Turing"
       ],
-      "python_entities_shared": [
-        "person:Alan Turing"
-      ],
+      "python_entities_shared": [],
       "python_dates": [],
       "python_importance": 0.2
     },

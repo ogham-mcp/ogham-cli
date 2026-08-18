@@ -298,3 +298,22 @@ func TestRecurrence_TagsFormat(t *testing.T) {
 		}
 	}
 }
+
+// TestDayIndexToNameCoversEveryWeekday closes a gap that was masked
+// until the person: classifier was removed: only a few branches of this
+// switch were reached by the recurrence fixtures.
+func TestDayIndexToNameCoversEveryWeekday(t *testing.T) {
+	want := []string{"sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"}
+	for i, w := range want {
+		if got := dayIndexToName(i); got != w {
+			t.Errorf("dayIndexToName(%d) = %q, want %q", i, got, w)
+		}
+	}
+	// Out-of-range indices return the "unknown" sentinel rather than
+	// panicking or inventing a day.
+	for _, bad := range []int{-1, 7, 99} {
+		if got := dayIndexToName(bad); got != "unknown" {
+			t.Errorf("dayIndexToName(%d) = %q, want %q", bad, got, "unknown")
+		}
+	}
+}
