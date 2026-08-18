@@ -43,6 +43,8 @@ func LoadEnvFiles() []string {
 //   - no escape-sequence or variable interpolation (Python's env loading
 //     doesn't interpolate either; keep parity, keep it simple)
 func parseEnvFile(path string) []string {
+	// #nosec G304 -- .env path resolved from config; reading operator
+	// files is the function's purpose.
 	f, err := os.Open(path)
 	if err != nil {
 		return nil

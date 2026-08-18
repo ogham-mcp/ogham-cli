@@ -66,7 +66,12 @@ func StartCallbackServer(ctx context.Context) (port int, result <-chan CallbackR
 		}
 	}()
 
-	// Auto-shutdown after result received or timeout
+	// Auto-shutdown after result received or timeout.
+	//
+	// #nosec G118 -- this goroutine DOES observe ctx (it selects on
+	// ctx.Done() below); the detached context is only for Shutdown, and
+	// it is bounded. See the comment at the Shutdown call for why
+	// reusing ctx there would be wrong.
 	go func() {
 		select {
 		case <-ctx.Done():
@@ -74,7 +79,14 @@ func StartCallbackServer(ctx context.Context) (port int, result <-chan CallbackR
 			// Give browser time to render the success page
 			time.Sleep(1 * time.Second)
 		}
-		if err := server.Shutdown(context.Background()); err != nil {
+		// Deliberately NOT ctx: by the time we get here ctx may already
+		// be cancelled, and Shutdown on a cancelled context returns
+		// immediately without draining, cutting off the success page the
+		// browser is still fetching. Detached but bounded, so a wedged
+		// connection cannot hang the process forever (gosec G118).
+		shutdownCtx, cancelShutdown := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancelShutdown()
+		if err := server.Shutdown(shutdownCtx); err != nil {
 			slog.Error("callback server shutdown error", "error", err)
 		}
 	}()

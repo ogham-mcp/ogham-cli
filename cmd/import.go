@@ -44,6 +44,8 @@ file is untouched.`,
 			}
 			data = buf
 		} else {
+			// #nosec G304 -- path is the import file the user named on the
+			// command line; reading it is what import does.
 			buf, err := os.ReadFile(path)
 			if err != nil {
 				return fmt.Errorf("read %s: %w", path, err)

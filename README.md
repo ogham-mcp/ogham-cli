@@ -655,6 +655,26 @@ ogham-cli/
 └── main.go
 ```
 
+
+## Contributing
+
+Hooks are managed with [`prek`](https://github.com/j178/prek), **not** `pre-commit`.
+It is a drop-in-compatible Rust reimplementation, so `.pre-commit-config.yaml`
+keeps the standard name and schema — which is why this needs saying.
+
+```bash
+brew install prek
+prek install            # writes .git/hooks/pre-commit
+prek run --all-files    # run everything now
+```
+
+The config had never been installed on the maintainer's machine until
+2026-08-18, so the `govulncheck` hook it had declared since May had never
+run — which is how a reachable CVE reached a release branch (v0.13.2).
+If a hook is slow enough that you want `--no-verify`, move it to
+pre-push rather than skipping it.
+
+
 ## License
 
 MIT

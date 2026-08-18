@@ -1,3 +1,21 @@
+# Hook config for ogham-cli.
+#
+# THE RUNNER IS `prek`, NOT `pre-commit`.
+#
+#   brew install prek
+#   prek install          # writes .git/hooks/pre-commit
+#   prek run --all-files  # run everything now
+#
+# prek is a drop-in-compatible Rust reimplementation, so this file keeps
+# the standard filename and schema -- which is exactly why the runner
+# needs stating here. Reading the config alone leads you to install
+# `pre-commit`, and someone did that on 2026-08-18 (TBU-255).
+#
+# The two Go scanners at the bottom are the slow ones: `prek run
+# --all-files` takes minutes, dominated by their `go run ...@latest`
+# compile. If that ever becomes a reason to reach for --no-verify,
+# move them to pre-push rather than deleting them -- an unexecuted
+# hook is worse than no hook, which is how GO-2026-5970 shipped.
 repos:
   - repo: https://github.com/dnephin/pre-commit-golang
     rev: v0.5.1
@@ -35,7 +53,10 @@ repos:
     hooks:
       - id: gosec
         name: gosec (Go SAST)
-        entry: go run github.com/securego/gosec/v2/cmd/gosec@latest -quiet -exclude=G104 ./...
+        # Pinned, not @latest: a floating version means a commit can start
+        # failing because an upstream tool changed, with no repo change --
+        # the problem TBU-234 pinned out of CI. Bump deliberately.
+        entry: go run github.com/securego/gosec/v2/cmd/gosec@v2.22.9 -quiet -exclude=G104 ./...
         language: system
         types: [go]
         pass_filenames: false
@@ -47,7 +68,10 @@ repos:
     hooks:
       - id: govulncheck
         name: govulncheck (known CVEs)
-        entry: go run golang.org/x/vuln/cmd/govulncheck@latest ./...
+        # Pinned for the same reason as gosec above. NOTE: the CVE
+        # database is fetched at run time, so pinning the tool does not
+        # freeze what it knows -- new advisories still surface.
+        entry: go run golang.org/x/vuln/cmd/govulncheck@v1.1.4 ./...
         language: system
         types: [go]
         pass_filenames: false

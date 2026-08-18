@@ -6,6 +6,61 @@ repo](https://github.com/ogham-mcp/ogham-mcp).
 
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), loosely.
 
+## v0.13.3 (2026-08-18)
+
+Security triage and hook hygiene. No functional change to the CLI —
+every code change in this release is a `#nosec` annotation, one bounded
+context, or documentation.
+
+### Fixed
+
+- **All 25 gosec findings triaged to zero** (#50). Two were HIGH and are
+  worth reading rather than taking on trust:
+
+  - `internal/auth/callback.go` — the callback server's shutdown context
+    was detached *and unbounded*, so a wedged connection could hang the
+    process. Now bounded at 5 seconds. It stays detached deliberately:
+    reusing the request context would abort the drain, cutting off the
+    success page the browser is still fetching.
+  - `internal/sidecar/sidecar.go` — flagged, examined, kept. The
+    supervisor goroutine watches a subprocess whose lifetime is owned by
+    `Close()`, not by the call that started it; cancelling the connect
+    context must not kill a running sidecar out from under other
+    callers.
+
+  The remaining 23 are annotated with a **per-site reason**. No rule IDs
+  were added to the hook's `-exclude` list — silencing a rule to go
+  green is not triage.
+
+### Changed
+
+- **Pre-commit hooks are documented.** The runner is
+  [`prek`](https://github.com/j178/prek), not `pre-commit` — a
+  drop-in-compatible reimplementation, so the config keeps the standard
+  filename and gave no hint, which is exactly why it needed saying.
+  Config header and a README **Contributing** section now state it with
+  install commands.
+
+- **`gosec` and `govulncheck` pinned** (`v2.22.9`, `v1.1.4`) instead of
+  tracking `@latest`. A floating scanner version means a commit can
+  start failing with no repo change — the problem TBU-234 pinned out of
+  CI. `govulncheck`'s CVE database is still fetched at run time, so
+  pinning the tool does not freeze what it knows.
+
+### Notes
+
+- These hooks had **never run** on the maintainer's machine before
+  2026-08-18. That is how the reachable `golang.org/x/text` CVE in
+  v0.13.2 got as far as a release branch, and it is why this release
+  exists: the checks were correct and unexecuted. `prek install` is the
+  whole fix.
+
+- Verified with a full CLI smoke test as well as the suite — read-only
+  verbs against a live store, and the hook path against isolated
+  outbox/dedupe directories: cross-process dedup, `outcome:error`
+  tagging, no raw command output in stored records, and read-class tools
+  correctly skipped.
+
 ## v0.13.2 (2026-08-18)
 
 ### Security

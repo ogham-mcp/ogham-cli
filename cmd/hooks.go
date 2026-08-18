@@ -1082,6 +1082,7 @@ func plural(n int, singular, pluralForm string) string {
 // readClaudeSettings reads ~/.claude/settings.json.
 func readClaudeSettings() (map[string]any, error) {
 	home, _ := os.UserHomeDir()
+	// #nosec G304 -- fixed filename under os.UserHomeDir(); no caller input.
 	data, err := os.ReadFile(home + "/.claude/settings.json")
 	if err != nil {
 		return nil, err

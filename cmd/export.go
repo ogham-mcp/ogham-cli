@@ -81,6 +81,8 @@ file is untouched.`,
 
 		out := os.Stdout
 		if exportOutput != "" {
+			// #nosec G304 -- exportOutput is the path the user passed to --output.
+			// Writing where they asked is the command's entire purpose.
 			f, err := os.OpenFile(exportOutput, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o600)
 			if err != nil {
 				return fmt.Errorf("open %s: %w", exportOutput, err)

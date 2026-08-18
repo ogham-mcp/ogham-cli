@@ -113,10 +113,16 @@ func openBrowser(url string) error {
 	var cmd *exec.Cmd
 	switch runtime.GOOS {
 	case "darwin":
+		// #nosec G204 -- no shell; literal program name; url is the
+		// loopback dashboard address this process just bound.
 		cmd = exec.Command("open", url)
 	case "windows":
+		// #nosec G204 -- no shell; literal program name; url is the
+		// loopback dashboard address this process just bound.
 		cmd = exec.Command("rundll32", "url.dll,FileProtocolHandler", url)
 	default: // linux, *bsd
+		// #nosec G204 -- no shell; literal program name; url is the
+		// loopback dashboard address this process just bound.
 		cmd = exec.Command("xdg-open", url)
 	}
 	return cmd.Start()
