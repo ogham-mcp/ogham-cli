@@ -45,16 +45,16 @@ import (
 // clock. It now pins parsedatetime's clock and refuses to write a
 // fixture if the pin stops working.
 //
-// NARROWED 2026-08-18. person: was removed from the Go extractor
-// (ogham-cli#44, #45) and dropped from SHARED_PREFIXES here. It was the
-// only category with no unambiguous syntactic marker, and -- measured
-// on this corpus -- the ONLY prefix on which the two implementations
-// disagreed at all. With it gone the remaining three match 97/97 with
-// zero tags on either side, so the entities floor is 95%.
+// person: REMOVED FROM BOTH SIDES 2026-08-18 -- ogham-cli#44/#45 and
+// ogham-mcp 5399440. It was the only category with no unambiguous
+// syntactic marker, and -- measured on this corpus -- the only prefix
+// on which the two implementations ever disagreed. With it gone all
+// four prefixes match 97/97 with zero tags on either side, so the
+// entities floor is 95%.
 //
-// Python still emits person:, so this narrowing hides a known,
-// deliberate divergence rather than drift. If Python drops the class
-// too, widen SHARED_PREFIXES back and the comparison costs nothing.
+// The prefix stays in SHARED_PREFIXES on purpose. Neither side emits
+// it, so comparing it costs nothing and asserts that neither side
+// quietly reintroduces it.
 
 type parityRecord struct {
 	Index                int      `json:"index"`

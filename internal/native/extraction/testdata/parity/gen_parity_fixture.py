@@ -99,13 +99,16 @@ def _assert_clock_is_pinned(reference: "datetime") -> None:
 # v0.5 shared entity prefixes between Go and Python. Anything outside
 # this set is Python-only (event:/activity:/emotion:/relationship:/
 # quantity:/preference:) and therefore excluded from parity comparison.
-# person: was removed from the Go extractor on 2026-08-18 (ogham-cli#44,
-# #45). It was the only one of the four with no unambiguous syntactic
-# marker, and it was also the ONLY prefix on which the two
-# implementations disagreed -- entity:, file: and error: matched 97/97.
-# Python still emits person: for now, so comparing it would measure a
-# deliberate divergence rather than drift.
-SHARED_PREFIXES = ("entity:", "file:", "error:")
+# person: was removed from BOTH implementations on 2026-08-18 --
+# ogham-cli#44/#45 and ogham-mcp 5399440. It was the only one of the
+# four categories with no unambiguous syntactic marker, and the only
+# prefix the two sides ever disagreed on.
+#
+# It stays in this tuple deliberately. Neither side emits it now, so
+# comparing it costs nothing and asserts that neither side quietly
+# reintroduces it -- the same reasoning as keeping the PersonName
+# dimension in the PICT model rather than deleting it.
+SHARED_PREFIXES = ("entity:", "file:", "error:", "person:")
 
 # Pinned reference date: makes relative-date extraction reproducible.
 # Every "yesterday" / "last week" / "in three days" in the corpus is

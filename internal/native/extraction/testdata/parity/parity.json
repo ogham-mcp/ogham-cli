@@ -3,7 +3,8 @@
   "shared_entity_prefixes": [
     "entity:",
     "file:",
-    "error:"
+    "error:",
+    "person:"
   ],
   "count": 97,
   "records": [
@@ -99,9 +100,7 @@
         "type:decision",
         "dependencies"
       ],
-      "python_entities_full": [
-        "person:Decision Geminis"
-      ],
+      "python_entities_full": [],
       "python_entities_shared": [],
       "python_dates": [],
       "python_importance": 0.4
@@ -519,8 +518,7 @@
       "content": "Kevin Burns shipped the Voyage + Mistral absorption in commit bfd3378 on 2026-04-21.",
       "tags": [],
       "python_entities_full": [
-        "event:voyage",
-        "person:Kevin Burns"
+        "event:voyage"
       ],
       "python_entities_shared": [],
       "python_dates": [
@@ -533,8 +531,7 @@
       "content": "Emma Carter tested the v0.4 release against his self-hosted stack; found no regressions.",
       "tags": [],
       "python_entities_full": [
-        "activity:tested",
-        "person:Emma Carter"
+        "activity:tested"
       ],
       "python_entities_shared": [],
       "python_dates": [],
@@ -546,8 +543,7 @@
       "tags": [],
       "python_entities_full": [
         "entity:YouTube",
-        "event:demo",
-        "person:Max Fischer"
+        "event:demo"
       ],
       "python_entities_shared": [
         "entity:YouTube"
@@ -559,9 +555,7 @@
       "index": 37,
       "content": "Maya Martins is interested in picking up the Agent Zero importer as a contributor task.",
       "tags": [],
-      "python_entities_full": [
-        "person:Maya Martins"
-      ],
+      "python_entities_full": [],
       "python_entities_shared": [],
       "python_dates": [],
       "python_importance": 0.2
@@ -570,9 +564,7 @@
       "index": 38,
       "content": "Peter Müller mentioned Freiberufler status at the last industry meetup, not Gewerbe.",
       "tags": [],
-      "python_entities_full": [
-        "person:Peter Müller"
-      ],
+      "python_entities_full": [],
       "python_entities_shared": [],
       "python_dates": [],
       "python_importance": 0.2
@@ -581,10 +573,7 @@
       "index": 39,
       "content": "Rachel Green asked whether Ogham supports Clerk Organizations for team shared memory -- it's on the v0.7 roadmap.",
       "tags": [],
-      "python_entities_full": [
-        "person:Clerk Organizations",
-        "person:Rachel Green"
-      ],
+      "python_entities_full": [],
       "python_entities_shared": [],
       "python_dates": [],
       "python_importance": 0.2
@@ -634,9 +623,7 @@
       "index": 44,
       "content": "Yesterday Kevin signed off on the v0.4 private release.",
       "tags": [],
-      "python_entities_full": [
-        "person:Yesterday Kevin"
-      ],
+      "python_entities_full": [],
       "python_entities_shared": [],
       "python_dates": [
         "2026-04-20"
@@ -797,8 +784,7 @@
       "content": "My colleague Anna Marchetti sent me a ClerkOrganization invite yesterday.",
       "tags": [],
       "python_entities_full": [
-        "entity:ClerkOrganization",
-        "person:Anna Marchetti"
+        "entity:ClerkOrganization"
       ],
       "python_entities_shared": [
         "entity:ClerkOrganization"
@@ -900,8 +886,7 @@
       ],
       "python_entities_full": [
         "file:internal/native/extraction/entities.go",
-        "file:src/ogham/extraction.py",
-        "person:Kevin Burns"
+        "file:src/ogham/extraction.py"
       ],
       "python_entities_shared": [
         "file:internal/native/extraction/entities.go",
@@ -934,8 +919,7 @@
         "type:merge"
       ],
       "python_entities_full": [
-        "entity:GeminiEmbedder",
-        "person:Nora Svensson"
+        "entity:GeminiEmbedder"
       ],
       "python_entities_shared": [
         "entity:GeminiEmbedder"
@@ -1033,8 +1017,7 @@
       "content": "Wir haben entschieden, EmbeddingCache zu verwenden. Kevin Burns prüft den Implementierungsstand am Dienstag.",
       "tags": [],
       "python_entities_full": [
-        "entity:EmbeddingCache",
-        "person:Kevin Burns"
+        "entity:EmbeddingCache"
       ],
       "python_entities_shared": [
         "entity:EmbeddingCache"
@@ -1108,9 +1091,7 @@
       "index": 80,
       "content": "Peterson Lee is a common misreading of two distinct people in the Contoso EMEA org.",
       "tags": [],
-      "python_entities_full": [
-        "person:Peterson Lee"
-      ],
+      "python_entities_full": [],
       "python_entities_shared": [],
       "python_dates": [],
       "python_importance": 0.2
@@ -1119,9 +1100,7 @@
       "index": 81,
       "content": "Dr. Alan Turing first formalised the halting problem; see Turing (1936).",
       "tags": [],
-      "python_entities_full": [
-        "person:Alan Turing"
-      ],
+      "python_entities_full": [],
       "python_entities_shared": [],
       "python_dates": [],
       "python_importance": 0.2
