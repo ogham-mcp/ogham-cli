@@ -17,7 +17,7 @@
 //     by enqueue time. Drain processes oldest-first.
 //   - Zero CGO, zero binary bloat, zero new top-level dependencies
 //     (google/uuid is already in tree). The drainer is `os.ReadDir`
-//     + `os.ReadFile` + `os.Remove`.
+//   - `os.ReadFile` + `os.Remove`.
 //
 // Bounds (from the v0.9 council perf seat):
 //   - Drain deadline: 30 s (configurable via context).
@@ -61,10 +61,10 @@ const (
 // (drains are serialised by the SessionStart hook that owns them;
 // concurrent drains would race on deletes but not on writers).
 type Outbox struct {
-	Dir           string
-	DrainBatch    int           // 0 means DefaultDrainBatch
-	TmpThreshold  time.Duration // 0 means DefaultTmpThreshold
-	now           func() time.Time
+	Dir          string
+	DrainBatch   int           // 0 means DefaultDrainBatch
+	TmpThreshold time.Duration // 0 means DefaultTmpThreshold
+	now          func() time.Time
 }
 
 // New constructs an Outbox over the given directory, creating it
@@ -142,11 +142,11 @@ type Handler func(ctx context.Context, rec *Record) error
 
 // DrainStats summarises one Drain call.
 type DrainStats struct {
-	Processed   int // handler called and returned nil
-	Failed      int // handler returned error; file kept
-	Orphaned    int // stray .tmp deleted
-	Malformed   int // file unparseable; quarantined
-	Remaining   int // files left when we stopped (cap or deadline)
+	Processed int // handler called and returned nil
+	Failed    int // handler returned error; file kept
+	Orphaned  int // stray .tmp deleted
+	Malformed int // file unparseable; quarantined
+	Remaining int // files left when we stopped (cap or deadline)
 }
 
 // Drain processes queued records oldest-first. Stops on context
@@ -271,4 +271,3 @@ func DefaultDir() (string, error) {
 	}
 	return filepath.Join(cache, "ogham", "outbox"), nil
 }
-

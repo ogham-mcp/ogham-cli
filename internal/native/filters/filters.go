@@ -27,13 +27,13 @@ import (
 // objects derived from it. Populated once at init.
 type loadedConfig struct {
 	cfg                *shared.HooksConfig
-	bareTokens         *regexp.Regexp   // OR-joined patterns from secrets.bare_tokens
-	envKeyPattern      *regexp.Regexp   // KEY=value for env_keys list
-	keyValueAssignment *regexp.Regexp   // Generic KEY=VALUE for service prefixes
-	urlCredentials     *regexp.Regexp   // ://user:pass@host
-	alwaysSkip         map[string]bool  // O(1) lookup for always_skip_tools
-	routine            map[string]bool  // O(1) lookup for routine_tools
-	responseGated      map[string]bool  // O(1) lookup for response_gated_tools
+	bareTokens         *regexp.Regexp  // OR-joined patterns from secrets.bare_tokens
+	envKeyPattern      *regexp.Regexp  // KEY=value for env_keys list
+	keyValueAssignment *regexp.Regexp  // Generic KEY=VALUE for service prefixes
+	urlCredentials     *regexp.Regexp  // ://user:pass@host
+	alwaysSkip         map[string]bool // O(1) lookup for always_skip_tools
+	routine            map[string]bool // O(1) lookup for routine_tools
+	responseGated      map[string]bool // O(1) lookup for response_gated_tools
 }
 
 var config *loadedConfig

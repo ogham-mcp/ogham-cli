@@ -619,15 +619,6 @@ recurrence_patterns:
   - pattern: "annually"
     normalised: "yearly"
 
-# --- Person-name tightening (v0.7) ---
-# Seeded with known tech-term false positives seen on real memories.
-# Items are stripped of trailing "." so "Next.js" stored as "Next.js"
-# still matches via the regex-level punctuation check, not this list.
-# Bigrams are matched by joining both tokens with a single space and
-# lowercasing; the denylist above hits unigrams, while this list catches
-# the compound false-positives we've seen in the parity corpus.
-# Generic prepositions from person_name_context_words that only license
-# a name at distance 1. See PersonNameWeakContextWords (#33).
 negation_markers:
   - no longer
   - not anymore

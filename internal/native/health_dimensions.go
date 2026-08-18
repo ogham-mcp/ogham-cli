@@ -335,14 +335,14 @@ func msSince(t time.Time) float64 {
 // so users (and dashboards) don't read this as a stable 8-row format
 // until the follow-up session lands.
 type ExtendedHealthReport struct {
-	Profile           string            `json:"profile"`
-	OverallScore      float64           `json:"overall_score"`
-	OverallZone       Zone              `json:"overall_zone"`
-	Dimensions        []DimensionResult `json:"dimensions"`
-	PortedDimensions  int               `json:"ported_dimensions"`
-	TotalDimensions   int               `json:"total_dimensions"`
-	DeferredNotice    string            `json:"deferred_notice,omitempty"`
-	DurationMs        float64           `json:"duration_ms"`
+	Profile          string            `json:"profile"`
+	OverallScore     float64           `json:"overall_score"`
+	OverallZone      Zone              `json:"overall_zone"`
+	Dimensions       []DimensionResult `json:"dimensions"`
+	PortedDimensions int               `json:"ported_dimensions"`
+	TotalDimensions  int               `json:"total_dimensions"`
+	DeferredNotice   string            `json:"deferred_notice,omitempty"`
+	DurationMs       float64           `json:"duration_ms"`
 }
 
 // ComposeExtendedHealth runs every dimension in this batch and returns
