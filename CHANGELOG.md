@@ -31,12 +31,20 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), loosely.
   Existing rows are untouched — this changes what is stored from here
   on. Nothing consumed `person:` for ranking. (#44, #45)
 
+  The Python `ogham-mcp` extractor dropped the class the same day
+  (`5399440`), so both implementations now agree. The prefix is still
+  compared by the parity gate, deliberately: neither side emits it, so
+  the check costs nothing and catches a quiet reintroduction on either
+  side.
+
 - **Parity fixture regenerated and the entities floor raised to 95%.**
   The fixture had never been regenerated since 2026-04-21 and could not
   have been: the generator stamped a `reference_date` it never applied.
   It now pins parsedatetime's clock and refuses to write a fixture if
   the pin stops working. With `person:` gone the remaining three
-  prefixes match **97/97 with zero tags on either side**. (TBU-243)
+  prefixes match **97/97 with zero tags on either side** — across all
+  four prefixes, so this is genuine agreement rather than agreement by
+  exclusion. (TBU-243)
 
 - **All eight direct dependencies updated** — `pgx/v5` 5.9.2 → 5.10.0,
   `modelcontextprotocol/go-sdk` 1.4.1 → 1.7.0, `modernc.org/sqlite`
