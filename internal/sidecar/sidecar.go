@@ -104,7 +104,9 @@ func New(opts Options) *Client {
 // be reused after Start/Wait.
 func buildCmd(opts Options) *exec.Cmd {
 	cmdArgs := resolveCommand(opts.Command, opts.Args)
-	cmd := exec.Command(cmdArgs[0], cmdArgs[1:]...) //nolint:gosec // user-controlled sidecar command is intentional
+	// #nosec G204 -- the operator configures which sidecar binary to run;
+	// launching it is the feature. No shell, and args are passed as argv.
+	cmd := exec.Command(cmdArgs[0], cmdArgs[1:]...) //nolint:gosec // operator-configured sidecar command is intentional
 	cmd.Env = append(os.Environ(), opts.Env...)
 	// stderr is inherited -- the Python sidecar's logs surface to the terminal,
 	// which is helpful when diagnosing why a tool call failed.
@@ -132,6 +134,13 @@ func (c *Client) Connect(ctx context.Context) error {
 	c.session = session
 	c.mu.Unlock()
 
+	// #nosec G118 -- the supervisor is deliberately not tied to ctx. It
+	// watches a long-lived subprocess whose lifecycle is owned by
+	// Close(), not by the call that happened to start it; cancelling the
+	// Connect context must not kill a running sidecar out from under
+	// other callers. supervise() exits on c.closed, and its own
+	// reconnect already uses a bounded context rather than a naked
+	// Background.
 	go c.supervise(session)
 	return nil
 }

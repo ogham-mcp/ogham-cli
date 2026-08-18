@@ -116,6 +116,9 @@ func ParsePickle(pklPath string, areas []string, includeKnowledge bool) ([]Memor
 		knowledgeArg = "1"
 	}
 
+	// #nosec G204 -- no shell. "python3" and parserScript are literals;
+	// pklPath is the pickle the user asked to import, passed as an argv
+	// element rather than interpolated into a command string.
 	cmd := exec.Command("python3", "-c", parserScript, pklPath, areasArg, knowledgeArg)
 	out, err := cmd.CombinedOutput()
 	if err != nil {

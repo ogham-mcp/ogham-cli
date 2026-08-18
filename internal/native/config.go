@@ -100,6 +100,8 @@ func Load(path string) (*Config, error) {
 	// env always wins over dotenv (set-if-absent semantics).
 	mergeEnvFilesIntoProcess()
 
+	// #nosec G304 -- native config path, resolved from the documented
+	// default or an operator-set env var.
 	if data, err := os.ReadFile(path); err == nil {
 		if err := toml.Unmarshal(data, cfg); err != nil {
 			return nil, fmt.Errorf("parse native config %s: %w", path, err)

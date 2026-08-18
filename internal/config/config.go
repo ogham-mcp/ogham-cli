@@ -25,6 +25,8 @@ func Load(path string) (*Config, error) {
 		GatewayURL: DefaultGatewayURL,
 	}
 
+	// #nosec G304 -- path is the config location, either the documented
+	// default or an explicit --config from the operator.
 	if data, err := os.ReadFile(path); err == nil {
 		if err := toml.Unmarshal(data, cfg); err != nil {
 			return nil, fmt.Errorf("parse config %s: %w", path, err)
@@ -46,12 +48,15 @@ func Save(path string, cfg *Config) error {
 		return err
 	}
 
+	// #nosec G304 -- same operator-supplied config path, write side.
 	f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0600)
 	if err != nil {
 		return err
 	}
 	defer func() { _ = f.Close() }()
 
+	// #nosec G117 -- cfg has an APIKey field and writing it to the config
+	// file is what Save exists to do. The file is created 0600 above.
 	return toml.NewEncoder(f).Encode(cfg)
 }
 

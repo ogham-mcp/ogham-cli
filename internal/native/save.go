@@ -23,6 +23,7 @@ func Save(path string, cfg *Config) error {
 	// Read existing so we can merge. When the file doesn't exist, start
 	// from an empty map.
 	existing := make(map[string]any)
+	// #nosec G304 -- path is the memory-file location from config.
 	if data, err := os.ReadFile(path); err == nil {
 		_ = toml.Unmarshal(data, &existing) // best-effort
 	}
@@ -73,6 +74,7 @@ func Save(path string, cfg *Config) error {
 
 	// Write with 0600 perms; open with O_TRUNC to avoid leftover bytes
 	// if the new content is shorter than the old.
+	// #nosec G304 -- same config-resolved memory-file path, write side.
 	f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o600)
 	if err != nil {
 		return fmt.Errorf("save config: open: %w", err)
@@ -219,6 +221,7 @@ func SaveEnvFile(path string, cfg *Config) error {
 		fmt.Fprintf(&sb, "%s=%s\n", k, entries[k])
 	}
 
+	// #nosec G304 -- same config-resolved memory-file path, write side.
 	f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o600)
 	if err != nil {
 		return fmt.Errorf("save env: open: %w", err)

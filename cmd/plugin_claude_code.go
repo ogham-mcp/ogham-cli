@@ -173,8 +173,9 @@ func copyOghamBinary(dir string) error {
 		return fmt.Errorf("open src binary %s: %w", src, err)
 	}
 	defer func() { _ = in.Close() }()
-	// #nosec G302 -- a binary that Claude Code is going to exec needs
-	// the user-exec bit. 0700 is owner-only RWX (no group/world bits).
+	// #nosec G302,G304 -- G302: a binary that Claude Code is going to
+	// exec needs the user-exec bit; 0700 is owner-only RWX. G304: dst is
+	// under the scaffold directory the caller asked the emitter to write.
 	out, err := os.OpenFile(dst, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0700)
 	if err != nil {
 		return fmt.Errorf("create dst binary %s: %w", dst, err)

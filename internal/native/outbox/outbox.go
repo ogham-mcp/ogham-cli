@@ -110,6 +110,8 @@ func (o *Outbox) Write(rec *Record) error {
 	tmpPath := filepath.Join(o.Dir, base+inflightExtension)
 	livePath := filepath.Join(o.Dir, base+liveExtension)
 
+	// #nosec G304 -- tmpPath is filepath.Join(o.Dir, generatedBase+ext);
+	// both components are produced by this package.
 	f, err := os.OpenFile(tmpPath, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
 	if err != nil {
 		return fmt.Errorf("outbox: open tmp: %w", err)
@@ -236,6 +238,8 @@ func (o *Outbox) Drain(ctx context.Context, handler Handler) (DrainStats, error)
 
 // readRecord loads one .jsonl file and parses its single line.
 func readRecord(path string) (*Record, error) {
+	// #nosec G304 -- path comes from the drainer's glob over o.Dir, not
+	// from any caller.
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil, err

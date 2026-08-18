@@ -98,6 +98,9 @@ func (d *Deduper) IsDuplicate(sessionID, toolName, target string) bool {
 	}
 
 	// Atomic claim: exactly one caller creates the marker.
+	// #nosec G304 -- path is filepath.Join(d.dir, sha256hex). The filename
+	// is a hash, so it cannot contain a separator or dot segment;
+	// TestDeduperKeysAreNotPathTraversable pins that.
 	f, err := os.OpenFile(path, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0600)
 	if err == nil {
 		_ = f.Close()
