@@ -67,8 +67,18 @@ func TestOghamGoHookCommandRegex(t *testing.T) {
 		{"/Users/kevin/.local/bin/ogham hooks run recall", true, "v0.7.4+ absolute-path form"},
 		{"/home/dev/go/bin/ogham hooks run inscribe", true, "v0.7.4+ absolute-path form"},
 
+		// Go-side: the `omcli` name. A machine that also develops the
+		// Python ogham-mcp installs this binary as omcli, because the
+		// Python package owns the name `ogham` there. #51 found all four
+		// of that machine's hook entries invisible to this regex, which
+		// silently broke install idempotency and uninstall.
+		{"/Users/kevin/.local/bin/omcli hooks run session-start", true, "omcli install name"},
+		{"/Users/kevin/.local/bin/omcli hooks run inscribe", true, "omcli install name"},
+		{"omcli hooks run post-tool", true, "omcli bare name"},
+
 		// Python ogham-mcp: two-token verb shape, must NOT match
 		{"/path/to/.venv/bin/ogham hooks recall", false, "Python verb shape"},
+		{"/Users/kevin/.local/bin/omcli hooks recall", false, "two-token shape is never Go-owned, whatever the binary is called"},
 		{"/path/to/.venv/bin/ogham hooks inscribe", false, "Python verb shape"},
 		{"ogham hooks recall", false, "Python verb shape (bare name)"},
 
@@ -492,5 +502,22 @@ func TestFormatPythonHookWarningNamesEventsAndFile(t *testing.T) {
 func TestFormatPythonHookWarningEmptyWhenClean(t *testing.T) {
 	if msg := formatPythonHookWarning(nil, "/x"); msg != "" {
 		t.Errorf("expected no warning for a clean config, got:\n%s", msg)
+	}
+}
+
+// TestOghamPythonHookCommandRegexIgnoresOmcli guards a deliberate
+// asymmetry: `omcli` is a name the GO binary ships under, so it
+// belongs in the Go-owned matcher only. Adding it here instead would let
+// `hooks install --replace-python` delete this project's own entries
+// while claiming it removed another tool's (#7: never clobber a config
+// you do not own -- in either direction).
+func TestOghamPythonHookCommandRegexIgnoresOmcli(t *testing.T) {
+	for _, command := range []string{
+		"/Users/kevin/.local/bin/omcli hooks inscribe",
+		"/Users/kevin/.local/bin/omcli hooks recall",
+	} {
+		if oghamPythonHookCommandRegex.MatchString(command) {
+			t.Errorf("%q matched the Python-owned regex; omcli is a Go binary name", command)
+		}
 	}
 }

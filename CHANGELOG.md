@@ -6,6 +6,76 @@ repo](https://github.com/ogham-mcp/ogham-mcp).
 
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), loosely.
 
+## Unreleased
+
+Hook startup latency and stale-wiring visibility.
+
+### Fixed
+
+- **`hooks run session-start` no longer blocks on the outbox backlog**
+  (#51). It drained every queued `PostToolUse` record inline before
+  returning, so startup wall time scaled with how many edits had happened
+  since the last session — worst first thing in the morning, after a heavy
+  previous day. Measured by the reporter across 14 real session starts on
+  one machine: **median 12.0 s, worst 27.1 s**, against **0.86 s** for the
+  same hook with an empty queue.
+
+  session-start now spawns a detached `hooks run drain` child and returns
+  immediately, so its cost is constant and independent of queue depth.
+  Control it with `--drain async|sync|off` (default `async`),
+  `--drain-batch N`, or `$OGHAM_DRAIN_MODE`; `sync` is the previous
+  behaviour. The child's output goes to `<cache>/ogham/drain.log`,
+  truncated per spawn.
+
+  Two things the shape depends on, both pinned by tests: the child does
+  **not** inherit the hook's stdout/stderr (an inherited pipe keeps the
+  client waiting, which would be the same bug with more moving parts),
+  and overlapping drainers are serialised by a new lock in the outbox —
+  the loser exits quietly rather than double-storing records.
+
+- **`omcli` is now recognised as a Go-owned hook command** (#51). The
+  matcher behind `hooks install`'s idempotent pre-pass, `hooks uninstall`,
+  and the new stale-wiring warning only knew the names `ogham` and
+  `ogham-cli`. A machine that also develops the Python `ogham-mcp` — which
+  owns the name `ogham` — installs this binary as `omcli`, and on such a
+  machine *none* of its four hook entries matched: install stacked
+  duplicates instead of replacing them, and uninstall removed nothing.
+  The two-token `hooks <verb>` shape still marks a Python-owned entry, so
+  Python hooks remain untouched.
+
+### Changed
+
+- **Both Go security scanners were pinned to versions that cannot run**
+  on this toolchain (go1.27), so two of the eleven `prek` hooks were
+  passing by aborting or failing on every commit regardless of the code.
+  `gosec` v2.22.9 -> v2.29.0 (it aborted with `internal error: package
+  "fmt" without types` before scanning a file); `golangci-lint` v2.12.2
+  -> v2.13.2 (built with go1.26, it panicked on `file requires newer Go
+  version go1.27`). The Makefile's `security-scan` target now shares the
+  gosec pin via `GOSEC_VERSION` instead of floating on `@latest` — a
+  release gate that scans with a different version than the commit hook
+  is a gate that surprises you at tag time. All eleven hooks pass.
+
+### Added
+
+- **`ogham hooks run drain`** — ship the queued outbox now, and the verb
+  the detached drainer runs. Useful for flushing by hand, and for seeing
+  an error a background drain swallowed.
+
+- **`ogham hooks status` reports the outbox** — queue depth, the queue
+  path, and whether a drain is currently in progress. A backlog that never
+  shrinks is the visible symptom of a drain failing in the background, so
+  status is where it should show.
+
+- **Stale `inscribe` wiring is now surfaced** (#51, aside). `hooks run
+  inscribe` prints a one-line deprecation notice on stderr every time it
+  fires, and `hooks status` names any `PreCompact -> hooks run inscribe`
+  entry still wired in `settings.json`. That wiring was deprecated in v0.8
+  (#11) and stops being written by `hooks install`, but pre-v0.8 installs
+  keep it forever — it kept firing, kept writing metadata-only stubs, and
+  nothing said so. Both messages name the binary the user actually has
+  installed, not the project name.
+
 ## v0.13.3 (2026-08-18)
 
 Security triage and hook hygiene. No functional change to the CLI —

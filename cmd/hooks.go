@@ -23,9 +23,13 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// drainDeadline bounds how long runNativeSessionStart spends draining
-// queued PostToolUse records before falling through to the actual
-// session-context build. Mirrors the council perf-seat 30s figure.
+// drainDeadline bounds how long an INLINE drain (`--drain sync`) spends
+// shipping queued PostToolUse records before falling through to the
+// actual session-context build. Mirrors the council perf-seat 30s figure.
+//
+// The default path no longer drains inline at all -- see cmd/hooks_drain.go
+// and #51. The background drainer uses backgroundDrainDeadline instead,
+// because nothing is waiting on it.
 const drainDeadline = 30 * time.Second
 
 // defaultPostToolMatcher scopes PostToolUse to write-class tools, so the
@@ -50,6 +54,24 @@ const drainDeadline = 30 * time.Second
 // re-running the measurement, not editing the test.
 const defaultPostToolMatcher = "Write|Edit"
 
+// oghamGoBinaryNames enumerates the names this Go binary ships under.
+// Every one of them is matched by the Go-owned regexes above and below.
+//
+// `omcli` was added on evidence, not speculation: the machine
+// that reported #51 runs `~/.local/bin/omcli`, because that laptop also
+// develops the Python ogham-mcp, which owns the name `ogham`. Without it
+// the "Go-owned" regex matched none of that machine's four hook entries,
+// so `hooks install` stacked duplicates instead of replacing (its whole
+// idempotency claim), `hooks uninstall` removed nothing, and the
+// stale-wiring warning below would have been silent on precisely the
+// install that needed it.
+//
+// The Python package's console script is `ogham` and always uses the
+// two-token `hooks <verb>` form, so widening the NAME list cannot make
+// the Go matcher eat a Python entry -- the `run` token is what separates
+// them, and that is unchanged. TestOghamGoHookCommandRegex pins both.
+const oghamGoBinaryNames = `ogham-cli|ogham|omcli`
+
 // oghamGoHookCommandRegex matches hook commands owned by THIS Go binary.
 // The verb shape `hooks run <verb>` distinguishes the Go CLI's three-token
 // form from the Python ogham-mcp's two-token `hooks <verb>` form, so the
@@ -62,12 +84,14 @@ const defaultPostToolMatcher = "Write|Edit"
 //	ogham-cli hooks run session-start           (pre-v0.7.4 broken form)
 //	/usr/local/bin/ogham hooks run session-start
 //	/Users/foo/.local/bin/ogham hooks run recall
+//	/Users/foo/.local/bin/omcli hooks run inscribe
 //
 // Does NOT match (Python ogham-mcp):
 //
 //	/path/to/.venv/bin/ogham hooks recall
 //	/path/to/.venv/bin/ogham hooks inscribe
-var oghamGoHookCommandRegex = regexp.MustCompile(`(?:^|/)(ogham-cli|ogham)\s+hooks\s+run\s+`)
+var oghamGoHookCommandRegex = regexp.MustCompile(
+	`(?:^|/)(?:` + oghamGoBinaryNames + `)\s+hooks\s+run\s+`)
 
 // oghamPythonHookCommandRegex matches hook commands owned by the Python
 // ogham-mcp package: the two-token `ogham hooks <verb>` form, as opposed
@@ -168,6 +192,89 @@ func formatPythonHookWarning(found []pythonHookEntry, settingsPath string) strin
 	b.WriteString("  also unscoped (matcher \"\"), so it captures every tool call.\n")
 	b.WriteString("  Remove those entries, or re-run: ogham hooks install --replace-python\n")
 	return b.String()
+}
+
+// oghamDeprecatedHookCommandRegex matches Go-owned hook commands for
+// verbs this binary still runs but no longer wires. Today that is
+// `hooks run inscribe`, deprecated in v0.8 (#11).
+//
+// It is deliberately narrower than oghamGoHookCommandRegex: a stale
+// entry is a thing to warn about, not a thing to delete. `hooks
+// uninstall` already removes Go-owned entries wholesale for users who
+// want them gone.
+var oghamDeprecatedHookCommandRegex = regexp.MustCompile(
+	`(?:^|/)(?:` + oghamGoBinaryNames + `)\s+hooks\s+run\s+inscribe\b`)
+
+// deprecatedHookEntry is one stale Go-owned hook wiring, for reporting.
+type deprecatedHookEntry struct {
+	Event   string
+	Command string
+	Why     string
+}
+
+// detectDeprecatedHooks finds Go-owned hook entries whose verb is
+// deprecated, sorted by event for stable output. Read-only.
+//
+// #51 (aside): a machine installed before v0.8 keeps its `PreCompact ->
+// hooks run inscribe` entry forever -- `hooks install` only replaces
+// entries it writes, and v0.8 stopped writing that one. Nothing surfaced
+// the leftover, so it kept firing and kept writing metadata-only stubs.
+func detectDeprecatedHooks(settings map[string]any) []deprecatedHookEntry {
+	var found []deprecatedHookEntry
+	forEachHookCommand(settings, func(event, command string) {
+		if oghamDeprecatedHookCommandRegex.MatchString(command) {
+			found = append(found, deprecatedHookEntry{
+				Event:   event,
+				Command: command,
+				Why:     "inscribe was deprecated in v0.8 (#11): it writes a metadata-only stub on every compact, which dilutes recall",
+			})
+		}
+	})
+	sort.Slice(found, func(i, j int) bool {
+		if found[i].Event != found[j].Event {
+			return found[i].Event < found[j].Event
+		}
+		return found[i].Command < found[j].Command
+	})
+	return found
+}
+
+// formatDeprecatedHookWarning renders the stale-wiring notice, or "" when
+// there is nothing to report. Split from the status command so its
+// content is testable without touching the filesystem.
+func formatDeprecatedHookWarning(found []deprecatedHookEntry, settingsPath, binName string) string {
+	if len(found) == 0 {
+		return ""
+	}
+	var b strings.Builder
+	fmt.Fprintf(&b, "\nogham: %d deprecated ogham hook entr%s still wired in %s:\n",
+		len(found), plural(len(found), "y", "ies"), settingsPath)
+	for _, f := range found {
+		fmt.Fprintf(&b, "    %-14s %s\n", f.Event, f.Command)
+		fmt.Fprintf(&b, "      %s\n", f.Why)
+	}
+	fmt.Fprintf(&b, "  Fix: %[1]s hooks uninstall && %[1]s hooks install\n", binName)
+	fmt.Fprintf(&b, "  Then commit pre-distilled content explicitly with `%s inscribe`.\n", binName)
+	return b.String()
+}
+
+// noticeInscribeDeprecated emits the one-line runtime deprecation notice
+// for the inscribe hook event. Unlike the post-tool notice this is NOT
+// marker-gated: the whole point is that the wiring is stale and fires
+// repeatedly, so a once-per-machine notice would be read and forgotten
+// while the stubs kept accumulating. One line, on stderr, every time.
+func noticeInscribeDeprecated(w io.Writer, binName string) {
+	fmt.Fprintf(w,
+		"ogham: `hooks run inscribe` is deprecated (v0.8, #11) -- it writes a metadata-only stub per compact, which dilutes recall. Re-wire with `%[1]s hooks uninstall && %[1]s hooks install`, and use `%[1]s inscribe` for real content.\n",
+		binName)
+}
+
+// oghamInvocationName is the binary name to print in remedies: the name
+// this binary is actually installed under, not the project's name. They
+// differ in the wild (#51 -- see oghamGoBinaryNames), and a copy-pasteable
+// command has to name the binary the user actually has.
+func oghamInvocationName() string {
+	return filepath.Base(oghamBinaryPath())
 }
 
 // oghamBinaryPath returns the absolute path of the running ogham binary,
@@ -370,7 +477,7 @@ var hooksCmd = &cobra.Command{
 
 var hooksRunCmd = &cobra.Command{
 	Use:   "run [event]",
-	Short: "Run a hook event (session-start, post-tool, inscribe, recall)",
+	Short: "Run a hook event (session-start, post-tool, drain, inscribe, recall)",
 	Long: `Run a lifecycle hook event.
 
 Routing (v0.9):
@@ -382,6 +489,22 @@ Routing (v0.9):
   - Gateway is the legacy synchronous path. --gateway forces it for
     any event, useful only for installs that still have a working
     gateway api_key in config.toml.
+
+Draining (#51): session-start no longer ships the queue
+inline. It spawns a detached ` + "`hooks run drain`" + ` child and returns
+immediately, so startup cost is constant instead of scaling with how
+many edits happened since the last session. Control it with:
+
+  --drain async   (default) detached child; startup does not wait
+  --drain sync    ship inline before building the session context
+  --drain off     skip; some later run ships the queue
+  --drain-batch N cap records shipped per drain (0 = 1000)
+
+$OGHAM_DRAIN_MODE sets the default without editing the hook command
+in settings.json; an explicit --drain still wins. Run ` + "`hooks run drain`" + `
+by hand to flush the queue now, or to see an error a background drain
+swallowed -- the detached child's output goes to <cache>/ogham/drain.log.
+Only one drainer runs at a time; the rest exit quietly.
 
 DEPRECATED (v0.8, #11): the 'inscribe' event runner stays for users
 with pre-v0.8 hook entries in their settings.json, but PreCompact ->
@@ -404,6 +527,13 @@ the inscribe verb reshape.`,
 		profile, _ := cmd.Flags().GetString("profile")
 		forceGateway, _ := cmd.Flags().GetBool("gateway")
 
+		drainFlag, _ := cmd.Flags().GetString("drain")
+		drainBatch, _ := cmd.Flags().GetInt("drain-batch")
+		mode, err := resolveDrainMode(drainFlag, cmd.Flags().Changed("drain"), os.Getenv(drainModeEnv))
+		if err != nil {
+			return err
+		}
+
 		// Decide routing: native (Supabase / Postgres direct) wins by
 		// default; --gateway flips back to the legacy gateway path.
 		nativeCfg, nativeReady := loadNativeIfReady(profile)
@@ -412,9 +542,21 @@ the inscribe verb reshape.`,
 		switch event {
 		case "session-start":
 			if useNative {
-				return runNativeSessionStart(ctx, nativeCfg, input, profile)
+				return runNativeSessionStart(ctx, nativeCfg, input, profile, mode, drainBatch)
 			}
 			return runGatewaySessionStart(ctx, input, profile)
+
+		case "drain":
+			// #51: the detached drainer session-start spawns, and the
+			// manual "flush the queue now" verb. Native-only -- the
+			// outbox exists precisely because the native post-tool path
+			// does not write synchronously; --gateway post-tool never
+			// queues anything.
+			if !useNative {
+				return fmt.Errorf(
+					"hooks drain: no native database backend configured (set SUPABASE_URL+SUPABASE_KEY or DATABASE_URL in ~/.ogham/config.env); the outbox is only used by the native post-tool path")
+			}
+			return runNativeDrain(ctx, nativeCfg, profile, drainBatch)
 
 		case "recall":
 			if useNative {
@@ -423,6 +565,12 @@ the inscribe verb reshape.`,
 			return runGatewayRecall(ctx, input, profile)
 
 		case "inscribe":
+			// #51 (aside): nothing warned at runtime that a pre-v0.8
+			// `PreCompact -> hooks run inscribe` wiring was still firing,
+			// so machines upgraded in place kept writing metadata-only
+			// stubs on every compact and kept diluting recall. Say so,
+			// once per invocation, on the stream the client shows.
+			noticeInscribeDeprecated(os.Stderr, oghamInvocationName())
 			if useNative {
 				return runNativeInscribe(ctx, nativeCfg, input, profile)
 			}
@@ -441,7 +589,7 @@ the inscribe verb reshape.`,
 			return runGatewayPostTool(ctx, input, profile)
 
 		default:
-			return fmt.Errorf("unknown hook event: %s (use session-start, post-tool, inscribe, or recall)", event)
+			return fmt.Errorf("unknown hook event: %s (use session-start, post-tool, drain, inscribe, or recall)", event)
 		}
 	},
 }
@@ -469,13 +617,30 @@ func loadNativeIfReady(profile string) (*native.Config, bool) {
 
 // ---- Native event runners -------------------------------------------
 
-func runNativeSessionStart(ctx context.Context, cfg *native.Config, input map[string]any, profile string) error {
-	// Drain any PostToolUse records queued by hook fires that happened
-	// since the last SessionStart. Best-effort -- a failed drain (e.g.
-	// transient DB outage) logs but does not block the session-start
-	// context that follows.
-	if err := drainOutbox(ctx, cfg, profile); err != nil {
-		fmt.Fprintf(os.Stderr, "ogham: outbox drain warning: %v\n", err)
+func runNativeSessionStart(
+	ctx context.Context,
+	cfg *native.Config,
+	input map[string]any,
+	profile string,
+	mode drainMode,
+	batch int,
+) error {
+	// Ship the PostToolUse records queued since the last session. In the
+	// default async mode this only spawns a detached drainer, so the
+	// hook's wall time no longer scales with the backlog (#51). Every
+	// outcome here is best-effort: a failed drain logs to stderr and the
+	// session-start context is still produced.
+	switch mode {
+	case drainAsync:
+		maybeDrainAsync(ctx, cfg, profile, batch, os.Stderr)
+	case drainSync:
+		stats, err := drainOutboxLocked(ctx, cfg, profile, batch, drainDeadline)
+		reportDrainStats(os.Stderr, stats)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "ogham: outbox drain warning: %v\n", err)
+		}
+	case drainOff:
+		// Deliberately nothing.
 	}
 
 	cwd := getField(input, "cwd", ".")
@@ -557,46 +722,6 @@ func runNativePostTool(ctx context.Context, _ *native.Config, input map[string]a
 	}
 	_ = ctx
 	return nil
-}
-
-// drainOutbox is called from runNativeSessionStart to flush queued
-// PostToolUse records into the store via native.Store. Bounded by
-// drainDeadline and DefaultDrainBatch to keep SessionStart snappy
-// even after a long-idle gap.
-func drainOutbox(ctx context.Context, cfg *native.Config, profile string) error {
-	dir, err := outbox.DefaultDir()
-	if err != nil {
-		return err
-	}
-	if _, statErr := os.Stat(dir); os.IsNotExist(statErr) {
-		return nil // nothing queued
-	}
-	box, err := outbox.New(dir)
-	if err != nil {
-		return err
-	}
-
-	dctx, cancel := context.WithTimeout(ctx, drainDeadline)
-	defer cancel()
-
-	stats, err := box.Drain(dctx, func(c context.Context, rec *outbox.Record) error {
-		recProfile := rec.Profile
-		if recProfile == "" {
-			recProfile = profile
-		}
-		_, sErr := native.Store(c, cfg, rec.Content, native.StoreOptions{
-			Tags:    rec.Tags,
-			Source:  rec.Source,
-			Profile: recProfile,
-		})
-		return sErr
-	})
-	if stats.Processed+stats.Failed+stats.Orphaned+stats.Malformed > 0 {
-		fmt.Fprintf(os.Stderr,
-			"ogham: drained outbox -- processed=%d failed=%d orphaned=%d malformed=%d remaining=%d\n",
-			stats.Processed, stats.Failed, stats.Orphaned, stats.Malformed, stats.Remaining)
-	}
-	return err
 }
 
 // toolOutcome is everything we derive from a tool's response: did it
@@ -844,7 +969,7 @@ Python entries as part of the install.`,
 
 var hooksStatusCmd = &cobra.Command{
 	Use:   "status",
-	Short: "Show installed hooks",
+	Short: "Show installed hooks, the outbox queue depth, and any stale wiring",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		client := detectClient()
 		fmt.Printf("Client: %s\n", client)
@@ -853,20 +978,68 @@ var hooksStatusCmd = &cobra.Command{
 			settings, err := readClaudeSettings()
 			if err != nil {
 				fmt.Println("No hooks installed (settings.json not found)")
+				printOutboxStatus(os.Stdout)
 				return nil
 			}
 			hooks, ok := settings["hooks"].(map[string]any)
 			if !ok || len(hooks) == 0 {
 				fmt.Println("No hooks installed")
+				printOutboxStatus(os.Stdout)
 				return nil
 			}
 			fmt.Println("Installed hooks:")
+			events := make([]string, 0, len(hooks))
 			for event := range hooks {
+				events = append(events, event)
+			}
+			sort.Strings(events)
+			for _, event := range events {
 				fmt.Printf("  %s\n", event)
+			}
+
+			printOutboxStatus(os.Stdout)
+
+			// #51 (aside): a stale PreCompact -> inscribe entry keeps
+			// firing silently on machines installed before v0.8.
+			home, _ := os.UserHomeDir()
+			if msg := formatDeprecatedHookWarning(
+				detectDeprecatedHooks(settings),
+				home+"/.claude/settings.json",
+				oghamInvocationName()); msg != "" {
+				fmt.Fprint(os.Stderr, msg)
 			}
 		}
 		return nil
 	},
+}
+
+// printOutboxStatus reports the queue depth and whether a drainer is
+// currently running. A backlog that never shrinks is the visible symptom
+// of a drain that is failing in the background, so status is where a user
+// should be able to see it (#51).
+func printOutboxStatus(w io.Writer) {
+	box, err := openOutbox()
+	if err != nil {
+		fmt.Fprintf(w, "Outbox: unavailable (%v)\n", err)
+		return
+	}
+	if box == nil {
+		fmt.Fprintln(w, "Outbox: empty (no queue directory yet)")
+		return
+	}
+	pending, err := box.Pending()
+	if err != nil {
+		fmt.Fprintf(w, "Outbox: unavailable (%v)\n", err)
+		return
+	}
+	state := ""
+	if box.LockHeld() {
+		state = ", drain in progress"
+	}
+	fmt.Fprintf(w, "Outbox: %d queued%s (%s)\n", pending, state, box.Dir)
+	if pending > 0 {
+		fmt.Fprintln(w, "  Ships on next session start; flush now with `ogham hooks run drain`.")
+	}
 }
 
 var hooksUninstallCmd = &cobra.Command{
@@ -897,6 +1070,10 @@ config.`,
 func init() {
 	hooksRunCmd.Flags().String("profile", "work", "Memory profile")
 	hooksRunCmd.Flags().Bool("gateway", false, "Force gateway path even when native backend is configured")
+	hooksRunCmd.Flags().String("drain", string(drainAsync),
+		"How session-start ships the queued outbox: async (detached child), sync (inline), off")
+	hooksRunCmd.Flags().Int("drain-batch", 0,
+		"Max records to ship per drain (0 = package default of 1000)")
 	hooksCmd.AddCommand(hooksRunCmd)
 	hooksInstallCmd.Flags().Bool("replace-python", false,
 		"also remove ogham-mcp (Python) hook entries from settings.json")
