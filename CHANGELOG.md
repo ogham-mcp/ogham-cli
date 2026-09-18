@@ -6,7 +6,36 @@ repo](https://github.com/ogham-mcp/ogham-mcp).
 
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), loosely.
 
-## Unreleased
+## v0.13.5 (2026-09-18)
+
+Follow-up to v0.13.4, found smoke-testing its release artifact.
+
+### Fixed
+
+- **`hooks run drain` blocked on a stdin it never reads.** `hooks run`
+  parsed the client's JSON payload for every event, including `drain`,
+  which takes all it needs from flags and the queue on disk. `readStdin`
+  short-circuits on a character device, so an interactive terminal was
+  never affected and neither was the detached drainer (its stdin is
+  `/dev/null`) — but against an open pipe with no data it blocks in
+  `io.ReadAll` until the writer closes. That is exactly the case the verb
+  exists for: a script, a cron entry, a CI step, or anything of the form
+  `… | ogham hooks run drain`. Measured against a pipe held open for 8 s:
+  **8.0 s before, 0.6 s after** (the remainder is the drain's own backend
+  connect).
+
+  Events that do parse a payload are unchanged, and the default is to
+  read — a new verb has to opt out deliberately, because a needless read
+  costs a hang in a script while a missed read costs the whole payload,
+  silently, with the hook still exiting 0.
+
+- **The v0.13.4 entry below shipped headed `## Unreleased`.** The commit
+  that dated it was pushed to the PR branch but never became part of the
+  pull request, so it was not in the merge and not in the tag. The
+  heading is corrected here; the v0.13.4 tarball keeps the wrong one,
+  since a published tag is not worth moving for a heading.
+
+## v0.13.4 (2026-09-18)
 
 Hook startup latency and stale-wiring visibility.
 
