@@ -6,7 +6,7 @@ repo](https://github.com/ogham-mcp/ogham-mcp).
 
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), loosely.
 
-## Unreleased
+## v0.13.4 (2026-09-18)
 
 Hook startup latency and stale-wiring visibility.
 
