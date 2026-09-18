@@ -398,7 +398,7 @@ Every command outputs JSON by default and runs natively where possible. Pass `--
 | `ogham init` | interactive | huh TUI wizard; writes TOML + env |
 | `ogham dashboard [--port N]` | Python subprocess | Starts the Prefab dashboard (Python stays Python for the frontend) |
 | `ogham serve` | MCP server | Run as an MCP stdio server. Native Go tools by default (store_memory, hybrid_search, list_recent, health_check) + Python sidecar auto-proxied for everything else (delete_memory, compression, graph, typed-store, etc.). Native handlers win on name collision. Pass `--no-sidecar` for strict native-only. |
-| `ogham hooks install / uninstall / run <event>` | sidecar | Wire into Claude Code hooks. `install` writes hook entries with the absolute path of the running binary; v0.8 makes the install gateway-key-aware (skips `PostToolUse` when no api_key is configured, scopes its matcher to `Write\|Edit\|Bash` when wired). `uninstall` strips Go-owned ogham entries (verb-shape `hooks run <verb>`), leaves Python `ogham hooks <verb>` lines alone. See CHANGELOG for #7 (v0.7.4) and #10 (v0.8). |
+| `ogham hooks install / uninstall / run <event>` | sidecar | Wire into Claude Code hooks. `install` writes hook entries with the absolute path of the running binary; v0.8 makes the install gateway-key-aware (skips `PostToolUse` when no api_key is configured, scopes its matcher to `Write\|Edit\|Bash` when wired). `uninstall` strips Go-owned ogham entries (verb-shape `hooks run <verb>`, under any of the names `ogham` / `ogham-cli` / `omcli` / `om`), leaves Python `ogham hooks <verb>` lines alone. `session-start` does not ship the queued outbox inline -- it spawns a detached `hooks run drain` child so startup cost stays constant whatever the backlog (`--drain async|sync|off`, `--drain-batch N`, `$OGHAM_DRAIN_MODE`). `status` reports the queue depth and any stale wiring. See CHANGELOG for #7 (v0.7.4), #10 (v0.8) and #51. |
 | `ogham plugin claude-code` | offline | Emit Anthropic Claude Code plugin scaffold (`.claude-plugin/`, `hooks/`, `bin/`). Uses `${CLAUDE_PLUGIN_ROOT}` for path resolution -- Anthropic-prescribed pattern for plugin-scoped hooks. Default target `~/.claude/skills/ogham/`. Gateway-aware (composes with #10). Flags: `--scope`, `--output`, `--migrate-from-settings`, `--with-mcp`, `--dry-run`, `--force`, `--skip-binary-copy`. |
 | `ogham plugin openclaw` / `agent-zero` | offline | Emit host plugin manifest |
 | `ogham auth login --api-key KEY` | gateway only | Gateway API-key management (build-tag gated) |
@@ -629,6 +629,7 @@ ogham-cli/
 │   ├── capabilities.go      # native-vs-sidecar matrix (ogham capabilities [--json])
 │   ├── serve.go             # MCP server -- native tools + hybrid sidecar proxy
 │   ├── auth.go / init.go / hooks.go / import_agent_zero.go / import.go / plugin.go
+│   ├── hooks_drain.go       # outbox drain modes + the detached drainer (#51)
 │   └── helpers.go           # connectSidecar, JSON emitter, result unwrap, fallback notice
 ├── internal/
 │   ├── sidecar/             # MCP client wrapping a Python subprocess (reconnect-supervised)

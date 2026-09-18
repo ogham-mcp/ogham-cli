@@ -5,8 +5,8 @@ Usage:
 
 Available Commands:
   install     Detect AI client and install hooks configuration
-  run         Run a hook event (session-start, post-tool, inscribe, recall)
-  status      Show installed hooks
+  run         Run a hook event (session-start, post-tool, drain, inscribe, recall)
+  status      Show installed hooks, the outbox queue depth, and any stale wiring
   uninstall   Remove ogham hook entries from the client's settings
 
 Flags:

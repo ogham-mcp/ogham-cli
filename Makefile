@@ -149,9 +149,13 @@ deps-check:
 #           golangci-lint config); keeping both produces noisy duplicate
 #           reports. errcheck wins because it integrates with the
 #           project's existing nolint annotations.
+# The gosec version is pinned here and in .pre-commit-config.yaml, and the
+# two must stay in step -- a release gate that scans with a different
+# version than the commit hook is a gate that surprises you at tag time.
+GOSEC_VERSION := v2.29.0
 security-scan:
 	@echo "== gosec (static security analysis) =="
-	go run github.com/securego/gosec/v2/cmd/gosec@latest -quiet -exclude=G104 ./...
+	go run github.com/securego/gosec/v2/cmd/gosec@$(GOSEC_VERSION) -quiet -exclude=G104 ./...
 	@echo "== govulncheck (known CVEs in deps + stdlib) =="
 	go run golang.org/x/vuln/cmd/govulncheck@latest ./...
 
