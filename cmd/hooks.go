@@ -57,20 +57,37 @@ const defaultPostToolMatcher = "Write|Edit"
 // oghamGoBinaryNames enumerates the names this Go binary ships under.
 // Every one of them is matched by the Go-owned regexes above and below.
 //
-// `omcli` was added on evidence, not speculation: the machine
+// There are four, and which one you get depends on what else is on the
+// machine rather than on the build:
+//
+//	ogham       when the Python ogham-mcp is NOT installed and the
+//	            name is free
+//	ogham-cli   the pre-v0.7.4 install name
+//	omcli       when ogham-mcp IS installed, since it owns `ogham`
+//	om          the same, for the OpenBrain project
+//
+// `omcli` and `om` were added on evidence, not speculation: the machine
 // that reported #51 runs `~/.local/bin/omcli`, because that laptop also
-// develops the Python ogham-mcp, which owns the name `ogham`. Without it
-// the "Go-owned" regex matched none of that machine's four hook entries,
-// so `hooks install` stacked duplicates instead of replacing (its whole
-// idempotency claim), `hooks uninstall` removed nothing, and the
-// stale-wiring warning below would have been silent on precisely the
-// install that needed it.
+// develops the Python ogham-mcp. Without them the "Go-owned" regex
+// matched none of that machine's four hook entries, so `hooks install`
+// stacked duplicates instead of replacing (its whole idempotency claim),
+// `hooks uninstall` removed nothing, and the stale-wiring warning below
+// was silent on precisely the install that needed it.
+//
+// Adding a name here widens what `hooks install` REPLACES and what
+// `hooks uninstall` DELETES, so a name goes in only once it is confirmed
+// to be this binary. #7 cuts both ways: never clobber a config you do
+// not own, and never orphan one you do.
 //
 // The Python package's console script is `ogham` and always uses the
 // two-token `hooks <verb>` form, so widening the NAME list cannot make
 // the Go matcher eat a Python entry -- the `run` token is what separates
 // them, and that is unchanged. TestOghamGoHookCommandRegex pins both.
-const oghamGoBinaryNames = `ogham-cli|ogham|omcli`
+//
+// `om` is short enough to be worth stating that it cannot match a longer
+// name by accident: the pattern requires whitespace immediately after
+// the name, so `omnibus hooks run x` does not match. Pinned by test.
+const oghamGoBinaryNames = `ogham-cli|ogham|omcli|om`
 
 // oghamGoHookCommandRegex matches hook commands owned by THIS Go binary.
 // The verb shape `hooks run <verb>` distinguishes the Go CLI's three-token
@@ -85,6 +102,7 @@ const oghamGoBinaryNames = `ogham-cli|ogham|omcli`
 //	/usr/local/bin/ogham hooks run session-start
 //	/Users/foo/.local/bin/ogham hooks run recall
 //	/Users/foo/.local/bin/omcli hooks run inscribe
+//	/Users/foo/.local/bin/om hooks run post-tool
 //
 // Does NOT match (Python ogham-mcp):
 //

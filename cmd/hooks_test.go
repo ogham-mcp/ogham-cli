@@ -67,14 +67,24 @@ func TestOghamGoHookCommandRegex(t *testing.T) {
 		{"/Users/kevin/.local/bin/ogham hooks run recall", true, "v0.7.4+ absolute-path form"},
 		{"/home/dev/go/bin/ogham hooks run inscribe", true, "v0.7.4+ absolute-path form"},
 
-		// Go-side: the `omcli` name. A machine that also develops the
-		// Python ogham-mcp installs this binary as omcli, because the
-		// Python package owns the name `ogham` there. #51 found all four
-		// of that machine's hook entries invisible to this regex, which
-		// silently broke install idempotency and uninstall.
+		// Go-side: the `omcli` / `om` names. A machine that also develops
+		// the Python ogham-mcp installs this binary as omcli (or om, for
+		// the OpenBrain project), because the Python package owns the
+		// name `ogham` there. #51 found all four of that machine's hook
+		// entries invisible to this regex, which silently broke install
+		// idempotency and uninstall.
 		{"/Users/kevin/.local/bin/omcli hooks run session-start", true, "omcli install name"},
 		{"/Users/kevin/.local/bin/omcli hooks run inscribe", true, "omcli install name"},
 		{"omcli hooks run post-tool", true, "omcli bare name"},
+		{"/Users/kevin/.local/bin/om hooks run session-start", true, "om install name"},
+		{"/Users/kevin/.local/bin/om hooks run inscribe", true, "om install name"},
+		{"om hooks run recall", true, "om bare name"},
+
+		// `om` is two characters; it must not match inside a longer name.
+		// The pattern requires whitespace straight after the name, so a
+		// tool called omnibus / omega keeps its own hooks.
+		{"/usr/local/bin/omnibus hooks run deploy", false, "om must not match a longer name"},
+		{"/usr/local/bin/omega hooks run session-start", false, "om must not match a longer name"},
 
 		// Python ogham-mcp: two-token verb shape, must NOT match
 		{"/path/to/.venv/bin/ogham hooks recall", false, "Python verb shape"},
@@ -506,7 +516,7 @@ func TestFormatPythonHookWarningEmptyWhenClean(t *testing.T) {
 }
 
 // TestOghamPythonHookCommandRegexIgnoresOmcli guards a deliberate
-// asymmetry: `omcli` is a name the GO binary ships under, so it
+// asymmetry: `omcli` and `om` are names the GO binary ships under, so they
 // belongs in the Go-owned matcher only. Adding it here instead would let
 // `hooks install --replace-python` delete this project's own entries
 // while claiming it removed another tool's (#7: never clobber a config
@@ -515,9 +525,11 @@ func TestOghamPythonHookCommandRegexIgnoresOmcli(t *testing.T) {
 	for _, command := range []string{
 		"/Users/kevin/.local/bin/omcli hooks inscribe",
 		"/Users/kevin/.local/bin/omcli hooks recall",
+		"/Users/kevin/.local/bin/om hooks inscribe",
+		"/Users/kevin/.local/bin/om hooks recall",
 	} {
 		if oghamPythonHookCommandRegex.MatchString(command) {
-			t.Errorf("%q matched the Python-owned regex; omcli is a Go binary name", command)
+			t.Errorf("%q matched the Python-owned regex; that is a Go binary name", command)
 		}
 	}
 }

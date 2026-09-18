@@ -33,15 +33,17 @@ Hook startup latency and stale-wiring visibility.
   and overlapping drainers are serialised by a new lock in the outbox —
   the loser exits quietly rather than double-storing records.
 
-- **`omcli` is now recognised as a Go-owned hook command** (#51). The
-  matcher behind `hooks install`'s idempotent pre-pass, `hooks uninstall`,
-  and the new stale-wiring warning only knew the names `ogham` and
-  `ogham-cli`. A machine that also develops the Python `ogham-mcp` — which
-  owns the name `ogham` — installs this binary as `omcli`, and on such a
-  machine *none* of its four hook entries matched: install stacked
-  duplicates instead of replacing them, and uninstall removed nothing.
-  The two-token `hooks <verb>` shape still marks a Python-owned entry, so
-  Python hooks remain untouched.
+- **`omcli` and `om` are now recognised as Go-owned hook commands**
+  (#51). The matcher behind `hooks install`'s idempotent pre-pass, `hooks
+  uninstall`, and the new stale-wiring warning only knew the names `ogham`
+  and `ogham-cli`. A machine that also develops the Python `ogham-mcp` —
+  which owns the name `ogham` — installs this binary as `omcli`, or as
+  `om` for the OpenBrain project, and on such a machine *none* of its four
+  hook entries matched: install stacked duplicates instead of replacing
+  them, and uninstall removed nothing. The two-token `hooks <verb>` shape
+  still marks a Python-owned entry, so Python hooks remain untouched, and
+  the pattern requires whitespace straight after the name, so a tool
+  called `omnibus` keeps its own hooks.
 
 ### Changed
 
