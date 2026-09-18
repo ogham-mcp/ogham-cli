@@ -541,7 +541,14 @@ the inscribe verb reshape.`,
 		ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 		defer cancel()
 
-		input := readStdin()
+		// Only events that actually parse a hook payload touch stdin --
+		// reading one the verb never uses turns into a hang whenever
+		// stdin is an open pipe (see eventReadsStdin).
+		var input map[string]any
+		if eventReadsStdin(event) {
+			input = readStdin()
+		}
+
 		profile, _ := cmd.Flags().GetString("profile")
 		forceGateway, _ := cmd.Flags().GetBool("gateway")
 
@@ -1099,6 +1106,26 @@ func init() {
 	hooksCmd.AddCommand(hooksUninstallCmd)
 	hooksCmd.AddCommand(hooksStatusCmd)
 	rootCmd.AddCommand(hooksCmd)
+}
+
+// eventReadsStdin reports whether a hook event consumes the JSON payload
+// the client writes to stdin.
+//
+// Every event does except `drain`, which takes all it needs from flags
+// and the queue on disk. That distinction is not cosmetic: readStdin
+// short-circuits on a character device, so an interactive terminal is
+// fine, but against an open pipe with no data it blocks in io.ReadAll
+// until the writer closes. `drain` is the one verb meant to be run from
+// a script, a cron entry or a CI step -- precisely where stdin is a pipe
+// somebody else owns -- and `hooks status` tells users to run it by
+// hand. Found smoke-testing v0.13.4: 8.0 s of doing nothing against a
+// pipe held open for 8 s.
+//
+// The default is to READ, so a new verb opts out deliberately. A
+// needless read costs a hang in a script; a missed read costs the whole
+// payload, silently, with the hook still exiting 0.
+func eventReadsStdin(event string) bool {
+	return event != "drain"
 }
 
 // readStdin reads JSON from stdin if available.
