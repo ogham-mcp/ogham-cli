@@ -6,6 +6,35 @@ repo](https://github.com/ogham-mcp/ogham-mcp).
 
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), loosely.
 
+## Unreleased
+
+### Testing
+
+- **Post-release smoke job** (`.github/workflows/release-smoke.yml`,
+  `scripts/release-smoke.sh`). Runs on `release: published` across
+  ubuntu-latest and macos-latest, and installs the **published** artifact
+  the way a user would — fetching `install.sh` from the tag, letting it
+  verify the SHA-256 against `checksums.txt`, then exercising the real
+  binary.
+
+  It exists because `go test ./...` was green for all three defects that
+  reached a tag in the v0.13.4–v0.13.7 run: a hook that blocked on stdin,
+  an installer that silently overwrote a different product's binary, and
+  the guard added to stop that then refusing every in-place upgrade. Each
+  was found by hand afterwards.
+
+  Seven assertions, each tied to one of those: install under `--name`;
+  `version --text` identifies the product and reports the tag; an upgrade
+  over our own binary proceeds without prompting; a foreign target is
+  refused and left intact; `--name ../escape` is rejected; `hooks run
+  drain` returns in under 5s against a pipe held open for 8s; and `hooks
+  status` reports the outbox.
+
+  Verified to **fail** against the releases that really were broken —
+  v0.13.4 takes 8s on the stdin check, v0.13.6 exits 1 on the upgrade
+  check — so none of it is decorative. `workflow_dispatch` takes a tag,
+  which is how that was checked.
+
 ## v0.13.7 (2026-09-21)
 
 Fixes a false positive in the check v0.13.6 added, found by using the
