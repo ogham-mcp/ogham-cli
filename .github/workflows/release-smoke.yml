@@ -1,0 +1,60 @@
+name: release-smoke
+
+# Smoke-test the PUBLISHED artifact, on real runners, after a release.
+#
+# `test.yml` proves the source compiles and the unit tests pass. It cannot
+# prove the thing users download works, and in the v0.13.4 - v0.13.7 run
+# three defects reached a tag with `go test ./...` green for every one:
+# a hook that blocked on stdin, an installer that silently overwrote a
+# different product's binary, and the guard added to stop that then
+# refusing every in-place upgrade. All three were found by hand,
+# afterwards. This job is that hand, and it runs before anyone reports it.
+#
+# Deliberately not part of the release job: this must test what was
+# actually published, so it runs after, against the tag, downloading the
+# same assets a user would.
+
+on:
+  release:
+    types: [published]
+  # Re-runnable against any existing tag, which is also how it was first
+  # validated (against v0.13.7, and against v0.13.4/v0.13.6 to confirm the
+  # assertions fail on the releases that really were broken).
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tag to smoke-test (e.g. v0.13.7)'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
+
+jobs:
+  smoke:
+    name: smoke (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - name: Resolve tag
+        id: tag
+        shell: bash
+        run: |
+          if [ -n "${{ inputs.tag }}" ]; then
+            echo "tag=${{ inputs.tag }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "tag=${{ github.event.release.tag_name }}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Smoke-test the published release
+        shell: bash
+        run: bash scripts/release-smoke.sh "${{ steps.tag.outputs.tag }}"
