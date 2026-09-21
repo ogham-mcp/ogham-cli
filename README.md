@@ -191,7 +191,7 @@ curl -sSL https://.../install.sh | bash -s -- --install-dir ~/tools/bin
 
 **Target-identity check (v0.13.6+).** The check above asks whether something *else* named `ogham` is on `$PATH`, which is a question about location. It does not ask whether the file at the install target is actually this binary -- and those differ. On a machine that develops `ogham-mcp`, `~/.local/bin/ogham` is a symlink into that project's venv, which *is* the install target, so the PATH check read it as an in-place upgrade and the install silently destroyed a working Python entry point.
 
-`install.sh` now refuses to overwrite anything it cannot identify as an ogham-cli binary: a symlink, a file with a `#!` shebang, or anything whose `version` output doesn't start with `ogham-cli/`. It names what it found and suggests `--name omcli`. `--force` still overrides. Covered by `install_test.go`, which drives the real script against a local `file://` release tree.
+`install.sh` now refuses to overwrite anything it cannot identify as an ogham-cli binary: a symlink, a file with a `#!` shebang, or anything whose `version --text` output doesn't start with `ogham-cli/`. It names what it found and suggests `--name omcli`. `--force` still overrides. Covered by `install_test.go`, which drives the real script against a local `file://` release tree.
 
 In-place upgrades over an existing install at the target dir proceed transparently -- no flag required.
 

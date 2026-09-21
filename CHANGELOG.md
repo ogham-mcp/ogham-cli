@@ -6,6 +6,33 @@ repo](https://github.com/ogham-mcp/ogham-mcp).
 
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), loosely.
 
+## v0.13.7 (2026-09-21)
+
+Fixes a false positive in the check v0.13.6 added, found by using the
+released installer to upgrade a real install.
+
+### Fixed
+
+- **`install.sh` refused to upgrade its own binary.** v0.13.6's
+  target-identity check probed the target with `version` and required the
+  output to start with `ogham-cli/`. But `version` defaults to **JSON** —
+  the CLI's global default, for LLM and script consumption — and that JSON
+  carries version, commit, build_date, go, os and arch, and nothing that
+  names the product. Only `version --text` emits the identifying line. So
+  a genuine ogham-cli failed to identify itself and every in-place upgrade
+  was refused with "is NOT an ogham-cli binary".
+
+  It failed safe — it refuses rather than destroys, and `--force` worked —
+  but it was wrong. The probe now asks for `version --text`.
+
+  **The test that should have caught this passed for the wrong reason.**
+  Its stand-in binary printed the text form for a bare `version`, so it
+  never exercised the shape the real binary produces. The stand-in now
+  mirrors the real CLI, JSON default and all, and
+  `TestRealBinaryVersionTextIsIdentifiable` pins the actual contract
+  against the actual binary, so the two cannot drift apart in silence
+  again.
+
 ## v0.13.6 (2026-09-21)
 
 Installer: a second name, and a guard that asks the right question.

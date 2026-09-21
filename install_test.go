@@ -27,8 +27,16 @@ import (
 
 // fakeBinarySource is a stand-in for the released binary: a compiled Go
 // program, not a script, because "is it a script?" is one of the things
-// the identity check keys on. Its `version` output has to start with
-// `ogham-cli/` the way the real one does.
+// the identity check keys on.
+//
+// It must mirror the REAL CLI's output shape, which is the whole lesson
+// of v0.13.6. The first version of this stand-in printed the
+// "ogham-cli/..." line for a bare `version`, so every test here passed
+// while the installer's probe -- which also ran bare `version` -- was
+// broken against the real binary. The real `version` defaults to JSON,
+// and that JSON names no product; only `version --text` identifies us.
+// TestRealBinaryVersionTextIsIdentifiable pins the contract this
+// imitates, so the two cannot drift apart again in silence.
 const fakeBinarySource = `package main
 
 import (
@@ -38,7 +46,15 @@ import (
 
 func main() {
 	if len(os.Args) > 1 && os.Args[1] == "version" {
-		fmt.Println("ogham-cli/0.0.0-test  commit=test  built=test")
+		for _, a := range os.Args[2:] {
+			if a == "--text" {
+				fmt.Println("ogham-cli/0.0.0-test  commit=test  built=test")
+				return
+			}
+		}
+		// Default output is JSON, exactly like the real CLI -- and note
+		// that nothing in it names the product.
+		fmt.Println(` + "`" + `{"version": "0.0.0-test", "commit": "test"}` + "`" + `)
 		return
 	}
 	fmt.Println("fake ogham-cli")
@@ -295,5 +311,45 @@ func TestInstallRejectsANameThatIsAPath(t *testing.T) {
 				t.Errorf("rejection should explain the rule:\n%s", out)
 			}
 		})
+	}
+}
+
+// TestRealBinaryVersionTextIsIdentifiable pins the contract install.sh's
+// identity probe depends on: `version --text` must emit a line starting
+// with "ogham-cli/". Nothing else the CLI prints identifies the product --
+// the default JSON carries version, commit, build_date, go, os and arch,
+// and not the name.
+//
+// This test exists because the stand-in above can be made to say anything.
+// If the real output format ever changes, the installer silently stops
+// recognising its own binary and starts refusing every upgrade; that is
+// what v0.13.6 shipped. This fails instead.
+func TestRealBinaryVersionTextIsIdentifiable(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("builds and runs a unix binary")
+	}
+	bin := filepath.Join(t.TempDir(), "ogham")
+	build := exec.Command("go", "build", "-o", bin, ".")
+	if out, err := build.CombinedOutput(); err != nil {
+		t.Fatalf("build: %v\n%s", err, out)
+	}
+
+	out, err := exec.Command(bin, "version", "--text").Output() // #nosec G204 -- path built by this test
+	if err != nil {
+		t.Fatalf("version --text: %v", err)
+	}
+	if !strings.HasPrefix(string(out), "ogham-cli/") {
+		t.Errorf("version --text = %q, want a line starting \"ogham-cli/\" -- install.sh's identity probe keys on it", out)
+	}
+
+	// The other half of the lesson: bare `version` must NOT be what the
+	// probe relies on. If this ever starts matching, the probe could be
+	// simplified -- but only deliberately, not by accident.
+	plain, err := exec.Command(bin, "version").Output() // #nosec G204 -- path built by this test
+	if err != nil {
+		t.Fatalf("version: %v", err)
+	}
+	if strings.HasPrefix(string(plain), "ogham-cli/") {
+		t.Logf("note: bare `version` now emits the text form too: %q", plain)
 	}
 }
