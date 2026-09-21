@@ -164,24 +164,34 @@ Detects platform, downloads the right asset, ad-hoc signs on macOS, and installs
 curl -sSL https://raw.githubusercontent.com/ogham-mcp/ogham-cli/main/install.sh | bash
 ```
 
-Pin a specific release or change the install dir:
+Pin a specific release, change the install dir, or install under a different name:
 
 ```bash
 curl -sSL https://raw.githubusercontent.com/ogham-mcp/ogham-cli/main/install.sh | bash -s -- --version v0.13.1
 INSTALL_DIR=/usr/local/bin curl -sSL https://raw.githubusercontent.com/ogham-mcp/ogham-cli/main/install.sh | bash
+curl -sSL https://raw.githubusercontent.com/ogham-mcp/ogham-cli/main/install.sh | bash -s -- --name omcli
 ```
 
-**PATH-collision check (v0.7.4+).** The Python `ogham-mcp` package and this Go CLI both ship a binary named `ogham`. If `install.sh` finds an existing `ogham` on `$PATH` that isn't at the install target, it refuses to install -- typing `ogham` would otherwise depend on PATH order and be easy to confuse. Three ways out:
+**`--name` (v0.13.6+).** Installs the binary under a different filename. Use it when the Python `ogham-mcp` package already owns the name `ogham` on the machine -- `omcli` and `om` are the conventional alternatives, and `ogham hooks install` / `uninstall` / `status` recognise all of them. The name must be a bare filename (letters, digits, `.`, `_`, `-`); a path is rejected, because this script is run as `curl | bash`.
+
+**PATH-collision check (v0.7.4+).** The Python `ogham-mcp` package and this Go CLI both ship a binary named `ogham`. If `install.sh` finds an existing `ogham` on `$PATH` that isn't at the install target, it refuses to install -- typing `ogham` would otherwise depend on PATH order and be easy to confuse. Four ways out:
 
 ```bash
-# 1. Force the install (you'll manage PATH order yourself)
+# 1. Install under a different name (recommended)
+curl -sSL https://.../install.sh | bash -s -- --name omcli
+
+# 2. Force the install (you'll manage PATH order yourself)
 curl -sSL https://.../install.sh | bash -s -- --force
 
-# 2. Install to a sandboxed dir off PATH
+# 3. Install to a sandboxed dir off PATH
 curl -sSL https://.../install.sh | bash -s -- --install-dir ~/tools/bin
 
-# 3. Uninstall the Python ogham-mcp first (if you don't need it)
+# 4. Uninstall the Python ogham-mcp first (if you don't need it)
 ```
+
+**Target-identity check (v0.13.6+).** The check above asks whether something *else* named `ogham` is on `$PATH`, which is a question about location. It does not ask whether the file at the install target is actually this binary -- and those differ. On a machine that develops `ogham-mcp`, `~/.local/bin/ogham` is a symlink into that project's venv, which *is* the install target, so the PATH check read it as an in-place upgrade and the install silently destroyed a working Python entry point.
+
+`install.sh` now refuses to overwrite anything it cannot identify as an ogham-cli binary: a symlink, a file with a `#!` shebang, or anything whose `version` output doesn't start with `ogham-cli/`. It names what it found and suggests `--name omcli`. `--force` still overrides. Covered by `install_test.go`, which drives the real script against a local `file://` release tree.
 
 In-place upgrades over an existing install at the target dir proceed transparently -- no flag required.
 
