@@ -6,7 +6,9 @@ repo](https://github.com/ogham-mcp/ogham-mcp).
 
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), loosely.
 
-## Unreleased
+## v0.13.6 (2026-09-21)
+
+Installer: a second name, and a guard that asks the right question.
 
 ### Added
 
