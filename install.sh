@@ -165,9 +165,20 @@ target_is_ogham_cli() {
     return 1
   fi
   [ -x "$path" ] || return 1
-  # Last resort, and the only positive identification: ask it. Our
-  # `version` output starts with the module name.
-  probe_out="$("$path" version 2>/dev/null || true)"
+  # Last resort, and the only positive identification: ask it.
+  #
+  # `version` MUST be asked with --text. The CLI's global default output
+  # is JSON (for LLM / script consumption), and that JSON carries
+  # version / commit / build_date / go / os / arch -- and nothing at all
+  # that names the product. There is no way to identify ourselves from
+  # it. Only `version --text` emits the "ogham-cli/<semver>" line.
+  #
+  # v0.13.6 probed bare `version`, got JSON, matched nothing, and so
+  # refused to upgrade its own binary. It failed safe, but it failed.
+  # The test that was supposed to catch it used a stand-in that printed
+  # the text form unconditionally, so it passed without ever exercising
+  # the shape the real binary produces.
+  probe_out="$("$path" version --text 2>/dev/null || true)"
   case "$probe_out" in
     ogham-cli/*) return 0 ;;
     *) return 1 ;;
