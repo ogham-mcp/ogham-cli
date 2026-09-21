@@ -6,6 +6,50 @@ repo](https://github.com/ogham-mcp/ogham-mcp).
 
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), loosely.
 
+## Unreleased
+
+### Added
+
+- **`install.sh --name <name>`** (also `$BINARY_NAME`). Installs the binary
+  under a different filename; the default is still `ogham`, so nothing
+  changes for an existing install. This is what makes the four names in
+  `cmd/hooks.go`'s `oghamGoBinaryNames` reachable: the hook matcher knew
+  about `omcli` and `om`, but the installer could not produce them.
+
+### Fixed
+
+- **`install.sh` could silently destroy the Python `ogham-mcp` entry
+  point.** Its PATH-collision check (#7) asks whether something *else*
+  named `ogham` is on `$PATH` — a question about location. It never asked
+  whether the file at the install target is this binary. On a machine that
+  develops `ogham-mcp`, `~/.local/bin/ogham` is a symlink into that
+  project's venv and *is* the install target, so the check concluded
+  "in-place upgrade" and `mv -f` replaced a working install of a different
+  product with no warning.
+
+  Added a target-identity check: before overwriting, the target must
+  identify as an ogham-cli binary. A symlink fails (a venv console shim is
+  exactly that), a `#!` shebang fails — detected by reading two bytes
+  rather than by executing a file we have already failed to identify — and
+  otherwise it is asked for its `version`, which must start with
+  `ogham-cli/`. On refusal it names what it found and suggests
+  `--name omcli`. `--force` overrides, and an upgrade over a real
+  ogham-cli still proceeds without prompting.
+
+- **`--name` is validated as a bare filename.** Letters, digits, `.`, `_`
+  and `-` only; a path is rejected. This script is run as `curl | bash`,
+  so a name that can contain a slash is an installer that writes wherever
+  it is pointed.
+
+### Testing
+
+- **`install.sh` has tests for the first time** (`install_test.go`). They
+  drive the real script against a local `file://` release tree — no
+  network, no GitHub — covering the default name, alternate names, the two
+  refusal shapes, `--force`, an upgrade over our own binary, and the
+  rejected `--name` values. Each was checked against the previous script
+  first and fails there, so none of them is decorative.
+
 ## v0.13.5 (2026-09-18)
 
 Follow-up to v0.13.4, found smoke-testing its release artifact.
