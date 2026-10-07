@@ -172,8 +172,11 @@ func TestNewEmbedder_GeminiDefaults(t *testing.T) {
 	if e.Dimension() != 512 {
 		t.Errorf("default dim = %d, want 512", e.Dimension())
 	}
-	if !strings.Contains(e.Name(), "gemini-embedding-2-preview") {
-		t.Errorf("default model missing from name: %q", e.Name())
+	// Exact match, not Contains: "gemini-embedding-2" is a substring of the
+	// preview name, so a Contains check passes for both and cannot tell them
+	// apart. The default is the GA model, as in the Python server.
+	if got := strings.TrimSuffix(e.Name(), "+cache"); got != "gemini/gemini-embedding-2" {
+		t.Errorf("default model = %q, want gemini/gemini-embedding-2", got)
 	}
 }
 

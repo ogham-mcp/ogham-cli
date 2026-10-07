@@ -165,7 +165,7 @@ func runInitWizard(cfg *native.Config) error {
 		huh.NewGroup(
 			huh.NewInput().
 				Title("Model (optional)").
-				Description("Leave blank for the provider default (e.g. gemini-embedding-2-preview).").
+				Description("Leave blank for the provider default (e.g. gemini-embedding-2).").
 				Value(&cfg.Embedding.Model),
 		),
 
