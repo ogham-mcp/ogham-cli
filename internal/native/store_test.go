@@ -49,39 +49,6 @@ func TestComputeSurprise_Clamps(t *testing.T) {
 	}
 }
 
-func TestPickAutoLinks_FiltersByThreshold(t *testing.T) {
-	neighbors := []SearchResult{
-		{ID: "a", Similarity: 0.91},
-		{ID: "b", Similarity: 0.65}, // below threshold
-		{ID: "c", Similarity: 0.78},
-		{ID: "d", Similarity: 0.72},
-		{ID: "e", Similarity: 0.99},
-	}
-	got := pickAutoLinks(neighbors, 0.70, 3)
-	// Should return top 3 sorted desc by similarity: e, a, c.
-	// b filtered out; d drops below the cap of 3.
-	if len(got) != 3 {
-		t.Fatalf("len = %d, want 3", len(got))
-	}
-	wantOrder := []string{"e", "a", "c"}
-	for i, l := range got {
-		if l.ID != wantOrder[i] {
-			t.Errorf("position %d: id = %s, want %s", i, l.ID, wantOrder[i])
-		}
-	}
-}
-
-func TestPickAutoLinks_AllBelowThreshold(t *testing.T) {
-	neighbors := []SearchResult{
-		{ID: "a", Similarity: 0.5},
-		{ID: "b", Similarity: 0.55},
-	}
-	got := pickAutoLinks(neighbors, 0.70, 3)
-	if len(got) != 0 {
-		t.Errorf("len = %d, want 0 (all below threshold)", len(got))
-	}
-}
-
 func TestMergeTags_DedupsAndSorts(t *testing.T) {
 	caller := []string{"type:decision", "project:ogham"}
 	entities := []string{"entity:NewEmbedder", "file:/repo/embedder.go"}
@@ -411,5 +378,21 @@ func TestWriteMemorySupabase_HttpError(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "401") {
 		t.Errorf("error should mention 401, got %v", err)
+	}
+}
+
+// Tool-call captures (hook:*) stay out of the knowledge graph; every other
+// source links. Issue #58.
+func TestShouldAutoLink(t *testing.T) {
+	for source, want := range map[string]bool{
+		"claude-code":      true,
+		"":                 true,
+		"inscribe":         true,
+		"hook:post-tool":   false,
+		"hook:pre-compact": false,
+	} {
+		if got := shouldAutoLink(source); got != want {
+			t.Errorf("shouldAutoLink(%q) = %v, want %v", source, got, want)
+		}
 	}
 }
