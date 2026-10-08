@@ -108,8 +108,14 @@ coverage-full-report:
 sync-schema:
 	@test -f ../openbrain-sharedmemory/sql/schema_postgres.sql \
 	  || { echo "openbrain-sharedmemory/sql/schema_postgres.sql not found"; exit 1; }
-	cp ../openbrain-sharedmemory/sql/schema_postgres.sql \
-	   internal/native/testdata/schema_postgres.sql
+	@# The schema writes its vector width as the placeholder :embedding_dim (TBU-149).
+	@# A bare copy fails at the first vector column and the testcontainer never
+	@# boots -- which is why this file sat unsynced from 2026-04-22. psql -v / \\set
+	@# does NOT reach the halfvec(:embedding_dim) casts inside $$-quoted function
+	@# bodies, so substitute textually, exactly as docs/byodb.md tells users to.
+	@# 512 is the schema default and what the pgcontainer fixtures assume.
+	sed 's/:embedding_dim/512/g' ../openbrain-sharedmemory/sql/schema_postgres.sql \
+	   > internal/native/testdata/schema_postgres.sql
 	@echo "schema refreshed; rerun 'make pgcontainer' to verify tests still pass"
 
 # Regenerate PICT matrices from .pict source files. CI runs this and

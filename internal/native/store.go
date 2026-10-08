@@ -14,10 +14,15 @@ import (
 	"github.com/ogham-mcp/ogham-cli/internal/native/extraction"
 )
 
-// Auto-link threshold. Matches Python ogham's settings.ogham_link_threshold
-// default (0.85 dense-cosine after provider-scaled calibration). Above this,
-// the top-N nearest memories become link candidates for the new row.
-const autoLinkThreshold = 0.70
+// Auto-link parameters, passed to the server's auto_link_memory() function.
+// They are the function's own defaults and what the Python store path uses,
+// so the two writers link identically. This was 0.70 -- while its comment
+// claimed 0.85 -- and was compared against hybrid-search ranking scores
+// rather than cosine similarity. Issue #58.
+const (
+	autoLinkThreshold = 0.85
+	autoLinkMaxLinks  = 5
+)
 
 // Surprise fallback when no existing memory is close enough to compare
 // against -- matches the Python "surprise unknown, default middle of band"
@@ -59,23 +64,25 @@ type StoreOptions struct {
 
 // StoreResult is returned by Store. ID is empty when DryRun=true.
 type StoreResult struct {
-	ID         string         `json:"id,omitempty"`
-	Profile    string         `json:"profile"`
-	Tags       []string       `json:"tags"`
-	Entities   []string       `json:"entities"`
-	Dates      []string       `json:"dates"`
-	Importance float64        `json:"importance"`
-	Surprise   float64        `json:"surprise"`
-	LinkedTo   []AutoLink     `json:"linked_to,omitempty"`
-	Elapsed    time.Duration  `json:"elapsed"`
-	DryRun     bool           `json:"dry_run,omitempty"`
-	Metadata   map[string]any `json:"metadata,omitempty"`
+	ID         string     `json:"id,omitempty"`
+	Profile    string     `json:"profile"`
+	Tags       []string   `json:"tags"`
+	Entities   []string   `json:"entities"`
+	Dates      []string   `json:"dates"`
+	Importance float64    `json:"importance"`
+	Surprise   float64    `json:"surprise"`
+	LinkedTo   []AutoLink `json:"linked_to,omitempty"`
+	// LinkError is set when the memory was written but auto-linking failed.
+	// The store still succeeds -- failing it would make the caller retry and
+	// write a duplicate -- but the failure is reported, not swallowed.
+	LinkError string         `json:"link_error,omitempty"`
+	Elapsed   time.Duration  `json:"elapsed"`
+	DryRun    bool           `json:"dry_run,omitempty"`
+	Metadata  map[string]any `json:"metadata,omitempty"`
 }
 
-// AutoLink is a prospective link candidate surfaced at store time.
-// v0.5 preview does not write the memory_links row; that lands in a
-// follow-up commit so the orchestrator + extraction + surprise path
-// can ship independently.
+// AutoLink is an edge the store actually wrote to memory_relationships
+// (relationship 'similar'). Before issue #58 this held unwritten candidates.
 type AutoLink struct {
 	ID         string  `json:"id"`
 	Similarity float64 `json:"similarity"`
@@ -89,10 +96,10 @@ type AutoLink struct {
 //     - embedder.Embed(content)
 //     - searchByText(content[:200])  used to compute surprise
 //  3. surprise = 1.0 - max(similarity from step 2); default 0.5 on empty
-//  4. auto-link: top-N above threshold become links in the result; the
-//     actual INSERT into memory_links is deferred to the next commit
-//  5. DB write via backend (postgres direct; supabase still goes through
-//     the Python sidecar until a native PostgREST write lands)
+//  4. DB write via backend (postgres direct, or PostgREST)
+//  5. finishStore: auto-link through the server's auto_link_memory()
+//     (skipped for hook:* captures), then an audit `store` event --
+//     the same two steps the Python store path runs after its insert
 //
 // The returned StoreResult is safe to marshal to JSON; cmd/store.go
 // emits it to --json users.
@@ -184,7 +191,6 @@ func Store(ctx context.Context, cfg *Config, content string, opts StoreOptions) 
 	}
 
 	surprise := computeSurprise(neighbors)
-	links := pickAutoLinks(neighbors, autoLinkThreshold, 3)
 
 	// Merge extracted tag artefacts into the caller's tag set. Python
 	// ogham uses the same prefixes (entity:/file:/person:/location:/
@@ -223,7 +229,6 @@ func Store(ctx context.Context, cfg *Config, content string, opts StoreOptions) 
 		Dates:      dates,
 		Importance: importance,
 		Surprise:   surprise,
-		LinkedTo:   links,
 		DryRun:     opts.DryRun,
 		Metadata:   metadata,
 	}
@@ -264,6 +269,8 @@ func Store(ctx context.Context, cfg *Config, content string, opts StoreOptions) 
 	default:
 		return nil, fmt.Errorf("native store: unknown backend %q", backend)
 	}
+
+	finishStore(ctx, cfg, backend, result, embedding, opts.Source, embedder.Name())
 
 	result.Elapsed = time.Since(start)
 	return result, nil
@@ -409,34 +416,6 @@ func computeSurprise(neighbors []SearchResult) float64 {
 	}
 }
 
-// pickAutoLinks returns the top-N neighbors whose similarity exceeds
-// threshold, sorted descending by similarity. The actual INSERT into
-// memory_links is deferred to a follow-up commit; surfacing candidates
-// here lets the --native-store-preview caller see what would link.
-func pickAutoLinks(neighbors []SearchResult, threshold float64, n int) []AutoLink {
-	var picks []AutoLink
-	for _, m := range neighbors {
-		if m.Similarity >= threshold {
-			picks = append(picks, AutoLink{
-				ID:         m.ID,
-				Similarity: m.Similarity,
-				Content:    m.Content,
-			})
-		}
-	}
-	sort.Slice(picks, func(i, j int) bool {
-		return picks[i].Similarity > picks[j].Similarity
-	})
-	if len(picks) > n {
-		picks = picks[:n]
-	}
-	return picks
-}
-
-// mergeRecurrenceTags adds recurrence:<x> tags to an existing tag slice,
-// dedup'd. Keeps mergeTags's signature small so the date + entity merge
-// path stays unchanged. Output is sorted to match Python's sorted()
-// semantics.
 func mergeRecurrenceTags(tags, recurrenceTags []string) []string {
 	if len(recurrenceTags) == 0 {
 		return tags
