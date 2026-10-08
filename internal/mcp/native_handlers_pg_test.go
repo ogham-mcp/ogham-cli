@@ -30,7 +30,10 @@ import (
 // the DB.
 func newOllamaStub() *httptest.Server {
 	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// A unit vector, not zeros: cosine on a zero vector is NaN, and a
+		// NaN score fails JSON marshalling of the whole search result.
 		vec := make([]float64, 512)
+		vec[0] = 1
 		// Shape: {"embeddings": [[...]]} -- array of arrays. Getting
 		// this wrong masquerades green on any dev machine with a real
 		// Ollama at :11434 (happened with rc2 CI; see commit fixing
@@ -257,7 +260,10 @@ func TestMCPHandlers_TypedStorePGSweep(t *testing.T) {
 	cfg.Embedding.Provider = "ollama"
 	cfg.Embedding.Model = "embeddinggemma"
 	cfg.Embedding.Dimension = 512
-	t.Setenv("OLLAMA_URL", ollama.URL)
+	// This config is built directly, so applyEnv never runs and OLLAMA_URL
+	// is never read -- since 53a452f (2026-04-20) a Setenv here silently fell
+	// through to a real Ollama on localhost:11434. Point at the stub directly.
+	cfg.Embedding.BaseURL = ollama.URL
 
 	cases := []struct {
 		name       string
