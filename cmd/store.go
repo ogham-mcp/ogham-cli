@@ -127,8 +127,11 @@ func runStoreNative(ctx context.Context, content string) error {
 	if len(res.Tags) > 0 {
 		fmt.Printf("  tags: %s\n", strings.Join(res.Tags, ", "))
 	}
+	if res.LinkError != "" {
+		fmt.Printf("  auto-link failed (memory was stored): %s\n", res.LinkError)
+	}
 	if len(res.LinkedTo) > 0 {
-		fmt.Printf("  %d auto-link candidate(s) (writes deferred):\n", len(res.LinkedTo))
+		fmt.Printf("  linked to %d existing memories:\n", len(res.LinkedTo))
 		for _, l := range res.LinkedTo {
 			fmt.Printf("    %s  sim=%.3f\n", l.ID, l.Similarity)
 		}

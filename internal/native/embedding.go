@@ -52,7 +52,11 @@ func NewEmbedder(cfg *Config) (Embedder, error) {
 	case "gemini":
 		model = cfg.Embedding.Model
 		if model == "" {
-			model = "gemini-embedding-2-preview"
+			// The GA name. "gemini-embedding-2-preview" is the same model --
+			// identical vectors, verified against the live API 2026-10-07 -- but
+			// Google lists it separately as the Preview, and the Python server
+			// already defaults to the GA name. No re-embed needed to switch.
+			model = "gemini-embedding-2"
 		}
 		if cfg.Embedding.APIKey == "" {
 			return nil, fmt.Errorf("native embedder: gemini provider selected but GEMINI_API_KEY is not set")
