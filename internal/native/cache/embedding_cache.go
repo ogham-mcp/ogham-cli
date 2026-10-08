@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"sync"
 	"sync/atomic"
 
@@ -29,9 +30,13 @@ import (
 // Default file name under cacheDir. Matches Python's embedding_cache.py.
 const dbFileName = "embeddings.db"
 
-// DefaultMaxSize is the eviction ceiling used when none is specified.
-// Matches Python's EmbeddingCache default.
-const DefaultMaxSize = 10_000
+// DefaultMaxSize is the eviction ceiling used when none is specified. It
+// matches the Python server's EFFECTIVE default, settings.
+// embedding_cache_max_size (100,000 since 2026-04-23) -- not the
+// EmbeddingCache class default, which the server never uses. The two stacks
+// share one file, so a lower ceiling here evicted the Python side's rows on
+// every Go Put.
+const DefaultMaxSize = 100_000
 
 // Env var names honoured by Default(). OGHAM_CACHE_DIR is the Go-side
 // canonical override; EMBEDDING_CACHE_DIR mirrors the name pydantic-
@@ -40,6 +45,9 @@ const DefaultMaxSize = 10_000
 const (
 	envOghamCacheDir     = "OGHAM_CACHE_DIR"
 	envEmbeddingCacheDir = "EMBEDDING_CACHE_DIR"
+	// Same name the Python server reads, so one setting sizes both stacks --
+	// e.g. 500000 for a LongMemEval re-run.
+	envEmbeddingCacheMaxSize = "EMBEDDING_CACHE_MAX_SIZE"
 )
 
 var (
@@ -58,9 +66,18 @@ func Default() (*EmbeddingCache, error) {
 		if dir == "" {
 			dir = os.Getenv(envEmbeddingCacheDir)
 		}
-		defaultCache, defaultErr = Open(dir, DefaultMaxSize)
+		defaultCache, defaultErr = Open(dir, maxSizeFromEnv())
 	})
 	return defaultCache, defaultErr
+}
+
+// maxSizeFromEnv reads EMBEDDING_CACHE_MAX_SIZE, falling back to
+// DefaultMaxSize when it is unset, unparseable, or not positive.
+func maxSizeFromEnv() int {
+	if n, err := strconv.Atoi(os.Getenv(envEmbeddingCacheMaxSize)); err == nil && n > 0 {
+		return n
+	}
+	return DefaultMaxSize
 }
 
 // ResetDefault is a test helper: it closes the singleton (ignoring any

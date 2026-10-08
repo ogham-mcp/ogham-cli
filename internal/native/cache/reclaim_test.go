@@ -137,3 +137,38 @@ func TestEvict_ReturnsSpaceToTheFilesystem(t *testing.T) {
 		t.Errorf("freelist_count after eviction = %d, want 0", got)
 	}
 }
+
+// The cache file is shared with the Python server, so both must evict at the
+// same ceiling. Python's effective default has been 100,000 since 2026-04-23
+// and is raised via EMBEDDING_CACHE_MAX_SIZE (500,000 for a LongMemEval
+// re-run). A Go side capped at 10,000 deleted every Python row past that on
+// its next Put -- ~490,000 rows at once against a benchmark cache.
+func TestDefault_MaxSizeMatchesPython(t *testing.T) {
+	for _, tc := range []struct {
+		name, env string
+		want      int
+	}{
+		{"unset -> python default", "", 100_000},
+		{"env honoured, as in python", "500000", 500_000},
+		{"unparseable -> default", "lots", 100_000},
+		{"non-positive -> default", "0", 100_000},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Setenv("OGHAM_CACHE_DIR", t.TempDir())
+			t.Setenv("EMBEDDING_CACHE_MAX_SIZE", tc.env)
+			ResetDefault()
+			t.Cleanup(ResetDefault)
+			c, err := Default()
+			if err != nil {
+				t.Fatal(err)
+			}
+			st, err := c.Stats()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if st.MaxSize != tc.want {
+				t.Fatalf("MaxSize = %d, want %d", st.MaxSize, tc.want)
+			}
+		})
+	}
+}
