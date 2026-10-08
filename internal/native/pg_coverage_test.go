@@ -507,7 +507,10 @@ func TestPG_ExploreKnowledge_WalksRealGraph(t *testing.T) {
 	cfg.Embedding.Provider = "ollama"
 	cfg.Embedding.Model = "embeddinggemma"
 	cfg.Embedding.Dimension = 512
-	t.Setenv("OLLAMA_URL", ollama.URL)
+	// This config is built directly, so applyEnv never runs and OLLAMA_URL
+	// is never read -- since 53a452f (2026-04-20) a Setenv here silently fell
+	// through to a real Ollama on localhost:11434. Point at the stub directly.
+	cfg.Embedding.BaseURL = ollama.URL
 
 	results, err := ExploreKnowledge(context.Background(), cfg, "postgres", ExploreOptions{
 		Depth: 0, Limit: 5,
@@ -556,11 +559,16 @@ func TestPG_Store_FullRoundTripThroughWriteMemoryPostgres(t *testing.T) {
 	// request. Covers both the initial embed AND the surprise-search
 	// probe (which re-queries for the same content).
 	ollama := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Return a 512-dim zero vector -- fine since we're testing the
-		// INSERT plumbing, not similarity semantics.
+		// A 512-dim unit vector in the /api/embed shape the embedder parses,
+		// {"embeddings": [[...]]}. This stub used the old /api/embeddings
+		// shape, {"embedding": [...]}, and a zero vector -- neither surfaced
+		// while OLLAMA_URL was ignored and a real Ollama answered instead.
+		// Zero is not harmless: store also searches, and cosine on a zero
+		// vector is NaN.
 		vec := make([]float64, 512)
+		vec[0] = 1
 		_ = json.NewEncoder(w).Encode(map[string]any{
-			"embedding": vec,
+			"embeddings": [][]float64{vec},
 		})
 	}))
 	defer ollama.Close()
@@ -572,7 +580,10 @@ func TestPG_Store_FullRoundTripThroughWriteMemoryPostgres(t *testing.T) {
 	cfg.Embedding.Dimension = 512
 	// OllamaURL is how the embedder config looks up the host. See
 	// embedding.go ollamaEmbedder.endpoint().
-	t.Setenv("OLLAMA_URL", ollama.URL)
+	// This config is built directly, so applyEnv never runs and OLLAMA_URL
+	// is never read -- since 53a452f (2026-04-20) a Setenv here silently fell
+	// through to a real Ollama on localhost:11434. Point at the stub directly.
+	cfg.Embedding.BaseURL = ollama.URL
 
 	result, err := Store(context.Background(), cfg,
 		"Decision: use postgres for the test harness.", StoreOptions{
