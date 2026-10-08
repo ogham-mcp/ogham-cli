@@ -12,6 +12,7 @@
 package cache
 
 import (
+	"context"
 	"crypto/sha256"
 	"database/sql"
 	"encoding/hex"
@@ -182,7 +183,49 @@ func (c *EmbeddingCache) init() error {
 			return fmt.Errorf("embedding cache: add sparse column: %w", err)
 		}
 	}
+	c.ensureIncrementalVacuum()
 	return nil
+}
+
+// ensureIncrementalVacuum makes deleted rows give their space back to the
+// filesystem. SQLite reuses freed pages for later inserts but never returns
+// them to the disk unless auto_vacuum is on. Evict and Clear both delete, so
+// without this the file only grows -- one real cache reached 2.16 GB holding
+// ~7 MB of rows. auto_vacuum is a property of the FILE, which the Python
+// server shares and converts the same way (src/ogham/embedding_cache.py);
+// whichever opens it first converts it, and the other sees it done.
+//
+// Converting an existing file needs one VACUUM: the new setting is applied by
+// the VACUUM that follows the PRAGMA. Both run on one pinned connection,
+// because nothing guarantees two calls on the pool share one. (At open the
+// pool holds a single idle connection, so the tests cannot catch an unpinned
+// version -- this is defensive, not observed.) The VACUUM can fail with
+// SQLITE_BUSY while another process holds the database; the cache is
+// best-effort, so skip and retry on the next open.
+func (c *EmbeddingCache) ensureIncrementalVacuum() {
+	var mode int
+	if err := c.db.QueryRow("PRAGMA auto_vacuum").Scan(&mode); err != nil || mode == 2 { // 2 = INCREMENTAL
+		return
+	}
+	ctx := context.Background()
+	conn, err := c.db.Conn(ctx)
+	if err != nil {
+		return
+	}
+	defer func() { _ = conn.Close() }()
+	if _, err := conn.ExecContext(ctx, "PRAGMA auto_vacuum = INCREMENTAL"); err != nil {
+		return
+	}
+	_, _ = conn.ExecContext(ctx, "VACUUM")
+}
+
+// reclaimLocked returns freed pages to the filesystem after a delete. Called
+// with c.mu held. Best-effort: a failure leaves free pages for the next call.
+// modernc's Exec steps the statement to completion -- checked by the reclaim
+// tests. Python's execute() does not, which is why the Python side needs
+// fetchall().
+func (c *EmbeddingCache) reclaimLocked() {
+	_, _ = c.db.Exec("PRAGMA incremental_vacuum")
 }
 
 // Close releases the underlying SQLite handle. Safe to call multiple
@@ -313,6 +356,7 @@ func (c *EmbeddingCache) Clear() (int, error) {
 	if _, err := c.db.Exec("DELETE FROM embeddings"); err != nil {
 		return 0, fmt.Errorf("embedding cache: delete all: %w", err)
 	}
+	c.reclaimLocked()
 	c.hits.Store(0)
 	c.misses.Store(0)
 	return n, nil
@@ -361,5 +405,6 @@ func (c *EmbeddingCache) evictLocked() error {
 	if err != nil {
 		return fmt.Errorf("embedding cache: evict: %w", err)
 	}
+	c.reclaimLocked()
 	return nil
 }
