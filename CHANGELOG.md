@@ -6,6 +6,18 @@ repo](https://github.com/ogham-mcp/ogham-mcp).
 
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), loosely.
 
+## Unreleased
+
+### Fixed
+
+- **The post-release smoke job never ran on its own.** It was triggered by
+  `release: published`, but GoReleaser creates the release with
+  `GITHUB_TOKEN`, and GitHub does not let events made with that token
+  start other workflows. Its only runs were started by hand. The release
+  workflow now calls it as a job after GoReleaser finishes, so every tag
+  is smoke-tested on ubuntu-latest and macos-latest. It can still be run
+  by hand against any tag.
+
 ## v0.13.8 (2026-11-09)
 
 The native store now writes the knowledge-graph links it reports, the
