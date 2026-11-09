@@ -44,7 +44,7 @@ func TestMask(t *testing.T) {
 		Embedding: Embedding{
 			Provider:  "gemini",
 			APIKey:    "AIzaSyFAKE_KEY_FOR_UNIT_TESTS_ONLYX89d4",
-			Model:     "gemini-embedding-2-preview",
+			Model:     "gemini-embedding-2",
 			Dimension: 512,
 		},
 	}

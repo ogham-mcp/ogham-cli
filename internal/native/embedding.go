@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"math"
 	"net/http"
 	"strings"
@@ -32,6 +33,11 @@ type Embedder interface {
 // added as they are absorbed; Gemini is the first, matching the user's
 // current .env configuration. Returns a clear error on unknown providers
 // rather than silently falling back to a default.
+const (
+	geminiGAModel      = "gemini-embedding-2"
+	geminiPreviewModel = "gemini-embedding-2-preview"
+)
+
 func NewEmbedder(cfg *Config) (Embedder, error) {
 	if cfg == nil {
 		return nil, fmt.Errorf("native embedder: nil config")
@@ -56,7 +62,17 @@ func NewEmbedder(cfg *Config) (Embedder, error) {
 			// identical vectors, verified against the live API 2026-10-07 -- but
 			// Google lists it separately as the Preview, and the Python server
 			// already defaults to the GA name. No re-embed needed to switch.
-			model = "gemini-embedding-2"
+			model = geminiGAModel
+		}
+		if model == geminiPreviewModel {
+			// Google retired the Preview on 2026-11-06. Requests naming it are
+			// redirected to the GA model for now (same schema, same embedding
+			// space, no re-index), but Google warns the old name may stop
+			// working, so it is rewritten here rather than sent. Mirrors the
+			// Python server's config validator.
+			slog.Warn("GEMINI_EMBED_MODEL names a retired model; using the GA model instead (same embedding space, no re-embed needed). Update your config.",
+				"configured", geminiPreviewModel, "using", geminiGAModel)
+			model = geminiGAModel
 		}
 		if cfg.Embedding.APIKey == "" {
 			return nil, fmt.Errorf("native embedder: gemini provider selected but GEMINI_API_KEY is not set")
