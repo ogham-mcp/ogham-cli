@@ -210,7 +210,7 @@ func TestGeminiEmbed_RoundTrip(t *testing.T) {
 		if err := json.Unmarshal(body, &parsed); err != nil {
 			t.Fatalf("request body not JSON: %v\n%s", err, body)
 		}
-		if parsed.Model != "models/gemini-embedding-2-preview" {
+		if parsed.Model != "models/gemini-embedding-2" {
 			t.Errorf("model = %s", parsed.Model)
 		}
 		if parsed.OutputDimensionality != 512 {
@@ -230,7 +230,7 @@ func TestGeminiEmbed_RoundTrip(t *testing.T) {
 
 	e := &geminiEmbedder{
 		apiKey:  "test-key",
-		model:   "gemini-embedding-2-preview",
+		model:   "gemini-embedding-2",
 		dim:     512,
 		http:    server.Client(),
 		baseURL: server.URL,
@@ -423,5 +423,24 @@ func TestGeminiEmbed_MalformedJSON(t *testing.T) {
 	}
 	if _, err := e.Embed(context.Background(), "x"); err == nil {
 		t.Error("expected parse error")
+	}
+}
+
+// Google retired Gemini Embedding 2 Preview on 2026-11-06 and redirects the
+// old name to the GA model (same embedding space, no re-index), warning that
+// it may stop working. A config that still names the preview must reach the
+// API as the GA model.
+func TestNewEmbedder_GeminiPreviewNameRewrittenToGA(t *testing.T) {
+	t.Setenv("OGHAM_EMBEDDING_CACHE", "0")
+	e, err := NewEmbedder(&Config{Embedding: Embedding{
+		Provider: "gemini",
+		APIKey:   "test",
+		Model:    "gemini-embedding-2-preview",
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := strings.TrimSuffix(e.Name(), "+cache"); got != "gemini/gemini-embedding-2" {
+		t.Errorf("model = %q, want gemini/gemini-embedding-2", got)
 	}
 }

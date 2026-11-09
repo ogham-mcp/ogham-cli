@@ -21,7 +21,7 @@ func TestSave_CreatesFileWithSectionedTOML(t *testing.T) {
 		Embedding: Embedding{
 			Provider:  "gemini",
 			APIKey:    "gm_test",
-			Model:     "gemini-embedding-2-preview",
+			Model:     "gemini-embedding-2",
 			Dimension: 512,
 		},
 	}
