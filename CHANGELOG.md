@@ -6,9 +6,42 @@ repo](https://github.com/ogham-mcp/ogham-mcp).
 
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), loosely.
 
-## Unreleased
+## v0.13.8 (2026-11-09)
+
+The native store now writes the knowledge-graph links it reports, the
+Gemini embedder follows Google's retirement of the Preview model name, and
+the embedding cache shared with the Python server stops growing without
+bound.
+
+### Fixed
+
+- **Native `store` reported auto-links it never wrote.** Since 2026-04-21
+  the native path computed link candidates, returned them as `linked_to`,
+  and persisted nothing. Hook capture routes through this path, so on a
+  busy install auto-linking had effectively stopped. `store` now calls the
+  server's own `auto_link_memory()` with the same threshold (0.85) and cap
+  (5) as the Python server, and reports only the links actually written.
+  It also writes the audit `store` event the Python path writes. A link or
+  audit failure is logged and reported, and never fails the store, because
+  the memory is already saved. Tool-call captures (`hook:*` sources) are
+  stored but deliberately not linked, so they cannot swamp the graph.
+  (#59)
+- **Gemini Embedding 2 Preview was retired by Google on 2026-11-06.** The
+  default is now the GA `gemini-embedding-2` (#60). A config that still
+  names `gemini-embedding-2-preview` is rewritten to the GA model with a
+  warning, rather than sent (#67). Same embedding space, so no re-embed is
+  needed.
+- **The embedding cache never gave disk space back.** Evicted and cleared
+  entries freed space inside `~/.cache/ogham/embeddings.db` but never
+  returned it to the disk, so the file only grew. One real cache reached
+  2.16 GB around about 7 MB of live entries. It is compacted once on first
+  open, and space is returned on every delete from then on. The default
+  size cap is now 100,000 entries, the same as the Python server that
+  shares the file, and `EMBEDDING_CACHE_MAX_SIZE` is honoured. Previously
+  a 10,000 cap here could evict Python's entries. (#63)
 
 ### Testing
+
 
 - **Post-release smoke job** (`.github/workflows/release-smoke.yml`,
   `scripts/release-smoke.sh`). Runs on `release: published` across
