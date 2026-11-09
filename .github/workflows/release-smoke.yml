@@ -10,13 +10,21 @@ name: release-smoke
 # refusing every in-place upgrade. All three were found by hand,
 # afterwards. This job is that hand, and it runs before anyone reports it.
 #
-# Deliberately not part of the release job: this must test what was
-# actually published, so it runs after, against the tag, downloading the
-# same assets a user would.
+# A separate job, not a step in the release job: it must test what was
+# actually published, so it runs after GoReleaser, against the tag,
+# downloading the same assets a user would.
 
 on:
-  release:
-    types: [published]
+  # Called by release.yml as a job after GoReleaser finishes (TBU-294).
+  # This used to be `release: published`, which never fired on its own:
+  # GoReleaser creates the release with GITHUB_TOKEN, and events made with
+  # GITHUB_TOKEN do not start other workflows. Do not go back to it.
+  workflow_call:
+    inputs:
+      tag:
+        description: 'Tag to smoke-test'
+        required: true
+        type: string
   # Re-runnable against any existing tag, which is also how it was first
   # validated (against v0.13.7, and against v0.13.4/v0.13.6 to confirm the
   # assertions fail on the releases that really were broken).
@@ -45,16 +53,8 @@ jobs:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - name: Resolve tag
-        id: tag
-        shell: bash
-        run: |
-          if [ -n "${{ inputs.tag }}" ]; then
-            echo "tag=${{ inputs.tag }}" >> "$GITHUB_OUTPUT"
-          else
-            echo "tag=${{ github.event.release.tag_name }}" >> "$GITHUB_OUTPUT"
-          fi
-
       - name: Smoke-test the published release
         shell: bash
-        run: bash scripts/release-smoke.sh "${{ steps.tag.outputs.tag }}"
+        env:
+          TAG: ${{ inputs.tag }}
+        run: bash scripts/release-smoke.sh "$TAG"
