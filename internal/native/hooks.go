@@ -188,6 +188,43 @@ func truncateRunes(s string, n int) string {
 	return s
 }
 
+// collapseASCIIWhitespace replaces each run of ASCII whitespace (\t \n
+// \v \f \r and space) with one space and trims the ends. Deliberately
+// not strings.Fields: Python and Go disagree on U+0085, U+001C-U+001F
+// and friends, and both clients must emit identical bytes.
+func collapseASCIIWhitespace(s string) string {
+	var b strings.Builder
+	pendingSpace := false
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		if c == ' ' || (c >= '\t' && c <= '\r') {
+			pendingSpace = b.Len() > 0
+			continue
+		}
+		if pendingSpace {
+			b.WriteByte(' ')
+			pendingSpace = false
+		}
+		b.WriteByte(c)
+	}
+	return b.String()
+}
+
+// ParseEnvelopeTime parses a created_at string per the envelope spec:
+// RFC 3339 (Z or offset), a naive timestamp (UTC) or a bare YYYY-MM-DD
+// (UTC). Anything else returns the zero time, rendered as [undated].
+func ParseEnvelopeTime(s string) time.Time {
+	if t, err := time.Parse(time.RFC3339Nano, s); err == nil {
+		return t
+	}
+	for _, layout := range []string{"2006-01-02T15:04:05.999999999", "2006-01-02 15:04:05.999999999", "2006-01-02"} {
+		if t, err := time.Parse(layout, s); err == nil {
+			return t
+		}
+	}
+	return time.Time{}
+}
+
 // formatRecallEnvelope renders the labelled recall block. It returns ""
 // when no row survives selection (or none fits under the cap).
 func formatRecallEnvelope(
@@ -212,7 +249,7 @@ func formatRecallEnvelope(
 		if !r.CreatedAt.IsZero() {
 			date = r.CreatedAt.UTC().Format("2006-01-02")
 		}
-		content := truncateRunes(strings.Join(strings.Fields(r.Content), " "), truncate)
+		content := truncateRunes(collapseASCIIWhitespace(r.Content), truncate)
 		line := fmt.Sprintf("- [%s] %s", date, content)
 		if tags := typeTagsFromResult(r); len(tags) > 0 {
 			line += " (" + strings.Join(tags, ", ") + ")"

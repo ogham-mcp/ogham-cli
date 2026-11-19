@@ -87,10 +87,13 @@ func TestRecallEnvelopeParityFixture(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	var cases []envelopeCase
-	if err := json.Unmarshal(data, &cases); err != nil {
+	var fixture struct {
+		Cases []envelopeCase `json:"cases"`
+	}
+	if err := json.Unmarshal(data, &fixture); err != nil {
 		t.Fatal(err)
 	}
+	cases := fixture.Cases
 	if len(cases) == 0 {
 		t.Fatal("fixture has no cases")
 	}
@@ -100,11 +103,7 @@ func TestRecallEnvelopeParityFixture(t *testing.T) {
 			for _, r := range c.Rows {
 				sr := SearchResult{Content: r.Content, Tags: r.Tags, Source: r.Source}
 				if r.CreatedAt != nil {
-					ts, err := time.Parse(time.RFC3339, *r.CreatedAt)
-					if err != nil {
-						t.Fatalf("bad created_at %q: %v", *r.CreatedAt, err)
-					}
-					sr.CreatedAt = ts
+					sr.CreatedAt = ParseEnvelopeTime(*r.CreatedAt)
 				}
 				if r.SupersededBy != nil {
 					sr.SupersededBy = *r.SupersededBy
@@ -208,5 +207,34 @@ func TestInscribeDryRunRespectsContext(t *testing.T) {
 	}
 	if content == "" {
 		t.Fatal("DryRun content should be non-empty even with done ctx")
+	}
+}
+
+func TestParseEnvelopeTime(t *testing.T) {
+	for in, want := range map[string]string{
+		"2026-05-01T23:30:00-05:00": "2026-05-02",
+		"2026-11-10T09:30:00Z":      "2026-11-10",
+		"2026-11-10T09:30:00":       "2026-11-10",
+		"2026-11-10":                "2026-11-10",
+		"":                          "",
+		"yesterday":                 "",
+	} {
+		got := ParseEnvelopeTime(in)
+		if want == "" {
+			if !got.IsZero() {
+				t.Errorf("%q: want undated, got %v", in, got)
+			}
+			continue
+		}
+		if g := got.UTC().Format("2006-01-02"); g != want {
+			t.Errorf("%q: got %s want %s", in, g, want)
+		}
+	}
+}
+
+func TestCollapseASCIIWhitespaceKeepsUnicodeSpace(t *testing.T) {
+	in := " a\u0085\u001f b\t\n\v\f\r c\u00a0d "
+	if got, want := collapseASCIIWhitespace(in), "a\u0085\u001f b c\u00a0d"; got != want {
+		t.Errorf("got %q want %q", got, want)
 	}
 }
