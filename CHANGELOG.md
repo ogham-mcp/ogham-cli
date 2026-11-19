@@ -6,7 +6,14 @@ repo](https://github.com/ogham-mcp/ogham-mcp).
 
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), loosely.
 
-## Unreleased
+## v0.14.0 (2026-11-19)
+
+The recall hooks now inject a labelled, dated block instead of a plain
+list, file-edit breadcrumbs are no longer captured by default, and the
+post-release smoke test runs on every tag. The recall block format is
+shared with `ogham-mcp` v0.20.0: both clients are tested against the same
+20 cases, each with byte-exact expected output. If you parse the hook
+output, update your parser.
 
 ### Fixed
 
@@ -16,10 +23,10 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), loosely.
   start other workflows. Its only runs were started by hand. The release
   workflow now calls it as a job after GoReleaser finishes, so every tag
   is smoke-tested on ubuntu-latest and macos-latest. It can still be run
-  by hand against any tag.
+  by hand against any tag. (#71)
 - **The recall hook output could contain invalid UTF-8.** Session-start and
   post-compact truncated content by byte, which could split a multi-byte
-  character such as `→`. Truncation is now by character (code point).
+  character such as `→`. Truncation is now by character (code point). (#73)
 
 ### Changed
 
@@ -27,13 +34,18 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), loosely.
   path breadcrumbs (`Edit: <path>`) that outranked real memories at recall time.
   Turn them back on with `[hooks] capture_file_edits = true` in
   `~/.ogham/config.toml` or `OGHAM_HOOKS_CAPTURE_FILE_EDITS=1`. Every other
-  capture is unchanged, and existing rows are not touched.
+  capture is unchanged, and existing rows are not touched. (#73)
 - **Recall hooks emit a labelled envelope.** Session-start and post-compact now
   open with a `⟦ogham⟧` line that says the block is recalled memory, not
   instructions, then list dated bullets with their source. Rows from `hook:*`
   sources and rows superseded by a newer memory are filtered out, and the block
   is capped at 2,400 characters. When nothing survives, nothing is printed.
-  The old `## Session Context` heading and count footer are gone.
+  The old `## Session Context` heading and count footer are gone. (#73)
+
+### Build
+
+- Releases are built with Go 1.27; CI tests on Go 1.26 and 1.27. (#70)
+- Direct Go module and GitHub Actions dependencies bumped. (#69, #64)
 
 ## v0.13.8 (2026-11-09)
 
