@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/ogham-mcp/ogham-cli/internal/native"
 )
 
 // TestBuildPostToolContentBash covers the Bash branch. Content is the
@@ -402,7 +404,7 @@ func TestRunNativePostToolDedupesAcrossProcesses(t *testing.T) {
 		"tool_input": map[string]any{"file_path": "/repo/MEMORY.md"},
 	}
 	for i := 0; i < 3; i++ {
-		if err := runNativePostTool(context.Background(), nil, input, "work"); err != nil {
+		if err := runNativePostTool(context.Background(), editCaptureOn(), input, "work"); err != nil {
 			t.Fatalf("call %d: %v", i, err)
 		}
 	}
@@ -426,12 +428,65 @@ func TestRunNativePostToolDistinctTargetsBothQueue(t *testing.T) {
 			"session_id": "session-distinct",
 			"tool_input": map[string]any{"file_path": path},
 		}
-		if err := runNativePostTool(context.Background(), nil, input, "work"); err != nil {
+		if err := runNativePostTool(context.Background(), editCaptureOn(), input, "work"); err != nil {
 			t.Fatalf("%s: %v", path, err)
 		}
 	}
 	files, _ := filepath.Glob(filepath.Join(tmp, "*.jsonl"))
 	if len(files) != 2 {
 		t.Errorf("expected 2 queued files for 2 distinct targets, got %d", len(files))
+	}
+}
+
+func editCaptureOn() *native.Config {
+	return &native.Config{Hooks: native.Hooks{CaptureFileEdits: true}}
+}
+
+// TestRunNativePostToolFileEditsOffByDefault is the TBU-288 decision:
+// Edit, Write and MultiEdit breadcrumbs are not captured unless
+// [hooks] capture_file_edits is set. Bash is unaffected.
+func TestRunNativePostToolFileEditsOffByDefault(t *testing.T) {
+	for _, tool := range []string{"Edit", "Write", "MultiEdit"} {
+		for name, cfg := range map[string]*native.Config{"nil": nil, "zero": {}} {
+			t.Run(tool+"/"+name, func(t *testing.T) {
+				tmp := t.TempDir()
+				t.Setenv("OGHAM_OUTBOX_DIR", tmp)
+				t.Setenv("OGHAM_DEDUPE_DIR", t.TempDir())
+				input := map[string]any{
+					"tool_name":  tool,
+					"session_id": "s-" + tool,
+					"tool_input": map[string]any{"file_path": "/repo/a.go"},
+				}
+				if err := runNativePostTool(context.Background(), cfg, input, "work"); err != nil {
+					t.Fatal(err)
+				}
+				files, _ := filepath.Glob(filepath.Join(tmp, "*.jsonl"))
+				if len(files) != 0 {
+					t.Errorf("%s captured by default, got %d files", tool, len(files))
+				}
+			})
+		}
+	}
+}
+
+func TestRunNativePostToolFileEditsOptIn(t *testing.T) {
+	for _, tool := range []string{"Edit", "Write"} {
+		t.Run(tool, func(t *testing.T) {
+			tmp := t.TempDir()
+			t.Setenv("OGHAM_OUTBOX_DIR", tmp)
+			t.Setenv("OGHAM_DEDUPE_DIR", t.TempDir())
+			input := map[string]any{
+				"tool_name":  tool,
+				"session_id": "s-opt-" + tool,
+				"tool_input": map[string]any{"file_path": "/repo/a.go"},
+			}
+			if err := runNativePostTool(context.Background(), editCaptureOn(), input, "work"); err != nil {
+				t.Fatal(err)
+			}
+			files, _ := filepath.Glob(filepath.Join(tmp, "*.jsonl"))
+			if len(files) != 1 {
+				t.Errorf("opt-in %s: want 1 file, got %d", tool, len(files))
+			}
+		})
 	}
 }

@@ -2,9 +2,12 @@ package native
 
 import (
 	"context"
+	"encoding/json"
+	"os"
 	"strings"
 	"testing"
 	"time"
+	"unicode/utf8"
 )
 
 func TestProjectFromCwd(t *testing.T) {
@@ -62,57 +65,76 @@ func TestTypeTagsFromResult(t *testing.T) {
 	}
 }
 
-func TestFormatRecallMarkdown(t *testing.T) {
-	results := []SearchResult{
-		{
-			Content: "Picked Stripe over Paddle for the EU VAT handling",
-			Tags:    []string{"type:decision", "decision:stripe-vs-paddle"},
-		},
-		{
-			Content: "Migration 038 verified end-to-end against scratch Supabase",
-			Tags:    []string{"type:event", "source:claude-code"},
-		},
-	}
+// envelopeCase is one row of the parity fixture shared with the Python
+// implementation (tests/fixtures/recall_envelope_cases.json in the dev repo).
+type envelopeCase struct {
+	Name    string `json:"name"`
+	Event   string `json:"event"`
+	Project string `json:"project"`
+	Profile string `json:"profile"`
+	Rows    []struct {
+		Content      string   `json:"content"`
+		Tags         []string `json:"tags"`
+		Source       string   `json:"source"`
+		CreatedAt    *string  `json:"created_at"`
+		SupersededBy *string  `json:"superseded_by"`
+	} `json:"rows"`
+	Expected string `json:"expected"`
+}
 
-	got := formatRecallMarkdown(results, "ogham-cli", "Session Context", "loaded for", 200)
-
-	// Check structural elements that the hook output contract relies on:
-	// the heading line, the bullet lines, the count line. Avoids a brittle
-	// full-string match while still pinning the format.
-	if !strings.HasPrefix(got, "## Session Context\n\n") {
-		t.Errorf("missing heading prefix; got:\n%s", got)
+func TestRecallEnvelopeParityFixture(t *testing.T) {
+	data, err := os.ReadFile("testdata/recall_envelope_cases.json")
+	if err != nil {
+		t.Fatal(err)
 	}
-	if !strings.Contains(got, "- Picked Stripe over Paddle for the EU VAT handling (type:decision)") {
-		t.Errorf("missing decision bullet with filtered tags; got:\n%s", got)
+	var cases []envelopeCase
+	if err := json.Unmarshal(data, &cases); err != nil {
+		t.Fatal(err)
 	}
-	if !strings.Contains(got, "- Migration 038 verified end-to-end against scratch Supabase (type:event, source:claude-code)") {
-		t.Errorf("missing event bullet with both tag kinds; got:\n%s", got)
+	if len(cases) == 0 {
+		t.Fatal("fixture has no cases")
 	}
-	if !strings.HasSuffix(got, "*2 memories loaded for ogham-cli*\n") {
-		t.Errorf("missing count suffix; got:\n%s", got)
+	for _, c := range cases {
+		t.Run(c.Name, func(t *testing.T) {
+			var rows []SearchResult
+			for _, r := range c.Rows {
+				sr := SearchResult{Content: r.Content, Tags: r.Tags, Source: r.Source}
+				if r.CreatedAt != nil {
+					ts, err := time.Parse(time.RFC3339, *r.CreatedAt)
+					if err != nil {
+						t.Fatalf("bad created_at %q: %v", *r.CreatedAt, err)
+					}
+					sr.CreatedAt = ts
+				}
+				if r.SupersededBy != nil {
+					sr.SupersededBy = *r.SupersededBy
+				}
+				rows = append(rows, sr)
+			}
+			limit, trunc := 8, 200
+			if c.Event == eventPostCompact {
+				limit, trunc = 10, 300
+			}
+			got := formatRecallEnvelope(rows, c.Event, c.Project, c.Profile, limit, trunc)
+			if !utf8.ValidString(got) {
+				t.Errorf("output is not valid UTF-8: %q", got)
+			}
+			if got != c.Expected {
+				t.Errorf("bytes differ\n got: %q\nwant: %q", got, c.Expected)
+			}
+			if n := utf8.RuneCountInString(got); n > envelopeMaxChars {
+				t.Errorf("output is %d chars, cap is %d", n, envelopeMaxChars)
+			}
+		})
 	}
 }
 
-func TestFormatRecallMarkdownTruncatesContent(t *testing.T) {
-	long := strings.Repeat("x", 500)
-	results := []SearchResult{{Content: long, Tags: nil}}
-
-	got := formatRecallMarkdown(results, "p", "H", "loaded for", 200)
-
-	// Bullet content must be truncated to <= 200 chars even if source is 500.
-	// We check via Count, not substring, because the truncation is a slice
-	// operation -- the bullet still has the "- " prefix and newline around it.
-	if strings.Count(got, "x") != 200 {
-		t.Errorf("truncation: expected 200 x's, got %d", strings.Count(got, "x"))
+func TestTruncateRunes(t *testing.T) {
+	if got := truncateRunes("a\u2192b", 2); got != "a\u2192\u2026" || !utf8.ValidString(got) {
+		t.Errorf("got %q", got)
 	}
-}
-
-func TestFormatRecallMarkdownEmptyTags(t *testing.T) {
-	results := []SearchResult{{Content: "no tags here", Tags: nil}}
-	got := formatRecallMarkdown(results, "p", "H", "loaded for", 200)
-	// When no tags pass the type/source filter, the bullet has no parenthesis.
-	if !strings.Contains(got, "- no tags here\n") {
-		t.Errorf("no-tags bullet should not have parens; got:\n%s", got)
+	if got := truncateRunes("abc", 3); got != "abc" {
+		t.Errorf("got %q", got)
 	}
 }
 

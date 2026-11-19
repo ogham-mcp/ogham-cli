@@ -25,6 +25,17 @@ type Config struct {
 	Database  Database  `toml:"database"`
 	Embedding Embedding `toml:"embedding"`
 	Profile   string    `toml:"profile"`
+	Hooks     Hooks     `toml:"hooks"`
+}
+
+// Hooks holds opt-in switches for hook capture. Zero value = defaults.
+type Hooks struct {
+	// CaptureFileEdits turns PostToolUse capture of Edit, Write and
+	// MultiEdit back on. Off by default (TBU-288): those rows are bare
+	// path breadcrumbs that outrank real memories at recall time.
+	// TOML: [hooks] capture_file_edits = true
+	// Env:  OGHAM_HOOKS_CAPTURE_FILE_EDITS=1
+	CaptureFileEdits bool `toml:"capture_file_edits"`
 }
 
 type Database struct {
@@ -163,6 +174,11 @@ func applyEnv(cfg *Config) {
 		if v := strings.TrimSpace(os.Getenv(name)); v != "" {
 			cfg.Database.SupabaseKey = v
 			break
+		}
+	}
+	if v := strings.TrimSpace(os.Getenv("OGHAM_HOOKS_CAPTURE_FILE_EDITS")); v != "" {
+		if b, err := strconv.ParseBool(v); err == nil {
+			cfg.Hooks.CaptureFileEdits = b
 		}
 	}
 	if v := strings.TrimSpace(os.Getenv("EMBEDDING_PROVIDER")); v != "" {

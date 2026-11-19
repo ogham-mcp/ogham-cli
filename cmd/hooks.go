@@ -685,9 +685,13 @@ func runNativeSessionStart(
 // SIGKILL-safe outbox. The actual store write happens at next
 // session-start when the drainer runs. Returns nil on skip-classified
 // events (Read, Glob, etc.) so the hook always exits 0.
-func runNativePostTool(ctx context.Context, _ *native.Config, input map[string]any, profile string) error {
+func runNativePostTool(ctx context.Context, cfg *native.Config, input map[string]any, profile string) error {
 	toolName := getField(input, "tool_name", "")
 	if toolName == "" {
+		return nil
+	}
+
+	if isFileEditTool(toolName) && (cfg == nil || !cfg.Hooks.CaptureFileEdits) {
 		return nil
 	}
 
@@ -798,6 +802,13 @@ func readToolOutcome(input map[string]any) toolOutcome {
 		}
 	}
 	return toolOutcome{}
+}
+
+// isFileEditTool reports whether the tool produces a bare path
+// breadcrumb. Capture of these is off unless [hooks] capture_file_edits
+// is set (TBU-288).
+func isFileEditTool(name string) bool {
+	return name == "Edit" || name == "Write" || name == "MultiEdit"
 }
 
 // buildPostToolContent produces a short, human-readable memory string
