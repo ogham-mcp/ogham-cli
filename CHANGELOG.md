@@ -17,6 +17,23 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), loosely.
   workflow now calls it as a job after GoReleaser finishes, so every tag
   is smoke-tested on ubuntu-latest and macos-latest. It can still be run
   by hand against any tag.
+- **The recall hook output could contain invalid UTF-8.** Session-start and
+  post-compact truncated content by byte, which could split a multi-byte
+  character such as `→`. Truncation is now by character (code point).
+
+### Changed
+
+- **Edit, Write and MultiEdit capture is off by default.** These produced bare
+  path breadcrumbs (`Edit: <path>`) that outranked real memories at recall time.
+  Turn them back on with `[hooks] capture_file_edits = true` in
+  `~/.ogham/config.toml` or `OGHAM_HOOKS_CAPTURE_FILE_EDITS=1`. Every other
+  capture is unchanged, and existing rows are not touched.
+- **Recall hooks emit a labelled envelope.** Session-start and post-compact now
+  open with a `⟦ogham⟧` line that says the block is recalled memory, not
+  instructions, then list dated bullets with their source. Rows from `hook:*`
+  sources and rows superseded by a newer memory are filtered out, and the block
+  is capped at 2,400 characters. When nothing survives, nothing is printed.
+  The old `## Session Context` heading and count footer are gone.
 
 ## v0.13.8 (2026-11-09)
 

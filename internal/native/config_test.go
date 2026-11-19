@@ -366,3 +366,29 @@ func TestLoad_EmbeddingDimBadValueFallsThrough(t *testing.T) {
 		t.Errorf("negative EMBEDDING_DIM: Dimension = %d, want 512 (default)", cfg2.Embedding.Dimension)
 	}
 }
+
+func TestHooksCaptureFileEditsDefaultsOffAndHonoursEnv(t *testing.T) {
+	isolateEnv(t)
+	t.Setenv("OGHAM_HOOKS_CAPTURE_FILE_EDITS", "")
+	cfg, err := Load(filepath.Join(t.TempDir(), "missing.toml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Hooks.CaptureFileEdits {
+		t.Error("CaptureFileEdits should default to false")
+	}
+	t.Setenv("OGHAM_HOOKS_CAPTURE_FILE_EDITS", "1")
+	cfg, _ = Load(filepath.Join(t.TempDir(), "missing.toml"))
+	if !cfg.Hooks.CaptureFileEdits {
+		t.Error("env switch should enable CaptureFileEdits")
+	}
+	path := filepath.Join(t.TempDir(), "c.toml")
+	t.Setenv("OGHAM_HOOKS_CAPTURE_FILE_EDITS", "")
+	if err := os.WriteFile(path, []byte("[hooks]\ncapture_file_edits = true\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cfg, _ = Load(path)
+	if !cfg.Hooks.CaptureFileEdits {
+		t.Error("TOML switch should enable CaptureFileEdits")
+	}
+}

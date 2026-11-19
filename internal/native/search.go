@@ -27,6 +27,11 @@ type SearchResult struct {
 	KeywordRank float64        `json:"keyword_rank"`
 	Relevance   float64        `json:"relevance"`
 	CreatedAt   time.Time      `json:"created_at"`
+	// SupersededBy is the id of a newer memory that contradicts this one,
+	// or "". It is not a column: it is derived after the search from
+	// in_result_contradictions (migration 047). Populated on the postgres
+	// path only; the supabase path leaves it empty.
+	SupersededBy string `json:"superseded_by,omitempty"`
 }
 
 // SearchOptions captures the optional arguments hybrid_search_memories
@@ -100,7 +105,45 @@ func searchPostgres(ctx context.Context, cfg *Config, query string, opts SearchO
 	}
 	defer func() { _ = conn.Close(ctx) }()
 
-	return runHybridSearch(ctx, conn, query, embedding, profile, limit, opts)
+	results, err := runHybridSearch(ctx, conn, query, embedding, profile, limit, opts)
+	if err != nil {
+		return nil, err
+	}
+	markSuperseded(ctx, conn, profile, results)
+	return results, nil
+}
+
+// markSuperseded fills SupersededBy from in_result_contradictions, which
+// returns stale -> newer pairs with both ends inside the result set.
+// Fail-open like the Python _demote_superseded: a missing function (a
+// pre-047 schema) or any error leaves the results unmarked.
+func markSuperseded(ctx context.Context, conn *pgx.Conn, profile string, results []SearchResult) {
+	if len(results) == 0 {
+		return
+	}
+	ids := make([]string, len(results))
+	for i, r := range results {
+		ids[i] = r.ID
+	}
+	rows, err := conn.Query(ctx,
+		`SELECT stale_id, newer_id FROM in_result_contradictions($1::text, $2::text[]::uuid[])`,
+		profile, ids)
+	if err != nil {
+		return
+	}
+	defer rows.Close()
+	newer := map[string]string{}
+	for rows.Next() {
+		var stale, n string
+		if rows.Scan(&stale, &n) == nil {
+			newer[stale] = n
+		}
+	}
+	for i := range results {
+		if n, ok := newer[results[i].ID]; ok {
+			results[i].SupersededBy = n
+		}
+	}
 }
 
 // runHybridSearch is factored out of Search so tests can exercise the SQL
