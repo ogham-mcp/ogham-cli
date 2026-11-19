@@ -46,8 +46,8 @@ echo "== release smoke: ${TAG} on $(uname -s)/$(uname -m) =="
 
 # ---------------------------------------------------------------------
 # 0. Wait for the release assets. GoReleaser creates the release and
-#    uploads archives as separate steps, so a `release: published` event
-#    can arrive before checksums.txt is fetchable.
+#    uploads archives as separate steps, and the download URL can lag
+#    the upload, so checksums.txt may not be fetchable straight away.
 # ---------------------------------------------------------------------
 echo "-- waiting for assets"
 asset_url="https://github.com/${REPO}/releases/download/${TAG}/checksums.txt"

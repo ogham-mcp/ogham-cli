@@ -51,3 +51,15 @@ jobs:
           # Homebrew tap push is disabled for v0.4.0 (see .goreleaser.yml
           # brews stanza -- commented out). Re-introduce GORELEASER_TAP_TOKEN
           # here when the tap is reactivated in v0.4.1+.
+
+  # Smoke-test the published artifact on ubuntu and macos (TBU-294).
+  # Called here because the `release: published` event GoReleaser's
+  # GITHUB_TOKEN creates never starts another workflow.
+  smoke:
+    name: Release smoke
+    needs: goreleaser
+    permissions:
+      contents: read
+    uses: ./.github/workflows/release-smoke.yml
+    with:
+      tag: ${{ github.ref_name }}
